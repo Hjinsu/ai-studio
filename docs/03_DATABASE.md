@@ -6,8 +6,8 @@ DDL 규칙(ADR-014): 테이블/컬럼에 CHARSET/COLLATE를 모두 생략(DB 기
 
 | 테이블 | 주요 필드/제약 | 결정 / 구현 |
 |---|---|---|
-| channel | id,name,language,timezone,budget_timezone,status | T02 |
-| channel_config | channel_id,version,config_json; unique(channel_id,version) | T02 |
+| channel | id,name,language,timezone,status(ACTIVE/PAUSED/ARCHIVED),version,archived_at. 예산 시간대는 정책 revision에 둔다 | ADR-034, T02 |
+| channel_config | 불변 revision: channel_id,revision_no, 핵심 설정 정규화 컬럼, provider_options_json; unique(channel_id,revision_no) | ADR-034, T02 |
 | channel_credential | channel_id,encrypted_token,key_version,scope,external_channel_id | T08 |
 | topic | channel_id,title,normalized_hash; unique(channel_id,normalized_hash) | T03 |
 | research_source | topic_id,url,retrieved_at,excerpt,license | T04 |
@@ -22,11 +22,11 @@ DDL 규칙(ADR-014): 테이블/컬럼에 CHARSET/COLLATE를 모두 생략(DB 기
 | ai_request_log | job_id,request_key,external_id,status,usage_json,error_code; unique(request_key) | T04 |
 | automation_job | revision_id,scene_id,stage,status,attempt,next_run_at,lease_until,lease_token,dedupe_key; unique(dedupe_key), index(status,next_run_at) | T03 |
 | job_dependency | job_id,depends_on_id; composite PK | T03 |
-| budget_policy | scope(SYSTEM/CHANNEL/CONTENT),scope_id,period_type,limit_amount,currency,timezone | ADR-017, T02 |
-| budget_bucket | policy_id,period_start_utc,period_end_utc,timezone,reserved,spent; unique(policy_id,period_start_utc) | ADR-017, T02 |
-| budget_reservation | request_key,bucket들,amount,status | ADR-017, T02 (원장과의 관계는 T02 결정 필요) |
-| cost_log | append-only. event_key(unique),request_key,entry_type(RESERVE/RELEASE/PROVISIONAL/CONFIRM/ADJUSTMENT/REFUND),original_amount,original_currency,exchange_rate_id,amount_krw,price_version. 기존 unique(request_key,entry_type) 제거 | ADR-019, T02 |
-| exchange_rate | base,quote,rate DECIMAL,effective_at,source | ADR-017, T02 |
+| budget_policy / budget_policy_revision | scope(SYSTEM/CHANNEL/CONTENT_TYPE, T03에 CONTENT),period_type(DAY/MONTH/LIFETIME),status,current_revision_no / revision: limit_krw DECIMAL(24,6), timezone | ADR-017, 026, 029, T02 |
+| budget_bucket | policy_id,(content_id T03),period_start,period_end(UTC),timezone,limit_krw,reserved_krw,spent_krw; unique(policy_id,subject,period_start) | ADR-017, 038, T02 |
+| budget_reservation / budget_reservation_bucket | request_key(+fingerprint),환율 고정,estimate_krw,status(ACTIVE/RECONCILIATION_REQUIRED/SETTLED/RELEASED),reserved_remaining,recognized_cost / 예약↔bucket 불변 연결 | ADR-026, 028, T02 |
+| cost_log | append-only(트리거+운영 권한). event_key(unique)+fingerprint, reservation_id, entry_type 6종, original_amount DECIMAL(24,12), fx_rate DECIMAL(24,10), amount_krw, reserve_delta_krw, cost_delta_krw | ADR-019, 026, 030, T02 |
+| exchange_rate | base_currency,quote=KRW,rate DECIMAL(24,10),effective_from,valid_until(기본 72h),source=MANUAL, 불변 | ADR-027, T02 |
 | render_output | revision_id,asset_id,manifest_hash | T05 |
 | quality_check | revision_id,check_code,result,evidence | T06 |
 | content_approval | revision_id,manifest_hash,reviewer_id,decision,created_at | T06 |
@@ -34,8 +34,10 @@ DDL 규칙(ADR-014): 테이블/컬럼에 CHARSET/COLLATE를 모두 생략(DB 기
 | publish_job | revision_id,approval_id,target_id,status,scheduled_at. (기존 unique(revision_id) 대체) | ADR-018, T08 |
 | publish_attempt | publish_job_id,attempt_no,upload_session_ref,external_video_id,outcome. 시도 이력 보존 | ADR-018, T08 |
 | video_analytics | publish_id,date,metric,dimensions_hash,value(nullable); composite unique | T09 |
-| admin_user | login,password_hash(BCrypt),role,enabled | ADR-023, T02 |
-| audit_event | actor,action,entity_id,created_at,details | T02 |
+| admin_user / admin_bootstrap | login,password_hash(BCrypt cost 12),role=ADMIN,enabled,password_changed_at / 최초 생성 단일 행 | ADR-031, 037, T02 |
+| audit_event | actor_type,actor_user_id,action,outcome,entity,trace_id,client_ip,details_json, append-only | T02 |
 | QRTZ_* | Quartz JDBC JobStore. Flyway로 생성, 자동 초기화 금지 | ADR-022, T03 |
 | competitor_channel / competitor_video / trend_keyword | external IDs, metric snapshots, observed_at (P1) | T10 |
 관계: channel 1:N topic/content; content 1:N revision; revision 1:N scene/asset_usage/jobs/checks; approval → revision+manifest; publish_job → approval+target; job → cost/request; bucket locks enforce limits. 승인 revision immutable. 삭제는 참조 보존 및 정책상 삭제 의무를 함께 처리.
+
+T02 상세(ERD·제약·인덱스·권한·검증 결과): [design/T02_DATA_MODEL.md](design/T02_DATA_MODEL.md), DDL 초안: [design/T02_DDL_DRAFT.sql](design/T02_DDL_DRAFT.sql).

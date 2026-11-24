@@ -26,6 +26,42 @@
 | ADR-023 | 승인(2026-11-25) | (I-09) Spring Security 세션 기반 관리자 인증. BCrypt, CSRF 활성, HttpOnly, SameSite=Lax, 유휴 만료 30분. local HTTP Secure=false, 운영 HTTPS Secure=true. 개발은 Vite proxy, 운영은 Spring Boot가 React 정적 파일 제공(동일 출처). 로컬 서버 loopback 바인딩(T01 적용). 초기 관리자 비밀번호 하드코딩 금지. 구현 T02 |
 | ADR-024 | 승인(2026-11-25) | 전용 DB 검증을 local/docker/prod 모두 적용(URL 사전 검사 + Flyway 직전 실제 연결 DB 검사, 불허 DB면 즉시 중단). 테스트는 격리 전용 DB(`ai_studio_test` 등 Testcontainers)만 허용. Security 등 필터 단계 오류도 공통 오류 형식(`/error` 컨트롤러, T01 적용). Actuator 표준 응답은 별도 계약 |
 | ADR-025 | 승인(2026-11-25) | DB 계정: 로컬 전용 DB는 ALL PRIVILEGES 허용. 운영은 migration 계정(`AI_STUDIO_DB_MIGRATION_USER/PASSWORD`, Flyway 전용)과 앱 계정 분리. 변수 이름은 T01 구현 시 ADR-013 규칙으로 정함 |
+| ADR-026 | 승인(2026-11-25, D-01) | 비용 데이터: budget_policy, budget_policy_revision, budget_bucket, budget_reservation, budget_reservation_bucket, cost_log, exchange_rate. reservation=현재 상태, cost_log=불변 이벤트, bucket=잠금·집계. 정책 변경 이력 revision 보존. 예약 검사·생성·원장·bucket 갱신 단일 트랜잭션, 일관 잠금 순서, bucket 동시 생성·중복 요청 경쟁 처리, 외부 호출은 트랜잭션 밖. 같은 key+같은 내용은 멱등, 다른 내용은 409. 원장 UPDATE/DELETE 금지, 운영 앱 계정은 원장 SELECT/INSERT만. 정합성 검사 기능 제공 |
+| ADR-027 | 승인(2026-11-25, D-02) | 환율: 관리자 수동 등록(유료 API 금지). 예약 시점 유효 환율 고정, 정산도 동일 환율. 유효기간 기본 72시간(설정 가능), KRW=1. 누락·만료 시 신규 외화 예약 PREREQUISITE_NOT_MET. 실제 결제 환율 차이는 별도 정산 이벤트. 환율 등록·조회 API/UI |
+| ADR-028 | 승인(2026-11-25, D-03) | 정산: PROVISIONAL 없는 CONFIRM 허용(기존 반영액 0 기준). PROVISIONAL은 비용 인식과 예약액 이동 원자 처리(계산식은 ADR-056으로 대체). CONFIRM은 최종액-기존 반영액 차액 기록 + 남은 예약 해제. ADJUSTMENT/REFUND는 증감 이력. 예약 상태 ACTIVE, RECONCILIATION_REQUIRED, SETTLED, RELEASED. 과금 불명은 자동 해제 금지. 예상 초과 실비용도 기록, 예산 초과 시 신규 제작 차단. 상태·이벤트 허용 조합과 계산식 문서화 |
+| ADR-029 | 승인(2026-11-25, D-04) | 콘텐츠 예산 LIFETIME, revision 변경·재생성 시 초기화 금지. T02는 SYSTEM/CHANNEL 실구현 + 콘텐츠 유형별 기본 한도 설정. 존재하지 않는 content_id 정책·예약 불허. 콘텐츠 FK와 콘텐츠 단위 예약은 T03 |
+| ADR-030 | 승인(2026-11-25, D-05) | 정밀도: 원본 금액 DECIMAL(24,12), 환율 DECIMAL(24,10), KRW 금액·집계 DECIMAL(24,6), Java BigDecimal. 예약 CEILING(6), 정산 HALF_UP(6). 저장된 금액 기준 집계(반복 환산 금지). REST 금액·환율은 문자열 |
+| ADR-031 | 승인(2026-11-25, D-06) | 초기 관리자: 일회성 CLI, 웹 가입 API·기본 비밀번호 금지. 터미널 숨김 입력, 인자·로그 비노출. 최소 12자, BCrypt cost 12(성능 검증), 72바이트 초과 거부(조용한 잘림 금지). 관리자 존재 시 거부, 동시 생성은 DB 제약+트랜잭션. 비밀번호 재설정 CLI |
+| ADR-032 | 승인(2026-11-25, D-07) | OpenAPI 3.1 계약 우선, `docs/api/openapi.yaml` 기준, Spring 호환 계약 검증 라이브러리 조사·고정 후 실제 요청/응답 검증. 금액·환율·BIGINT ID 문자열. 목록 기본 20, 최대 100. 오류 19개·공통 규격 유지. 환율·정책 이력·채널 설정 이력 API 포함 |
+| ADR-033 | 승인(2026-11-25, D-08) | openapi-typescript로 타입 생성, 생성물 Git 커밋·직접 수정 금지, CI에서 재생성 diff 검사 |
+| ADR-034 | 승인(2026-11-25, D-09) | 채널 물리 삭제 금지, 상태 ACTIVE/PAUSED/ARCHIVED, 보관 채널 비용·성과 보존. channel_config는 불변 버전 이력. 채널 optimistic lock 버전과 설정 revision 번호 구분. 핵심 설정 정규화, Provider 옵션만 JSON |
+| ADR-035 | 승인(2026-11-25, D-10) | T02 관리자 UI: 로그인/로그아웃, 기본 대시보드, 채널 목록·등록·수정·보관, 채널 설정·이력, 예산 정책, 예산 사용량, 비용 원장, 환율 등록·조회. 제작·장면·검수 화면은 후속 |
+| ADR-036 | 승인(2026-11-25, D-11) | 로그인 제한: login+IP 5회/15분, login 10회/15분, IP 30회/15분, 도달 시 15분 차단·429. 단일 인스턴스 메모리(만료·최대 메모리 관리), 재기동 시 초기화는 알려진 한계. 신뢰할 수 없는 전달 헤더를 IP 판정에 쓰지 않음 |
+| ADR-037 | 승인(2026-11-25, D-12) | ADMIN 단일 역할. 세션 인증, CSRF, HttpOnly, SameSite=Lax, 유휴 30분. 로그인 시 세션 ID 교체, 로그아웃 시 세션 폐기. 로그인 화면·정적 파일·CSRF 발급·로그인 API·health만 비인증(로그인 API도 CSRF 검증). 로그인/로그아웃 후 CSRF 재취득. 401/403 공통 형식, 계정 존재 여부 비노출 |
+| ADR-038 | 승인(2026-11-25, D-13) | 예산 시간대: UTC 저장, 현재 bucket 경계와 기존 예약 연결 불변, 시간대 변경은 다음 기간부터, 전환 시 기간 중복·누락 금지 및 예산 초기화 우회 방지, 정책·시간대 변경 이력 보존 |
+| ADR-039 | 승인(2026-11-25, T2-Q1) | 채널 설정에 content_strategy, target_audience, narration_style, visual_style 추가. default_content_type은 기본 선택값. 합성 고지 기본값은 UI 초기값일 뿐 영상별 판단을 대체하지 않음 |
+| ADR-040 | 승인(2026-11-25, T2-Q2) | `frontend/tools/openapi-typescript` 격리 도구(TS 5.9.3, openapi-typescript 7.13.0 고정, 자체 lockfile, 상대 경로, npm ci). 프로젝트 TS 6.0.3 유지. --force/--legacy-peer-deps 금지 |
+| ADR-041 | 승인(2026-11-25, T2-Q3) | openapi-request-validator-mockmvc 3.0.0(테스트 classpath 전용), Redocly CLI 2.83.0 |
+| ADR-042 | 승인(2026-11-25, T2-Q4) | PAUSED/ARCHIVED 신규 예약 차단, 기존 정산 허용. ARCHIVED 종료 상태(복원·수정 금지). 채널 상태 검사는 예약 트랜잭션 안에서 잠금으로 보호 |
+| ADR-043 | 승인(2026-11-25, T2-Q5) | 예산 트랜잭션 READ COMMITTED. 데드락·잠금 대기 초과 시 전체 롤백 후 최초 실행 외 최대 3회 재시도(백오프+jitter). 비즈니스 오류 재시도 금지 |
+| ADR-044 | 승인(2026-11-25, T2-Q6) | 세션 쿠키 `AI_STUDIO_SESSION`, HttpOnly, SameSite=Lax, Path=/, 유휴 30분, local/docker Secure=false, prod Secure=true |
+| ADR-045 | 승인(2026-11-25, T2-Q7) | T02 IP 판정은 remoteAddr만. 신뢰 프록시는 운영 배포 단계. Docker 개발 포트는 127.0.0.1로 제한 |
+| ADR-046 | 승인(2026-11-25, T2-Q8) | 환율 effectiveFrom 과거 최대 5분·미래 최대 7일, 기본 유효 72시간. 가장 최근 발효 환율이 만료되면 이전 환율로 fallback 금지 |
+| ADR-047 | 승인(2026-11-25, T2-Q9) | T02는 Vite proxy까지. 운영 JAR 정적 파일 패키징은 배포 단계(ADR-023 최종 구조 유지) |
+| ADR-048 | 승인(2026-11-25, T2-Q10) | RELEASED→SETTLED(지연 과금) 허용. 근거·사유·event_key·감사 이력 필수, 기존 이벤트 수정 금지 |
+| ADR-049 | 승인(2026-11-25, T2-Q11) | 시간대 변경 자투리를 다음 완전한 기간에 합침. 시간대 효력 시각을 revision에 명시 저장해 bucket 생성 여부와 무관하게 유지 |
+| ADR-050 | 승인(2026-11-25, T2-Q12) | 운영 binlog ON 트리거 생성 검증은 배포 전 필수. 앱 계정 SUPER 금지 |
+| ADR-051 | 승인(2026-11-25, T2-Q13) | 실패 로그인 ID·IP 기록 허용(비밀번호·토큰·세션 ID 금지). 대량 실패 로그 폭증 방지. 기본 90일 보존 정책 설계, 실제 삭제는 별도 관리 정책 |
+| ADR-052 | 승인(2026-11-25, T2-Q14) | 대시보드: 채널 수, 시스템 예산(한도·사용·예약·잔여), 정산 확인 필요 건수, 정합성 검사 상태, 지출 허용 여부. SYSTEM·CHANNEL 중복 합산 금지 |
+| ADR-053 | 승인(2026-11-25, F-01) | request_key, event_key, fingerprint, password_hash 등 정확 비교 컬럼은 `utf8mb4_bin`. MigrationConventionTest에 컬럼별 의도적 collation 예외 명시, 대소문자 구분·중복 테스트 |
+| ADR-054 | 승인(2026-11-25, F-02) | Fail Closed: SYSTEM DAY·MONTH 활성 정책이 없거나 비활성이면 신규 유료 예약 차단. 미등록·비활성·0원을 무제한으로 해석 금지. 정합성 오류 확인 시 신규 예약 차단 |
+| ADR-055 | 승인(2026-11-25, F-03) | budget_control 단일 제어 행. 전역 잠금 순서 budget_control → channel → budget_policy → budget_bucket → budget_reservation → 이벤트 INSERT. 필요한 행만, 역순 금지, 외부 호출은 트랜잭션 밖 |
+| ADR-056 | 승인(2026-11-25, F-04) | PROVISIONAL: newCost=K(P), newReserved=max(0, E−newCost), costDelta=newCost−oldCost, reserveDelta=newReserved−oldReserved(양수 허용). ADR-028의 PROVISIONAL 식 대체 |
+| ADR-057 | 승인(2026-11-25, F-05) | 원본 통화 조정과 KRW 전용 조정 구분. KRW 전용(FX_DIFFERENCE 등)은 recognized_cost_original 불변. 통화별 환불·조정 규칙과 제약 |
+| ADR-058 | 승인(2026-11-25, F-06) | admin_bootstrap 운영 최소 권한(SELECT/INSERT), UPDATE/DELETE 금지 |
+| ADR-059 | 승인(2026-11-25, F-07) | channel_config revision 생성 시 channel 행 잠금 + baseRevisionNo 검증, 기존 revision 불변 |
+| ADR-060 | 승인(2026-11-25, F-08) | JSON 로그인의 세션 인증 전략·SecurityContext 저장·세션 ID 변경·CSRF 무효화 검증. credential_version으로 비밀번호 변경 후 세션 무효화(시각 비교 단독 금지) |
+| ADR-061 | 승인(2026-11-25, F-09) | budget_control.spending_enabled 기본 false, 관리자 긴급 지출 차단. 차단 중에도 기존 정산·조회 허용. 실제 provider 호출은 T07 승인 전 금지 |
 
 ## 미결 설계 이슈 상태
 | ID | 결정 | 상태 | 구현 예정 |

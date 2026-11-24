@@ -18,5 +18,7 @@
 - [16_SOURCES](16_SOURCES.md)
 - 보고서: [reports/T01_REPORT](reports/T01_REPORT.md)
 - 계획: [plans/T02_PLAN](plans/T02_PLAN.md)
+- T02 설계: [design/T02_DATA_MODEL](design/T02_DATA_MODEL.md), [design/T02_BUDGET_LEDGER](design/T02_BUDGET_LEDGER.md), [design/T02_AUTH](design/T02_AUTH.md), [design/T02_DDL_DRAFT.sql](design/T02_DDL_DRAFT.sql), [api/openapi.yaml](api/openapi.yaml)
+- 보고서: [reports/T02_DESIGN_REPORT](reports/T02_DESIGN_REPORT.md)
 
 공통 계약은 ../AGENTS.md, 결정 변경은 ../DECISIONS.md, 진행 상태는 ../STATE.md. 이 문서는 구현 전 기준선이며 기존 대화의 상세 FR 번호 체계는 아래 문서에서 새로 묶었다. 구현 시 변경 이력 관리.

@@ -5,3 +5,4 @@ CI Windows/Linux 가능 범위, Gradle test, npm ci/test/build, fake E2E. ADR-01
 ## 결정 반영 (2026-11-25)
 - 통합 테스트(Docker 필요, Linux CI): `DatabaseBootstrapIT`(신규 DB V1→V2 초기화, collation, 세션 UTC, health), `DatabaseUpgradeIT`(V1 상태 DB를 최신으로 업그레이드, 불허 DB에서 Flyway 차단).
 - 단위 테스트: `MigrationConventionTest`(파일명 규칙, 적용된 migration SHA-256 불변, CHARSET+COLLATE 규칙), `ErrorDispatchTest`(필터 단계 오류의 공통 형식).
+- T02 필수 검증 목록과 방법: [plans/T02_PLAN.md](plans/T02_PLAN.md) 4절.

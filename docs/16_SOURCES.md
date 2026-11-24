@@ -34,3 +34,15 @@
 - https://services.gradle.org/versions/all
 - https://hub.docker.com/_/mariadb/tags
 - https://nodejs.org/dist/index.json
+
+## T02 의존성 후보 확인 (2026-11-25, Maven Central/npm registry, 스파이크는 scratchpad에서 실행 후 미커밋)
+| 항목 | 버전 | 확인 내용 |
+|---|---|---|
+| Spring Security | 7.1.3 (Boot 4.1.3 BOM) | starter-security, starter-security-test BOM 관리 |
+| Caffeine | 3.2.4 (Boot BOM) | rate limit 저장소 |
+| openapi-request-validator-core/-mockmvc | 3.0.0 | swagger-request-validator 3.0.0이 이 좌표로 이전. Java 21, Spring 7.0.7 빌드, swagger-parser 2.1.41, json-schema-validator 2.0.1. OpenAPI 3.1 초안 검증 스파이크 17/17 |
+| openapi-typescript | 7.13.0 | peer typescript ^5.x — 프로젝트 TS 6.0.3과 ERESOLVE. TS 5.9.3 별도 도구 디렉터리에서 생성, 결과는 TS 6 strict 통과 |
+| @redocly/cli | 2.83.0 | OpenAPI 초안 lint |
+| springdoc-openapi | 3.2.1 | Boot 4.2.0 기준(미채택) |
+- https://repo1.maven.org/maven2/com/atlassian/oai/openapi-request-validator/3.0.0/
+- https://www.npmjs.com/package/openapi-typescript
