@@ -1,0 +1,39 @@
+# 실행(저장소 루트): docker compose --env-file .env -f infra/docker-compose.yml up --build
+# 로컬 Docker는 필수가 아니다(ADR-010). worker 서비스는 T03에서 추가한다.
+name: ai-studio
+
+services:
+  mariadb:
+    # CI/Testcontainers(DatabaseBootstrapIT)와 같은 버전으로 유지한다
+    image: mariadb:11.8.8
+    environment:
+      MARIADB_DATABASE: ai_studio
+      MARIADB_USER: ${AI_STUDIO_DB_USER:?AI_STUDIO_DB_USER is required}
+      MARIADB_PASSWORD: ${AI_STUDIO_DB_PASSWORD:?AI_STUDIO_DB_PASSWORD is required}
+      MARIADB_RANDOM_ROOT_PASSWORD: "1"
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci", "--default-time-zone=+00:00"]
+    volumes:
+      - mariadb-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build:
+      context: ..
+      dockerfile: infra/backend.Dockerfile
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      AI_STUDIO_DB_URL: jdbc:mariadb://mariadb:3306/ai_studio
+      AI_STUDIO_DB_USER: ${AI_STUDIO_DB_USER:?AI_STUDIO_DB_USER is required}
+      AI_STUDIO_DB_PASSWORD: ${AI_STUDIO_DB_PASSWORD:?AI_STUDIO_DB_PASSWORD is required}
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8080:8080"
+
+volumes:
+  mariadb-data:

@@ -1,0 +1,54 @@
+# 공통 설정. 환경별 DB 접속 정보는 profile 파일(local/docker/prod)에서 환경변수로 받는다 (ADR-010).
+spring:
+  application:
+    name: ai-studio
+  profiles:
+    default: local
+  datasource:
+    hikari:
+      # DB 세션 시간대 UTC 고정 (AGENTS: UTC 저장)
+      connection-init-sql: "SET time_zone = '+00:00'"
+  flyway:
+    locations: classpath:db/migration
+    baseline-on-migrate: false
+    clean-disabled: true
+    validate-on-migrate: true
+  jackson:
+    time-zone: UTC
+  mvc:
+    problemdetails:
+      enabled: false
+
+mybatis:
+  configuration:
+    map-underscore-to-camel-case: true
+
+server:
+  error:
+    include-message: never
+    include-stacktrace: never
+    include-binding-errors: never
+    include-exception: false
+
+# Actuator는 health만 외부 노출하고 상세 정보는 숨긴다 (ADR-008)
+management:
+  endpoints:
+    access:
+      default: none
+    web:
+      discovery:
+        enabled: false
+      exposure:
+        include: health
+  endpoint:
+    health:
+      access: read-only
+      show-details: never
+      show-components: never
+      # 응답에 group 목록(liveness/readiness)을 노출하지 않는다
+      probes:
+        enabled: false
+
+logging:
+  pattern:
+    level: "%5p [%X{traceId:-}]"

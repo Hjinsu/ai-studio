@@ -1,0 +1,12 @@
+# Docker Compose 실행: infra/docker-compose.yml이 AI_STUDIO_ 환경변수를 주입한다 (ADR-013).
+# 컨테이너 내부는 모든 인터페이스에 바인딩하고, 호스트 노출은 Compose에서 127.0.0.1로 제한한다.
+spring:
+  datasource:
+    url: ${AI_STUDIO_DB_URL}
+    username: ${AI_STUDIO_DB_USER}
+    password: ${AI_STUDIO_DB_PASSWORD}
+
+# 허용 DB 검증 (ADR-024)
+ai-studio:
+  datasource:
+    expected-database: ai_studio

@@ -15,5 +15,8 @@
 - [13_SECURITY](13_SECURITY.md)
 - [14_TEST_PLAN](14_TEST_PLAN.md)
 - [15_ROADMAP](15_ROADMAP.md)
+- [16_SOURCES](16_SOURCES.md)
+- 보고서: [reports/T01_REPORT](reports/T01_REPORT.md)
+- 계획: [plans/T02_PLAN](plans/T02_PLAN.md)
 
 공통 계약은 ../AGENTS.md, 결정 변경은 ../DECISIONS.md, 진행 상태는 ../STATE.md. 이 문서는 구현 전 기준선이며 기존 대화의 상세 FR 번호 체계는 아래 문서에서 새로 묶었다. 구현 시 변경 이력 관리.

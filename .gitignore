@@ -13,3 +13,4 @@
 *.sql.dump
 .idea/
 .claude/settings.local.json
+**/coverage/

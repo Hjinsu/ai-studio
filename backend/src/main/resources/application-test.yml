@@ -1,0 +1,9 @@
+# 테스트: DB 접속 정보는 Testcontainers(@ServiceConnection)가 제공한다. .env는 읽지 않는다.
+# 격리된 테스트 전용 DB만 허용한다 (ADR-024). 로컬 ai_studio나 다른 프로젝트 DB로는 Flyway가 실행되지 않는다.
+ai-studio:
+  datasource:
+    expected-database: ai_studio_test
+
+logging:
+  level:
+    org.flywaydb: info

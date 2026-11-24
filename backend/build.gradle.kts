@@ -1,0 +1,69 @@
+import org.springframework.boot.gradle.plugin.SpringBootPlugin
+
+plugins {
+    java
+    alias(libs.plugins.spring.boot)
+}
+
+group = "com.aistudio"
+version = "0.1.0-SNAPSHOT"
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+dependencies {
+    // 버전은 Spring Boot BOM이 관리하고, BOM 밖 의존성만 version catalog에서 고정한다
+    implementation(platform(SpringBootPlugin.BOM_COORDINATES))
+    testImplementation(platform(SpringBootPlugin.BOM_COORDINATES))
+
+    implementation("org.springframework.boot:spring-boot-starter-webmvc")
+    implementation("org.springframework.boot:spring-boot-starter-validation")
+    implementation("org.springframework.boot:spring-boot-starter-actuator")
+    implementation("org.springframework.boot:spring-boot-starter-flyway")
+    implementation(libs.mybatis.spring.boot.starter)
+    implementation("org.flywaydb:flyway-mysql")
+    runtimeOnly("org.mariadb.jdbc:mariadb-java-client")
+
+    testImplementation("org.springframework.boot:spring-boot-starter-test")
+    testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
+    testImplementation("org.springframework.boot:spring-boot-testcontainers")
+    testImplementation("org.testcontainers:testcontainers-junit-jupiter")
+    testImplementation("org.testcontainers:testcontainers-mariadb")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+}
+
+tasks.withType<JavaCompile>().configureEach {
+    options.encoding = "UTF-8"
+}
+
+tasks.withType<Test>().configureEach {
+    useJUnitPlatform()
+    systemProperty("user.timezone", "UTC")
+    systemProperty("file.encoding", "UTF-8")
+}
+
+// 단위 테스트: Docker/DB 불필요
+tasks.named<Test>("test") {
+    useJUnitPlatform {
+        excludeTags("integration")
+    }
+}
+
+// 통합 테스트: Testcontainers MariaDB, Docker 필요 (ADR-011, CI Linux job)
+tasks.register<Test>("integrationTest") {
+    description = "Runs integration tests that require Docker."
+    group = LifecycleBasePlugin.VERIFICATION_GROUP
+    testClassesDirs = sourceSets["test"].output.classesDirs
+    classpath = sourceSets["test"].runtimeClasspath
+    useJUnitPlatform {
+        includeTags("integration")
+    }
+    shouldRunAfter(tasks.named("test"))
+}
+
+tasks.named<Jar>("jar") {
+    enabled = false
+}

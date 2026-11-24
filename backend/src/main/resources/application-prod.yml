@@ -1,0 +1,15 @@
+# 운영: 기본값 없이 AI_STUDIO_ 환경변수/secret store 값만 사용한다 (ADR-013).
+spring:
+  datasource:
+    url: ${AI_STUDIO_DB_URL}
+    username: ${AI_STUDIO_DB_USER}
+    password: ${AI_STUDIO_DB_PASSWORD}
+  # migration 계정과 앱 계정 분리 (ADR-025). Flyway는 같은 URL에 migration 계정으로 접속한다.
+  flyway:
+    user: ${AI_STUDIO_DB_MIGRATION_USER}
+    password: ${AI_STUDIO_DB_MIGRATION_PASSWORD}
+
+# 허용 DB 검증 (ADR-024)
+ai-studio:
+  datasource:
+    expected-database: ai_studio

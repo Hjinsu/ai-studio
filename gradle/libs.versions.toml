@@ -1,0 +1,10 @@
+# 버전 근거: docs/16_SOURCES.md
+[versions]
+spring-boot = "4.1.3"
+mybatis-spring-boot = "4.1.0"
+
+[libraries]
+mybatis-spring-boot-starter = { module = "org.mybatis.spring.boot:mybatis-spring-boot-starter", version.ref = "mybatis-spring-boot" }
+
+[plugins]
+spring-boot = { id = "org.springframework.boot", version.ref = "spring-boot" }

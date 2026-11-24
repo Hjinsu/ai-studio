@@ -1,4 +1,5 @@
 # 시스템 아키텍처
-backend/src/main/java/.../{channel,content,research,provider,media,render,job,budget,review,publish,analytics,security,shared}; frontend/src/{pages,features,api,components}; infra/; docs/.
+backend/src/main/java/com/aistudio/{channel,content,research,provider,media,render,job,budget,review,publish,analytics,security,shared}; frontend/src/{pages,features,api,components}; infra/; docs/.
 각 모듈은 api/application/domain/infrastructure 분리, 타 모듈 mapper 직접 접근 금지. REST → application → DB; Worker는 DB 큐 claim 후 트랜잭션 밖 외부 호출, 결과 저장 및 후속 작업 등록은 원자적으로 처리. Quartz는 작업 발행 및 lease 회수만 담당. Web/worker 동일 코드의 다른 실행 프로필 가능.
-파일 storage/{channelId}/{contentId}/{revisionId}/{assetId}.{ext}, DB에는 상대 키와 SHA256만 저장. 임시 파일 atomic rename, 경로 traversal 금지. DB/파일 백업 일관성 확보. 초기 Docker Compose DB+app+worker, 로컬 개발은 wrapper 및 npm lockfile. DB 큐 lease 상세는 08.
+파일 storage/{channelId}/{contentId}/{revisionId}/{assetId}.{ext}, DB에는 상대 키와 SHA256만 저장(asset 재사용을 위한 경로·소속 분리는 ADR-016, T03~T05에서 확정). 임시 파일 atomic rename, 경로 traversal 금지. DB/파일 백업 일관성 확보. 초기 Docker Compose DB+app+worker, 로컬 개발은 wrapper 및 npm lockfile. DB 큐 lease 상세는 08.
+패키지 `com.aistudio`, 메인 `AiStudioApplication`, 기능 모듈은 해당 작업에서 코드와 함께 생성(빈 패키지 금지, ADR-007). Spring profile: local(기존 설치 MariaDB 11.8, 전용 DB `ai_studio`), test, docker(Compose), prod(ADR-010). 로컬 Docker는 필수가 아니다. Redis/Kafka/Kubernetes 미도입(ADR-006). 프로젝트 환경변수는 `AI_STUDIO_` 접두사만 사용, 다른 프로젝트 변수 fallback 금지, 모든 DB profile은 Flyway 전 허용 DB 접속 검증(ADR-013, ADR-024). 로컬 서버는 127.0.0.1 바인딩(ADR-023).

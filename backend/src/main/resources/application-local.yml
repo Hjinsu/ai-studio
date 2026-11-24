@@ -1,0 +1,21 @@
+# 로컬 개발: 기존 설치 MariaDB 11.8의 AI Studio 전용 DB(ai_studio)만 사용한다 (ADR-010).
+# AI_STUDIO_ 접두사 환경변수만 사용하고 DB_* 등 다른 프로젝트 변수는 대체값으로 쓰지 않는다 (ADR-013).
+# 저장소 루트의 .env를 읽는다. bootRun(작업 디렉터리 backend/)과 루트 실행을 모두 지원한다.
+spring:
+  config:
+    import:
+      - "optional:file:.env[.properties]"
+      - "optional:file:../.env[.properties]"
+  datasource:
+    url: ${AI_STUDIO_DB_URL}
+    username: ${AI_STUDIO_DB_USER}
+    password: ${AI_STUDIO_DB_PASSWORD}
+
+# 로컬 서버는 loopback에만 바인딩한다 (ADR-023)
+server:
+  address: 127.0.0.1
+
+# 허용 DB 검증: URL(연결 전) + SELECT DATABASE()(Flyway 실행 전) (ADR-024)
+ai-studio:
+  datasource:
+    expected-database: ai_studio
