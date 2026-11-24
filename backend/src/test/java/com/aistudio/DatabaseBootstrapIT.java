@@ -12,30 +12,30 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.json.JsonCompareMode;
 import org.springframework.test.web.servlet.MockMvc;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.mariadb.MariaDBContainer;
 
 /**
  * 신규 DB 초기화: 빈 격리 DB에 애플리케이션 기동(Flyway V1→V2) 후 DB 상태와 health를 검증한다. Docker 필요 (ADR-011).
  * Docker가 없으면 실패한다. 미실행을 통과로 숨기지 않기 위해 disabledWithoutDocker를 쓰지 않는다.
  */
 @Tag("integration")
-@Testcontainers
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 class DatabaseBootstrapIT {
 
-    @Container
-    @ServiceConnection
-    static final MariaDBContainer MARIADB = TestDatabases.isolatedDatabase("ai_studio_test");
+    static final TestDatabases.TestDatabase DB = TestDatabases.create();
+
+    @DynamicPropertySource
+    static void database(DynamicPropertyRegistry registry) {
+        DB.register(registry);
+    }
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
@@ -50,22 +50,36 @@ class DatabaseBootstrapIT {
     void allMigrationsAreAppliedOnCleanDatabase() {
         List<String> versions = jdbcTemplate.queryForList(
                 "SELECT version FROM flyway_schema_history WHERE success = 1 ORDER BY installed_rank", String.class);
-        assertThat(versions).containsExactly("1", "2");
+        assertThat(versions).containsExactly("1", "2", "3", "4", "5");
         assertThat(flyway.info().pending()).isEmpty();
     }
 
     @Test
     void connectedToIsolatedTestDatabase() {
-        assertThat(jdbcTemplate.queryForObject("SELECT DATABASE()", String.class)).isEqualTo("ai_studio_test");
+        assertThat(jdbcTemplate.queryForObject("SELECT DATABASE()", String.class)).isEqualTo(DB.name()).startsWith("ai_studio_test_");
     }
 
     @Test
-    void noDomainTablesExistInT01() {
-        Integer otherTables = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM information_schema.tables "
-                        + "WHERE table_schema = DATABASE() AND table_name <> 'flyway_schema_history'",
-                Integer.class);
-        assertThat(otherTables).isZero();
+    void t02TablesExistWithUnicodeCiExceptBinaryColumns() {
+        List<String> tables = jdbcTemplate.queryForList(
+                "SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE() ORDER BY table_name",
+                String.class);
+        assertThat(tables).contains("admin_user", "admin_bootstrap", "audit_event", "channel", "channel_config",
+                "budget_control", "exchange_rate", "budget_policy", "budget_policy_revision", "budget_bucket",
+                "budget_reservation", "budget_reservation_bucket", "cost_log");
+        List<String> binaryColumns = jdbcTemplate.queryForList(
+                "SELECT CONCAT(table_name, '.', column_name) FROM information_schema.columns "
+                        + "WHERE table_schema = DATABASE() AND collation_name = 'utf8mb4_bin' AND data_type <> 'longtext' "
+                        + "ORDER BY 1", String.class);
+        assertThat(binaryColumns).containsExactly("admin_user.password_hash", "budget_reservation.request_fingerprint",
+                "budget_reservation.request_key", "cost_log.event_fingerprint", "cost_log.event_key",
+                "cost_log.request_key");
+        Integer otherCollations = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() "
+                        + "AND collation_name NOT IN ('utf8mb4_unicode_ci', 'utf8mb4_bin')", Integer.class);
+        assertThat(otherCollations).isZero();
+        assertThat(jdbcTemplate.queryForObject("SELECT spending_enabled FROM budget_control WHERE id = 1", Boolean.class))
+                .isFalse();
     }
 
     @Test

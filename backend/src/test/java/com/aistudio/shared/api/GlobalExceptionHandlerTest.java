@@ -33,7 +33,8 @@ import org.springframework.web.server.ResponseStatusException;
 
 @WebMvcTest(controllers = GlobalExceptionHandlerTest.ErrorTestController.class)
 @ActiveProfiles("test")
-@Import({GlobalExceptionHandlerTest.ErrorTestController.class, GlobalExceptionHandler.class, TraceIdFilter.class})
+@Import({GlobalExceptionHandlerTest.ErrorTestController.class, GlobalExceptionHandler.class, TraceIdFilter.class,
+        GlobalExceptionHandlerTest.PermitAllSecurity.class})
 class GlobalExceptionHandlerTest {
 
     private static final String TIMESTAMP_UTC = "\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z";
@@ -151,6 +152,16 @@ class GlobalExceptionHandlerTest {
         mockMvc.perform(get("/test/boom").header(TraceIdFilter.HEADER, "trace-abc-12345"))
                 .andExpect(header().string(TraceIdFilter.HEADER, "trace-abc-12345"))
                 .andExpect(jsonPath("$.traceId").value("trace-abc-12345"));
+    }
+
+    /** 이 테스트의 대상은 MVC 오류 변환이므로 보안 필터는 모두 허용(보안 동작은 AuthIT에서 검증). */
+    @org.springframework.boot.test.context.TestConfiguration
+    static class PermitAllSecurity {
+        @org.springframework.context.annotation.Bean
+        org.springframework.security.web.SecurityFilterChain permitAll(
+                org.springframework.security.config.annotation.web.builders.HttpSecurity http) throws Exception {
+            return http.csrf(csrf -> csrf.disable()).authorizeHttpRequests(auth -> auth.anyRequest().permitAll()).build();
+        }
     }
 
     @RestController

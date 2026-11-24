@@ -13,3 +13,10 @@ spring:
 ai-studio:
   datasource:
     expected-database: ai_studio
+
+# 운영 HTTPS: 세션 쿠키 Secure (ADR-044)
+server:
+  servlet:
+    session:
+      cookie:
+        secure: true

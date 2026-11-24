@@ -16,6 +16,34 @@
 ## 인수인계 기록
 작업 ID / 상태 / 변경 파일 / 테스트 명령 및 실제 결과 / 미해결 문제 / 다음 작업 / 필요 환경변수. 커밋 해시는 생성된 경우만 기록.
 
+### T02 — WIP 인수인계 (2026-11-25 02:54 KST, IN_PROGRESS 유지)
+이번 작업은 인수인계·저장만 수행했으며 신규 기능 코드는 수정하지 않았다. T02는 DONE이 아니고 T03는 시작하지 않았다.
+
+**구현 확인 (코드 존재 기준, 완료 승인 아님)**
+- 단계 2~3: Flyway V3~V5 신규 파일, `MigrationConventionTest` 해시 등록, Clock/lock retry/page response/audit 공통 코드가 작업 트리에 있다. V1·V2 파일은 변경되지 않았다.
+- 단계 4: 관리자 CLI, 세션/CSRF 인증, rate limit, credential version 검증, audit 코드와 단위·통합 테스트가 있다.
+- 단계 5: 채널 CRUD·상태 전이·설정 revision 및 `ChannelIT`가 있다.
+- 단계 6: 환율·정책·예산 bucket/예약·정산·원장·정합성 검사·대시보드 백엔드와 계산 단위 테스트가 있다. 다만 예산 DB 통합 테스트는 아직 없다.
+- 검증/기반: API 오류 처리 변경, OpenAPI 검증 테스트 의존성 및 일부 인증·채널 contract test가 있다.
+
+**미완료 / 미검증**
+- T02_PLAN.md §2 단계 7~10: 관리자 UI, 격리된 OpenAPI 타입 생성 도구·CI 검사, 전체 계약 검증, T02_REPORT 및 전체 CI 결과가 없다. 프론트엔드 파일은 이번 작업에서 변경되지 않았다.
+- `ChannelIT` 최근 결과 XML(2026-11-25 02:48): 6건 중 4건 통과, 2건 실패. `configRevisionsAreImmutableHistoryWithOptimisticBase`는 응답의 `channelId`가 OpenAPI schema에 정의되지 않았다는 contract 오류. `createListGetAndUpdateChannelWithContract`는 요청 중 예상 200 대신 500. 원인 해결 전 통합 테스트 통과로 간주하지 않는다.
+- 이외 AuthIT/AdminBootstrapIT/DatabaseUpgradeIT 및 예산 동시성·정산 DB 통합 검증은 성공 결과가 확인되지 않았다. 통합 테스트용 격리 DB 환경변수는 설정되지 않았고 Docker 명령도 사용할 수 없어 이번 인수인계 중 통합 테스트를 재실행하지 않았다.
+- 현재 로컬 `ai_studio` DB는 MariaDB 11.8.2, Flyway V1·V2 성공 이력만 확인했다(읽기 전용 JDBC 조회). V3~V5는 미적용이며 이후에도 migration 파일을 수정하지 않는다.
+- 실행한 명령: `.\gradlew.bat :backend:test` — 121 tests, 실패 0, 오류 0, skipped 0; 컴파일 포함 BUILD SUCCESSFUL.
+- 민감정보/산출물: gitleaks는 설치되지 않았다. 변경 소스의 비밀키·일반적인 credential 패턴 수동 검색 결과 없음. 스테이징 목록 재확인에서도 `.env`, 인증 파일, build/node_modules/dist, 로그, 미디어, DB dump는 없었다. `.env`와 build/node_modules/dist는 Git ignore 처리되어 있다.
+
+**현재 변경 및 저장**
+- 기반 브랜치 `main`은 원격 `origin/main`보다 1개 커밋 앞서 있고, 그 커밋 `e1cef2c`는 T02 설계 기준선이다. 기존 작업 변경은 backend T02 코드·테스트와 V3~V5 migration이다.
+- 변경은 별도 브랜치 `wip/t02-implementation-checkpoint-2026-11-25`에 커밋 메시지 `wip: checkpoint T02 implementation`으로 저장·푸시한다. `.env`, 인증 비밀정보, 빌드 산출물은 포함하지 않는다.
+- 다음 작업자는 해당 브랜치를 checkout/pull하고 이 기록 및 `docs/plans/T02_PLAN.md`를 먼저 확인한다.
+
+**정확한 다음 작업**
+1. `ChannelIT`의 위 두 실패를 재현해 원인을 해결한다(contract schema의 `channelId` 누락 여부와 500 발생 경로를 각각 확인).
+2. 예산 정책·예약 동시성·정산/원장·정합성 검사를 격리 MariaDB 기반 통합 테스트로 추가하고 `.\gradlew.bat :backend:integrationTest`를 실행한다. 로컬 `ai_studio`를 테스트 대상으로 사용하지 않는다.
+3. 인증·관리자 생성·V2→V5 upgrade 통합 테스트 결과까지 확인한 뒤, 서버 측 검증이 끝나면 T02_PLAN.md §2 단계 7(관리자 UI)을 이어간다. 그 전에는 T03를 시작하지 않는다.
+
 ### T02 — IN_PROGRESS (2026-11-25 구현 승인, ADR-039~061 반영)
 설계 기준선: ADR-026~061, docs/design/*, docs/api/openapi.yaml, docs/plans/T02_PLAN.md, infra/mariadb/prod-app-grants.sql.
 
