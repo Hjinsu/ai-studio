@@ -69,7 +69,9 @@ class ProductionGrantsIT {
     static final Set<String> IMMUTABLE = Set.of("admin_bootstrap", "audit_event", "channel_config", "exchange_rate",
             "budget_policy_revision", "budget_reservation_bucket", "cost_log", "flyway_schema_history",
             // T03-B(V6): 불변 입력·소재·명령 로그
-            "topic", "content_revision", "queue_command_log");
+            "topic", "content_revision", "queue_command_log",
+            // T03-C(V7): DAG 간선·이벤트 이력
+            "job_dependency", "job_event");
 
     static {
         Flyway.configure().dataSource(DB.dataSource()).locations("classpath:db/migration").load().migrate();

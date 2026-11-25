@@ -36,7 +36,8 @@ class MigrationConventionTest {
             "V4__create_channel.sql", "06d9de8f625d4575f9bc278263cd70a336535305a018bc3e977dcfd2e47d98ec",
             "V5__create_budget_and_ledger.sql", "a5d798c38c636d56d1974d8eb4494db46e9fcd8916ebd65d8ac3de325aa9ea5d",
             // V6: T03-B-FIX(RV-B-01/03) 미배포 보완, 사용자 예외 승인(2026-11-25). 이전 값 4fa717cc…0c9b(a2500a8)
-            "V6__create_content_domain.sql", "304900fda20821c83a9f3f3a56c9568f4215544158020569bd6f36e9d2412588");
+            "V6__create_content_domain.sql", "304900fda20821c83a9f3f3a56c9568f4215544158020569bd6f36e9d2412588",
+            "V7__create_queue_engine.sql", "5cff506d1bddda8f98489a6ab5e5419a3a8e276f8a0d675e61457b0ba12f5d81");
 
     /** V1은 ADR-014 이전 기준선이므로 collation 규칙 검사에서 제외한다 (수정 금지). */
     private static final List<String> COLLATION_RULE_EXEMPT = List.of("V1__initial_baseline.sql");
@@ -105,7 +106,15 @@ class MigrationConventionTest {
             "content_revision.revision_hash",
             "content_run.output_manifest_hash",
             "queue_command_log.request_key",
-            "queue_command_log.request_fingerprint");
+            "queue_command_log.request_fingerprint",
+            // T03-C(V7): job 키·lease 토큰·입력 hash, worker 인스턴스 UUID, 관리자 명령 키
+            "automation_job.job_key",
+            "automation_job.lease_token",
+            "automation_job.input_hash",
+            "job_attempt.worker_instance_id",
+            "job_attempt.lease_token",
+            "job_event.request_key",
+            "queue_worker_instance.instance_id");
 
     private static final Pattern CREATE_TABLE = Pattern.compile("create\\s+table\\s+(\\w+)");
     private static final Pattern COLUMN_COLLATE = Pattern.compile("^\\s*(\\w+)\\s+[^\\n]*?\\bcollate\\s*=?\\s*(\\w+)");

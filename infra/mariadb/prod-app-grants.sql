@@ -22,3 +22,10 @@ GRANT SELECT, INSERT, UPDATE ON @DB@.content TO '@APP_USER@'@'@APP_HOST@';
 GRANT SELECT, INSERT ON @DB@.content_revision TO '@APP_USER@'@'@APP_HOST@';
 GRANT SELECT, INSERT, UPDATE ON @DB@.content_run TO '@APP_USER@'@'@APP_HOST@';
 GRANT SELECT, INSERT ON @DB@.queue_command_log TO '@APP_USER@'@'@APP_HOST@';
+-- T03-C(V7) 큐. job_dependency·job_event는 불변·추가 전용(트리거와 이중 방어). queue_control은 단일 행(migration 생성).
+GRANT SELECT, UPDATE ON @DB@.queue_control TO '@APP_USER@'@'@APP_HOST@';
+GRANT SELECT, INSERT, UPDATE ON @DB@.queue_worker_instance TO '@APP_USER@'@'@APP_HOST@';
+GRANT SELECT, INSERT, UPDATE ON @DB@.automation_job TO '@APP_USER@'@'@APP_HOST@';
+GRANT SELECT, INSERT, UPDATE ON @DB@.job_attempt TO '@APP_USER@'@'@APP_HOST@';
+GRANT SELECT, INSERT ON @DB@.job_dependency TO '@APP_USER@'@'@APP_HOST@';
+GRANT SELECT, INSERT ON @DB@.job_event TO '@APP_USER@'@'@APP_HOST@';
