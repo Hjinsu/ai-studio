@@ -66,6 +66,18 @@ describe('request', () => {
   })
 })
 
+describe('Retry-After', () => {
+  it('keeps integer Retry-After seconds on 429 errors and ignores other formats', async () => {
+    mockApi(
+      csrf,
+      (call) => (call.url === '/api/a' ? { status: 429, body: error('RATE_LIMIT_EXCEEDED', 'Too many requests.'), headers: { 'Retry-After': '900' } } : undefined),
+      (call) => (call.url === '/api/b' ? { status: 429, body: error('RATE_LIMIT_EXCEEDED', 'Too many requests.'), headers: { 'Retry-After': 'Wed, 21 Oct 2026 07:28:00 GMT' } } : undefined),
+    )
+    await expect(request('POST', '/api/a')).rejects.toMatchObject({ status: 429, retryAfterSeconds: 900 })
+    await expect(request('POST', '/api/b')).rejects.toMatchObject({ status: 429, retryAfterSeconds: undefined })
+  })
+})
+
 describe('buildUrl', () => {
   it('drops empty query values', () => {
     expect(buildUrl('/a', { x: '', y: undefined, z: null, page: 0, s: 'A B' })).toBe('/a?page=0&s=A+B')

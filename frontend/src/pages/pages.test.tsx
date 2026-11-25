@@ -199,6 +199,30 @@ describe('Spending control and consistency', () => {
     expect(within(table).getByText('BUCKET_SPENT_MISMATCH')).toBeInTheDocument()
     expect(within(table).getByText('기간 예산 #3')).toBeInTheDocument()
   })
+
+  it('shows the reservation bucket link mismatch in Korean with its explanation', async () => {
+    mockApi(
+      me, csrf, health,
+      on('GET', '/api/v1/budget/control', 200, control(false, 0)),
+      on('GET', '/api/v1/budget-policies', 200, page([])),
+      on('POST', '/api/v1/budget/consistency-checks', 200, {
+        checkedAt: '2026-11-25T00:00:00Z', consistent: false,
+        issues: [{
+          checkCode: 'RESERVATION_BUCKET_LINK_MISMATCH', entityType: 'RESERVATION', entityId: '41',
+          expected: 'SYSTEM DAY=1, SYSTEM MONTH=1, CHANNEL DAY<=1, CHANNEL MONTH<=1, invalid=0',
+          actual: 'SYSTEM DAY=0, SYSTEM MONTH=1, CHANNEL DAY=0, CHANNEL MONTH=0, invalid=0',
+        }],
+      }),
+    )
+    renderApp('/budget/control')
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: '지금 검사' }))
+    const table = await screen.findByRole('table', { name: '정합성 오류' })
+    expect(within(table).getByText('예산 예약 연결 불일치')).toBeInTheDocument()
+    expect(within(table).getByText('비용 예약에 필요한 예산 연결이 누락되었거나 올바르지 않습니다. 신규 비용 예약이 차단되었습니다.')).toBeInTheDocument()
+    expect(within(table).getByText('RESERVATION_BUCKET_LINK_MISMATCH')).toBeInTheDocument()
+    expect(within(table).getByText('예약 #41')).toBeInTheDocument()
+  })
 })
 
 const reservation = {

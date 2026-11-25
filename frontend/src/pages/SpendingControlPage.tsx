@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, ShieldAlert, ShieldCheck, ShieldOff, X } from 'lucide-react'
 import { budgetControl, listPolicies, runConsistencyCheck, setSpending, type Schemas } from '../api/admin'
-import { CHECK_CODE, CONSISTENCY, label } from '../lib/labels'
+import { CHECK_CODE, CHECK_DETAIL, CONSISTENCY, label } from '../lib/labels'
 import { cn } from '../lib/cn'
 import { Button } from '../ui/Button'
 import { Card } from '../ui/Card'
@@ -161,7 +161,13 @@ export function SpendingControlPage() {
                           rows={report.issues}
                           rowKey={(i) => `${i.checkCode}-${i.entityType}-${i.entityId}`}
                           columns={[
-                            { key: 'what', header: '오류', cell: (i) => <><span className="block">{CHECK_CODE[i.checkCode] ?? i.checkCode}</span><span className="text-xs text-muted">{i.checkCode}</span></> },
+                            { key: 'what', header: '오류', cell: (i) => (
+                              <>
+                                <span className="block font-medium">{CHECK_CODE[i.checkCode] ?? i.checkCode}</span>
+                                {CHECK_DETAIL[i.checkCode] && <span className="block text-sm">{CHECK_DETAIL[i.checkCode]}</span>}
+                                <span className="text-xs text-muted">{i.checkCode}</span>
+                              </>
+                            ) },
                             { key: 'target', header: '대상', cell: (i) => `${i.entityType === 'RESERVATION' ? '예약' : i.entityType === 'BUCKET' ? '기간 예산' : '정책'} #${i.entityId}` },
                             { key: 'expected', header: '기대값', align: 'right', cell: (i) => i.expected },
                             { key: 'actual', header: '실제값', align: 'right', cell: (i) => i.actual },

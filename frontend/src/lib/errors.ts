@@ -11,7 +11,7 @@ const MESSAGES: Record<string, string> = {
   BUDGET_EXCEEDED: '예산 한도를 넘습니다.',
   POLICY_VIOLATION: '정책에 의해 거부되었습니다.',
   PREREQUISITE_NOT_MET: '선행 조건이 충족되지 않았습니다.',
-  RATE_LIMIT_EXCEEDED: '시도 횟수를 넘었습니다. 잠시 후 다시 시도하세요.',
+  RATE_LIMIT_EXCEEDED: '요청이 일시적으로 제한되었습니다.',
   INTERNAL_SERVER_ERROR: '서버 오류가 발생했습니다. 잠시 후 다시 시도하세요.',
 }
 
@@ -25,9 +25,32 @@ export interface ErrorView {
   traceId: string | null
 }
 
+/** 재시도 대기 시간 표시: 60초 미만은 초, 이상은 분(올림). */
+export function formatRetryAfter(seconds: number): string {
+  return seconds < 60 ? `${Math.max(1, seconds)}초` : `약 ${Math.ceil(seconds / 60)}분`
+}
+
+/**
+ * 429는 로그인 실패 반복 차단과 동시 인증 요청 제한(RV-08)에 같은 코드·메시지로 쓰인다. 원인을 단정하지 않고
+ * 두 경우를 함께 안내하며 Retry-After가 있으면 대기 시간을 알려준다.
+ */
+function rateLimitDetail(error: ApiError): string {
+  const wait = error.retryAfterSeconds !== undefined ? `${formatRetryAfter(error.retryAfterSeconds)} 후` : '잠시 후'
+  return `실패한 로그인이 반복되었거나 동시에 처리 중인 로그인 요청이 많으면 제한됩니다. ${wait} 다시 시도하세요.`
+}
+
 export function describeError(error: unknown): ErrorView {
   if (error instanceof ApiError) {
     const body = error.body
+    if (error.status === 429) {
+      return {
+        kind: 'other',
+        title: MESSAGES.RATE_LIMIT_EXCEEDED,
+        message: rateLimitDetail(error),
+        details: [],
+        traceId: body?.traceId ?? null,
+      }
+    }
     const kind: ErrorKind =
       error.status === 401 ? 'unauthorized' : error.status === 403 ? 'forbidden' : error.status === 404 ? 'notFound' : 'other'
     return {

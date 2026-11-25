@@ -10,12 +10,15 @@ export interface ApiErrorBody {
 export class ApiError extends Error {
   readonly status: number
   readonly body: ApiErrorBody | undefined
+  /** 429 응답의 Retry-After(초). 계약(OpenAPI TooManyRequests)상 정수 초. 없으면 undefined. */
+  readonly retryAfterSeconds: number | undefined
 
-  constructor(status: number, body: ApiErrorBody | undefined) {
+  constructor(status: number, body: ApiErrorBody | undefined, retryAfterSeconds?: number) {
     super(body?.message ?? `Request failed with status ${status}`)
     this.name = 'ApiError'
     this.status = status
     this.body = body
+    this.retryAfterSeconds = retryAfterSeconds
   }
 }
 
@@ -35,6 +38,14 @@ export async function readJson(response: Response): Promise<unknown> {
   }
 }
 
-export function toApiError(status: number, body: unknown): ApiError {
-  return new ApiError(status, isApiErrorBody(body) ? body : undefined)
+export function toApiError(status: number, body: unknown, retryAfterSeconds?: number): ApiError {
+  return new ApiError(status, isApiErrorBody(body) ? body : undefined, retryAfterSeconds)
+}
+
+/** Retry-After 헤더의 정수 초만 해석한다(HTTP-date 형식은 무시). */
+export function parseRetryAfter(value: string | null): number | undefined {
+  if (value === null || !/^\d+$/.test(value.trim())) {
+    return undefined
+  }
+  return Number(value.trim())
 }

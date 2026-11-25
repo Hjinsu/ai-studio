@@ -15,7 +15,7 @@ export interface Call {
   body: unknown
 }
 
-type Handler = (call: Call) => { status: number; body?: unknown } | undefined
+type Handler = (call: Call) => { status: number; body?: unknown; headers?: Record<string, string> } | undefined
 
 /** fetch 대역: 등록한 핸들러 순서대로 일치하는 첫 응답을 돌려주고 모든 호출을 기록한다. */
 export function mockApi(...handlers: Handler[]) {
@@ -33,7 +33,7 @@ export function mockApi(...handlers: Handler[]) {
       if (result) {
         return new Response(result.body === undefined ? '' : JSON.stringify(result.body), {
           status: result.status,
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...result.headers },
         })
       }
     }

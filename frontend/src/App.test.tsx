@@ -97,6 +97,27 @@ describe('App authentication', () => {
     expect(calls.filter((c) => c.url === '/api/v1/auth/login')).toHaveLength(1)
   })
 
+  it('explains a login 429 neutrally (failures or concurrent requests) with the Retry-After wait', async () => {
+    let retryAfter = '900'
+    mockApi(csrf, on('GET', '/api/v1/auth/me', 401, error('UNAUTHORIZED', 'x')), (call) =>
+      call.url === '/api/v1/auth/login'
+        ? { status: 429, body: error('RATE_LIMIT_EXCEEDED', 'Too many requests.'), headers: { 'Retry-After': retryAfter } }
+        : undefined,
+    )
+    renderApp('/')
+    const user = userEvent.setup()
+    await user.type(await screen.findByLabelText('아이디'), 'admin')
+    await user.type(screen.getByLabelText('비밀번호'), 'whatever-password')
+    await user.click(screen.getByRole('button', { name: '로그인' }))
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('요청이 일시적으로 제한되었습니다.')
+    expect(alert).toHaveTextContent('실패한 로그인이 반복되었거나 동시에 처리 중인 로그인 요청이 많으면 제한됩니다.')
+    expect(alert).toHaveTextContent('약 15분 후 다시 시도하세요.')
+    retryAfter = '1'
+    await user.click(screen.getByRole('button', { name: '로그인' }))
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('1초 후 다시 시도하세요.'))
+  })
+
   it('returns to login with a session-expired notice when a later request gets 401', async () => {
     let expired = false
     mockApi(

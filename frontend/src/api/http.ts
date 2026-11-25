@@ -1,4 +1,4 @@
-import { ApiError, readJson, toApiError } from './client'
+import { ApiError, parseRetryAfter, readJson, toApiError } from './client'
 import type { components } from './generated/schema'
 
 /**
@@ -80,7 +80,7 @@ export async function request<T>(method: 'GET' | 'POST' | 'PATCH', path: string,
   }
   const body = await readJson(response)
   if (!response.ok) {
-    throw toApiError(response.status, body)
+    throw toApiError(response.status, body, parseRetryAfter(response.headers.get('Retry-After')))
   }
   return body as T
 }

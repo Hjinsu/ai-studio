@@ -84,6 +84,13 @@ export const CHECK_CODE: Record<string, string> = {
   BUCKET_REVISION_MISMATCH: '기간 예산의 한도가 정책 revision과 다릅니다.',
   CLOSED_RESERVATION_HAS_RESERVE: '종료된 예약에 남은 예약액이 있습니다.',
   MISSING_RESERVE_EVENT: '예약 이벤트가 없는 예약이 있습니다.',
+  RESERVATION_BUCKET_LINK_MISMATCH: '예산 예약 연결 불일치',
+}
+
+/** 정합성 오류의 추가 설명(필요한 코드만). */
+export const CHECK_DETAIL: Record<string, string> = {
+  RESERVATION_BUCKET_LINK_MISMATCH:
+    '비용 예약에 필요한 예산 연결이 누락되었거나 올바르지 않습니다. 신규 비용 예약이 차단되었습니다.',
 }
 
 export function label(map: Record<string, Label>, value: string): Label {
