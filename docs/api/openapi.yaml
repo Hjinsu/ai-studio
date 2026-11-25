@@ -1452,7 +1452,7 @@ components:
                 type: string
                 enum: [RESERVATION_RESERVED_MISMATCH, RESERVATION_COST_MISMATCH, RESERVATION_ORIGINAL_COST_MISMATCH,
                        BUCKET_RESERVED_MISMATCH, BUCKET_SPENT_MISMATCH, BUCKET_OVERLAP, BUCKET_REVISION_MISMATCH,
-                       CLOSED_RESERVATION_HAS_RESERVE, MISSING_RESERVE_EVENT]
+                       CLOSED_RESERVATION_HAS_RESERVE, MISSING_RESERVE_EVENT, RESERVATION_BUCKET_LINK_MISMATCH]
               entityType: { type: string, enum: [RESERVATION, BUCKET, POLICY] }
               entityId: { $ref: '#/components/schemas/Id' }
               expected: { type: string }

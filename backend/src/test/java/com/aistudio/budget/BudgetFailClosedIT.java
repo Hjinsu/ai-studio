@@ -2,6 +2,9 @@ package com.aistudio.budget;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.math.BigDecimal;
 
@@ -9,10 +12,12 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.web.servlet.MockMvc;
 
 import com.aistudio.ApiTestSupport;
 import com.aistudio.TestDatabases;
@@ -29,6 +34,7 @@ import com.aistudio.shared.api.ErrorCode;
  */
 @Tag("integration")
 @SpringBootTest
+@AutoConfigureMockMvc
 @ActiveProfiles("test")
 class BudgetFailClosedIT {
 
@@ -57,6 +63,9 @@ class BudgetFailClosedIT {
     @Autowired
     private JdbcTemplate jdbc;
 
+    @Autowired
+    private MockMvc mockMvc;
+
     private void expectRejected(ReserveCommand command, ErrorCode code) {
         assertThatThrownBy(() -> reservations.reserve(command))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.errorCode()).isEqualTo(code));
@@ -70,8 +79,9 @@ class BudgetFailClosedIT {
     }
 
     @Test
-    void newReservationsFailClosedUntilEveryPrerequisiteHolds() {
-        Actor admin = Actor.admin(ApiTestSupport.admin(accounts, jdbc).id());
+    void newReservationsFailClosedUntilEveryPrerequisiteHolds() throws Exception {
+        var principal = ApiTestSupport.admin(accounts, jdbc);
+        Actor admin = Actor.admin(principal.id());
 
         // 1) 기본값: 지출 차단
         assertThat(control.get().spendingEnabled()).isFalse();
@@ -141,5 +151,54 @@ class BudgetFailClosedIT {
                 "fc-release-0009", null, null, null, null, null, null, Actor.system()));
         assertThat(released.status()).isEqualTo(BudgetReservationService.RELEASED);
         assertThat(control.runConsistencyCheck(admin).consistent()).isTrue();
+
+        control.setSpending(true, "test", control.get().version(), admin);
+        long confirmable = reservations.reserve(krw("fc-key-0011", null, "2")).reservation().id();
+        long releasable = reservations.reserve(krw("fc-key-0012", null, "2")).reservation().id();
+        long incomplete = insertReservationWithoutBucketLinks(ok.reservation().id());
+        mockMvc.perform(post("/api/v1/budget/consistency-checks").with(ApiTestSupport.as(principal)))
+                .andExpect(status().isOk())
+                .andExpect(ApiTestSupport.matchesContract())
+                .andExpect(jsonPath("$.consistent").value(false))
+                .andExpect(jsonPath("$.issues.length()").value(1))
+                .andExpect(jsonPath("$.issues[0].checkCode").value("RESERVATION_BUCKET_LINK_MISMATCH"))
+                .andExpect(jsonPath("$.issues[0].entityType").value("RESERVATION"))
+                .andExpect(jsonPath("$.issues[0].entityId").value(Long.toString(incomplete)));
+        var error = control.runConsistencyCheck(admin);
+        assertThat(control.get().consistencyStatus()).isEqualTo("ERROR");
+        assertThatThrownBy(() -> reservations.reserve(krw("fc-key-0013", null, "0.5")))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.errorCode()).isEqualTo(ErrorCode.PREREQUISITE_NOT_MET));
+        assertThat(reservations.confirm(new BudgetReservationService.EventCommand(confirmable, "fc-confirm-0011",
+                BigDecimal.ONE, null, null, null, null, null, Actor.system())).status())
+                .isEqualTo(BudgetReservationService.SETTLED);
+        assertThat(reservations.release(new BudgetReservationService.EventCommand(releasable, "fc-release-0012",
+                null, null, null, null, null, null, Actor.system())).status())
+                .isEqualTo(BudgetReservationService.RELEASED);
+        assertThat(control.runConsistencyCheck(admin).issues()).isEqualTo(error.issues());
+    }
+
+    private long insertReservationWithoutBucketLinks(long source) {
+        jdbc.update("""
+                INSERT INTO budget_reservation
+                    (request_key, request_fingerprint, purpose, original_currency, estimate_original, fx_rate,
+                     estimate_krw, status, reserved_remaining_krw, created_at, updated_at)
+                SELECT 'fc-missing-links', request_fingerprint, purpose, original_currency, estimate_original,
+                       fx_rate, estimate_krw, 'ACTIVE', estimate_krw, created_at, updated_at
+                  FROM budget_reservation WHERE id = ?
+                """, source);
+        long id = jdbc.queryForObject("SELECT id FROM budget_reservation WHERE request_key = 'fc-missing-links'",
+                Long.class);
+        jdbc.update("""
+                INSERT INTO cost_log
+                    (event_key, event_fingerprint, reservation_id, request_key, entry_type, original_currency,
+                     original_amount, fx_rate, amount_krw, reserve_delta_krw, cost_delta_krw, cost_delta_original,
+                     actor_type, occurred_at, recorded_at)
+                SELECT 'reserve:fc-missing-links', event_fingerprint, ?, 'fc-missing-links', entry_type,
+                       original_currency, original_amount, fx_rate, amount_krw, reserve_delta_krw, cost_delta_krw,
+                       cost_delta_original, actor_type, occurred_at, recorded_at
+                  FROM cost_log WHERE reservation_id = ? AND entry_type = 'RESERVE'
+                """, id, source);
+        return id;
     }
 }

@@ -345,20 +345,60 @@ class BudgetLedgerIT {
         assertConsistent();
     }
 
-    @Test
-    void consistencyProbeDocumentsMissingSystemBucketLinkDetectionGap() {
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {
+            "DAY", "MONTH", "BOTH", "WRONG_SCOPE", "WRONG_PERIOD", "DUPLICATE_DAY"
+    })
+    void detectsMissingSystemBucketLinksEvenWhenLedgerSumsMatch(String missing) {
         var template = new org.springframework.transaction.support.TransactionTemplate(transactionManager);
+        Long wrongBucketId = missing.equals("WRONG_SCOPE") ? channelBucketForWrongScopeProbe() : null;
         var command = new ReserveCommand(ApiTestSupport.uniqueKey("link-source"), null, "link-probe", "KRW",
                 BigDecimal.ONE);
         var source = reservations.reserve(command).reservation();
         template.executeWithoutResult(status -> {
             long id = insertLegacyReserve(source, ApiTestSupport.uniqueKey("missing-links"));
-            assertThat(reservations.bucketIds(id)).isEmpty();
+            for (var bucket : mapper.lockBuckets(reservations.bucketIds(source.id()))) {
+                String period = policies.get(bucket.policyId()).policy().periodType();
+                if (!missing.equals("BOTH") && !missing.equals("WRONG_SCOPE") && !period.equals(missing)) {
+                    mapper.insertReservationBucket(id, bucket.id());
+                    mapper.applyBucketDeltas(bucket.id(), source.estimateKrw(), BigDecimal.ZERO, source.createdAt());
+                }
+                if (period.equals("DAY") && (missing.equals("WRONG_PERIOD") || missing.equals("DUPLICATE_DAY"))) {
+                    boolean duplicate = missing.equals("DUPLICATE_DAY");
+                    var extra = new BudgetMapper.Generated();
+                    mapper.insertBucket(new BudgetMapper.Bucket(null, bucket.policyId(), null,
+                            bucket.periodStart().minusSeconds(1),
+                            duplicate ? bucket.periodEnd() : bucket.periodStart(), bucket.timezone(),
+                            bucket.limitKrw(), bucket.limitPolicyRevisionNo(), BigDecimal.ZERO, BigDecimal.ZERO,
+                            0, source.createdAt(), source.createdAt()), extra);
+                    mapper.insertReservationBucket(id, extra.id);
+                    mapper.applyBucketDeltas(extra.id, source.estimateKrw(), BigDecimal.ZERO, source.createdAt());
+                }
+            }
+            if (wrongBucketId != null) {
+                mapper.insertReservationBucket(id, wrongBucketId);
+                mapper.applyBucketDeltas(wrongBucketId, source.estimateKrw(), BigDecimal.ZERO, source.createdAt());
+            }
             assertThat(reservations.events(id)).hasSize(1);
-            assertThat(control.runConsistencyCheck(admin).issues()).isEmpty();
+            var first = control.runConsistencyCheck(admin);
+            assertThat(first.issues()).noneMatch(issue -> issue.checkCode().endsWith("_RESERVED_MISMATCH")
+                    || issue.checkCode().endsWith("_SPENT_MISMATCH"));
+            assertThat(first.issues()).filteredOn(issue -> issue.checkCode().equals("RESERVATION_BUCKET_LINK_MISMATCH"))
+                    .singleElement().satisfies(issue -> assertThat(issue.entityId()).isEqualTo(id));
+            assertThat(control.get().consistencyStatus()).isEqualTo("ERROR");
+            assertThat(control.runConsistencyCheck(admin).issues()).isEqualTo(first.issues());
             status.setRollbackOnly();
         });
         assertConsistent();
+    }
+
+    private long channelBucketForWrongScopeProbe() {
+        long channel = channelWithDailyLimit("100");
+        var linked = reservations.reserve(new ReserveCommand(ApiTestSupport.uniqueKey("wrong-scope"),
+                channel, "link-probe", "KRW", BigDecimal.ONE));
+        return mapper.lockBuckets(reservations.bucketIds(linked.reservation().id())).stream()
+                .filter(bucket -> policies.get(bucket.policyId()).policy().scope().equals("CHANNEL"))
+                .findFirst().orElseThrow().id();
     }
 
     private long insertLegacyReserve(BudgetMapper.Reservation source, String requestKey) {

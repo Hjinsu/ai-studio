@@ -99,6 +99,7 @@ stateDiagram-v2
 | 정합성 검사 | control X(검사 중 예약·정산 정지) → 결과를 control에 기록 |
 | 채널 설정 revision(ADR-059) | channel X → baseRevisionNo = 현재 최대 확인 → INSERT(UNIQUE 충돌도 409) |
 - 데드락(1213)·잠금 대기 초과(1205)는 전체 롤백 후 최초 실행 외 최대 3회 재시도, 지수 백오프(50ms·100ms·200ms) + 0~50% jitter. 비즈니스 오류는 재시도하지 않는다.
+- 잠금 재시도 경계는 최상위 트랜잭션을 시작한다. 호출 스레드에 상위 트랜잭션이 활성화된 경우 재시도 작업이나 SQL 변경 전에 호출 계약 위반으로 실패한다. 향후 T03 작업 상태 전이와 예산 호출의 원자성 및 트랜잭션 경계는 별도로 설계한다.
 - 외부 API 호출은 트랜잭션 밖에서만 한다.
 
 ## 7. 기간과 시간대 (ADR-017, ADR-038, ADR-049)
@@ -117,6 +118,7 @@ stateDiagram-v2
 `POST /api/v1/budget/consistency-checks`가 아래를 검사하고 결과(OK/ERROR, 건수, 시각)를 budget_control에 기록한다. ERROR면 신규 예약 차단, 다음 OK 검사 후 해제. 자동 수정 없음.
 | 코드 | 검사 |
 |---|---|
+| RESERVATION_BUCKET_LINK_MISMATCH | 예약 시각을 포함하는 SYSTEM DAY와 MONTH를 각각 하나씩 연결했는지 확인한다. CHANNEL 연결은 해당 채널의 DAY·MONTH 각각 최대 하나이며 연결된 정책은 예약 당시 존재해야 한다. 저장된 기간과 정책의 범위·기간 유형을 사용하므로 이후 상태·revision·시간대 변경과 독립적이다. |
 | RESERVATION_RESERVED_MISMATCH | RR = Σ ΔR |
 | RESERVATION_COST_MISMATCH | C = Σ ΔC |
 | RESERVATION_ORIGINAL_COST_MISMATCH | C₀ = Σ ΔC₀ |
