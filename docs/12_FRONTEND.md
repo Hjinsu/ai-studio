@@ -6,3 +6,4 @@ React Query 또는 동등한 서버 상태 관리, 타입은 OpenAPI와 일치. 
 ## 결정 반영 (2026-11-25)
 - ADR-021: 서버 타입은 OpenAPI 3.1 `docs/api/openapi.yaml`에서 생성(openapi-typescript 우선 후보).
 - ADR-023: 개발은 Vite proxy(`/api`, `/actuator` → 백엔드), 운영은 Spring Boot가 React 빌드 결과를 정적 파일로 제공해 동일 출처로 구성. 화면 시간은 사용자/채널 시간대.
+- ADR-035: T02 화면 — 로그인/로그아웃, 기본 대시보드, 채널 목록·등록·수정·보관, 채널 설정·이력, 예산 정책 관리, 사용량, 비용 원장, 환율 등록·조회. 금액·환율은 API 문자열을 그대로 표시(부동소수 변환 금지). ADR-033: 생성 타입은 `frontend/src/api/generated/`(직접 수정 금지, CI diff 검사).

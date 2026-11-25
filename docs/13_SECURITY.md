@@ -6,3 +6,4 @@ SSRF: research URL protocol allowlist, private IP/redirect 검사, 응답 크기
 - ADR-023: Spring Security 세션 기반 관리자 인증, BCrypt, CSRF 활성, 세션 쿠키 HttpOnly·SameSite=Lax, 유휴 만료 30분. local(HTTP) Secure=false, 운영(HTTPS) Secure=true. 로컬 서버는 loopback(127.0.0.1) 바인딩(T01 적용). 초기 관리자 비밀번호 하드코딩 금지. 구현 T02.
 - ADR-024: 모든 DB profile(local/docker/prod)에서 URL 사전 검사와 Flyway 직전 `SELECT DATABASE()` 검사로 허용 DB(`ai_studio`)가 아니면 즉시 중단. 테스트는 격리 DB(Testcontainers `ai_studio_test` 등)만 허용. 필터 단계 오류도 공통 오류 형식. T01 적용.
 - ADR-025: 로컬 전용 DB는 ALL PRIVILEGES 허용. 운영은 Flyway 전용 migration 계정(`AI_STUDIO_DB_MIGRATION_USER/PASSWORD`)과 앱 계정 분리(T01 설정 적용, 운영 미검증). Flyway 전에 migration 계정과 애플리케이션 계정의 실제 접속 DB를 모두 검사.
+- ADR-031, 036, 037 상세(관리자 CLI, 로그인 제한, 세션·CSRF 흐름): [design/T02_AUTH.md](design/T02_AUTH.md).

@@ -1,0 +1,6 @@
+# gitleaks 오탐 예외 (fingerprint 단위, 규칙 비활성화 금지). 항목마다 근거를 남긴다.
+# 주석에 탐지된 문자열을 그대로 인용하지 않는다(주석 자체가 다시 탐지됨).
+# 2026-11-25: BudgetMapper BUCKET_OVERLAP 정합성 검사 SQL의 두 bucket subject 컬럼 비교가 generic-api-key로 탐지됨. 비밀값 아님.
+4b29e7bb3eb97bff4f19c561fb9e44eb48968f5c:backend/src/main/java/com/aistudio/budget/BudgetMapper.java:generic-api-key:485
+# 2026-11-25: 위 예외의 이전 주석(커밋 e0ae07e)이 같은 SQL을 인용해 탐지됨. 비밀값 아님.
+e0ae07e2f27dfbef1de8b6fba946da441b2d9ee8:.gitleaksignore:generic-api-key:2

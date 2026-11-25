@@ -22,8 +22,22 @@ spring:
 mybatis:
   configuration:
     map-underscore-to-camel-case: true
+    # record 생성자 인자 이름으로 컬럼 매핑
+    arg-name-based-constructor-auto-mapping: true
 
 server:
+  # 전달 헤더(X-Forwarded-For 등)를 신뢰하지 않는다(ADR-045)
+  forward-headers-strategy: none
+  servlet:
+    session:
+      timeout: 30m
+      cookie:
+        # ADR-044: local/docker는 HTTP라 Secure=false, prod에서 true
+        name: AI_STUDIO_SESSION
+        http-only: true
+        same-site: lax
+        path: /
+        secure: false
   error:
     include-message: never
     include-stacktrace: never
@@ -52,3 +66,12 @@ management:
 logging:
   pattern:
     level: "%5p [%X{traceId:-}]"
+
+ai-studio:
+  security:
+    bcrypt-strength: 12
+    login-limit:
+      max-entries: 10000
+  budget:
+    # 환율 기본 유효기간(ADR-046)
+    exchange-rate-validity: PT72H

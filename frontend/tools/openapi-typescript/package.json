@@ -1,0 +1,19 @@
+{
+  "name": "ai-studio-openapi-typescript",
+  "private": true,
+  "description": "OpenAPI → TypeScript 타입 생성·명세 lint 격리 도구 (ADR-033, ADR-040). 프로젝트 TypeScript(6.x)와 분리된 의존성.",
+  "type": "module",
+  "engines": {
+    "node": ">=24.19.0 <25"
+  },
+  "scripts": {
+    "generate": "openapi-typescript ../../../docs/api/openapi.yaml -o ../../src/api/generated/schema.d.ts",
+    "check": "node check-generated.mjs",
+    "lint:openapi": "redocly lint ../../../docs/api/openapi.yaml"
+  },
+  "devDependencies": {
+    "@redocly/cli": "2.83.0",
+    "openapi-typescript": "7.13.0",
+    "typescript": "5.9.3"
+  }
+}

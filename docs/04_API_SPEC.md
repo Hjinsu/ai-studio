@@ -27,7 +27,7 @@ Base /api/v1, JSON UTF-8, 인증 세션/CSRF(ADR-023), UTC ISO8601, pagination p
 상태만 알 수 있는 오류(프레임워크·필터)는 상태별 기본 코드(409→RESOURCE_CONFLICT, 422→POLICY_VIOLATION)로 변환한다. 세분 코드(BUDGET_EXCEEDED 등)는 애플리케이션이 명시적으로 발생시킨다.
 Health: `GET /actuator/health` 인증 없음, 응답은 status만(ADR-008). 다른 Actuator 엔드포인트 비노출. Actuator 표준 응답은 공통 오류 형식과 별도 계약(ADR-024).
 
-T02 추가 API(ADR-021, 상세는 docs/plans/T02_PLAN.md, OpenAPI로 확정): 로그인, 로그아웃, CSRF 토큰, 현재 사용자 조회, 채널 CRUD, 채널 설정, 예산 정책 CRUD, 예산 사용량, 비용 원장 조회.
+T02 API는 OpenAPI 3.1 초안 [api/openapi.yaml](api/openapi.yaml)이 기준이다(ADR-032): 인증(csrf, login, logout, me), 대시보드, 채널(CRUD·pause·resume·archive), 채널 설정 revision·이력, 예산 정책·revision 이력·enable/disable, bucket 이력, 사용량(`GET /budget/usage?channelId=` — 아래 표의 `/channels/{id}/budget`을 대체), 정합성 검사, 예약 조회·관리자 확정·조정(Idempotency-Key), 원장 조회, 환율 등록·조회. ID·금액·환율은 문자열, 목록 기본 20·최대 100. 아래 표는 v0.1 기준선이며 T03 이후 경로는 해당 작업에서 OpenAPI로 확정한다.
 | Method | Path | 요청/결과 |
 |---|---|---|
 | POST | /channels | name,language,timezone → id |

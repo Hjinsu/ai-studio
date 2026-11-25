@@ -1,5 +1,19 @@
 # T01 완료 보고서 (ChatGPT 설계 검토용)
-작성 2026-11-25(3차 갱신: 설계 확정 ADR-012~025 반영) · 구현 Claude Code · 상태: **IMPLEMENTED, CI 통합 검증 대기** (DONE 아님) · 커밋 없음
+작성 2026-11-25(4차 갱신: 커밋·CI 결과) · 구현 Claude Code · 상태: **DONE (2026-11-25 설계 담당 승인)** · 커밋 `55e33ec`
+
+## 0. 커밋·CI 결과 (4차)
+| 항목 | 결과 |
+|---|---|
+| 커밋 | `55e33ecb94b00e5384b10e04f7f88a7b918fb0fe` feat: complete T01 foundation and design hardening (82 files) → origin/main |
+| 커밋 전 검사 | `.env`·빌드 산출물·node_modules·로그·영상·덤프 미포함, `.env` 비밀번호 문자열 미포함, `gitleaks git --staged` 누수 없음, `gradlew` 100755 |
+| 커밋 직전 추가 | 운영 migration 계정 분리 시 **애플리케이션 계정의 실제 접속 DB도 Flyway 전 검사**(DatabaseGuardConfigurationTest 6), 단위 103/103 |
+| GitHub Actions | run [45440907314](https://github.com/Hjinsu/ai-studio/actions/runs/45440907314) 전 job **success** |
+| Linux backend | Unit ✓, Integration(DatabaseBootstrapIT·DatabaseUpgradeIT, Testcontainers MariaDB 11.8.8) ✓, bootJar ✓, Compose config ✓, Docker image build ✓ |
+| Windows backend | unit + bootJar ✓(`gradlew.bat`) |
+| Frontend Linux/Windows | npm ci·lint·typecheck·test·build ✓ |
+| Secret scan | gitleaks ✓ |
+| 한계 | job 로그는 인증 필요(API 403)로 테스트별 개수 미확인. 통합 단계 성공은 Gradle 9의 테스트 미발견 실패 동작과 소요 시간(23초)으로 간접 확인 |
+
 
 ## 1. 이번 지시 반영 결과
 | 지시 | 결과 |
@@ -54,12 +68,13 @@
 | Vite 프록시 E2E, loopback 바인딩 | **통과** |
 | 프론트 lint/typecheck/test/build | **통과** (4/4) |
 | actionlint, gitleaks(dir, git) | **통과** |
-| 통합 테스트(DatabaseBootstrapIT, DatabaseUpgradeIT) | **실패(환경: Docker 없음) — 미검증** |
-| Docker build/Compose, GitHub Actions(Linux/Windows) | **미실행** |
+| 통합 테스트(DatabaseBootstrapIT, DatabaseUpgradeIT) | 로컬 실패(Docker 없음) → **CI 성공** |
+| Docker image build/Compose config, GitHub Actions(Linux/Windows) | **CI 성공**(Compose up은 미실행) |
 | prod profile 실제 운영 DB | **미검증** |
 
-**결론: 로컬에서 실행 가능한 범위는 모두 통과. 신규 DB 초기화·업그레이드 통합 테스트와 CI는 미검증이므로 T01은 DONE이 아니다.**
+**결론: 로컬 전 범위와 CI 전 job 통과. T01 DONE 전환은 승인 대기.**
 
 ## 5. T01 DONE 전환 조건
-1. 사용자 지시로 커밋/푸시(gradlew 100755 staged 상태)
-2. GitHub Actions 전 job 통과: backend-linux(단위+통합 2종+bootJar+compose config+image build), backend-windows, frontend(Linux/Windows), secret-scan
+1. ~~커밋/푸시~~ — 완료(`55e33ec`)
+2. ~~GitHub Actions 전 job 통과~~ — 완료(run 45440907314)
+3. ~~설계 담당 DONE 승인~~ — **승인(2026-11-25)**. 유지되는 한계: 개별 CI 로그 독립 확인 불가, 운영 DB 미검증

@@ -17,6 +17,14 @@
 - [15_ROADMAP](15_ROADMAP.md)
 - [16_SOURCES](16_SOURCES.md)
 - 보고서: [reports/T01_REPORT](reports/T01_REPORT.md)
-- 계획: [plans/T02_PLAN](plans/T02_PLAN.md)
+- 계획: [plans/T02_PLAN](plans/T02_PLAN.md), [plans/T03_PLAN](plans/T03_PLAN.md) (T03 선행 조건·필수 설계 제약만, 미착수)
+- T02 설계: [design/T02_DATA_MODEL](design/T02_DATA_MODEL.md), [design/T02_BUDGET_LEDGER](design/T02_BUDGET_LEDGER.md), [design/T02_AUTH](design/T02_AUTH.md), [design/T02_DDL_DRAFT.sql](design/T02_DDL_DRAFT.sql), [api/openapi.yaml](api/openapi.yaml), [design/UI_DESIGN_SYSTEM](design/UI_DESIGN_SYSTEM.md) (관리자 UI 디자인 시스템, ADR-063)
+- 보고서: [reports/T02_DESIGN_REPORT](reports/T02_DESIGN_REPORT.md), [reports/T02_REPORT](reports/T02_REPORT.md), [reports/T02_CODEX_FIX_REPORT](reports/T02_CODEX_FIX_REPORT.md), [reports/T02_CODEX_EXT_FIX_REPORT](reports/T02_CODEX_EXT_FIX_REPORT.md), [reports/T02_UI_FIX_REPORT](reports/T02_UI_FIX_REPORT.md) (Codex UI 리뷰 결함·사용자 확인 항목 수정)
+- 리뷰: [reviews/T02_CODEX_REVIEW](reviews/T02_CODEX_REVIEW.md) (Codex 최초 리뷰, 기준 fa32535), [reviews/T02_CLAUDE_BACKEND_REVIEW](reviews/T02_CLAUDE_BACKEND_REVIEW.md) (Claude 교차 리뷰, fa32535..6a32c64), [reviews/T02_CODEX_FRONTEND_REVIEW](reviews/T02_CODEX_FRONTEND_REVIEW.md) (Codex UI 독립 리뷰, fa32535..8319672)
+- 표적 UI 교차 리뷰와 후속 수정: [reviews/T02_CODEX_UI_FIX_REVIEW](reviews/T02_CODEX_UI_FIX_REVIEW.md), [reports/T02_UI_EXT_FIX_REPORT](reports/T02_UI_EXT_FIX_REPORT.md)
+- 최종 독립 리뷰와 콜백 경계 보강: [reviews/T02_FINAL_REVIEW](reviews/T02_FINAL_REVIEW.md), [reports/T02_FINAL_PATCH_REPORT](reports/T02_FINAL_PATCH_REPORT.md)
+- T02 DONE (2026-11-25): [최종 보강 독립 검토](reviews/T02_FINAL_PATCH_REVIEW.md), [종료 기록](reports/T02_REPORT.md#15-t02-final-close--종료-승인-및-main-반영-2026-11-25)
+- 가이드: [guides/LOCAL_TEST_GUIDE](guides/LOCAL_TEST_GUIDE.md) (Docker 없는 PC의 임시 MariaDB 통합 테스트, 프론트·계약 검사), [guides/LOCAL_RUN_GUIDE](guides/LOCAL_RUN_GUIDE.md) (로컬 서버 실행), [guides/T02_USER_VERIFICATION](guides/T02_USER_VERIFICATION.md) (T02 최종 사용자 검증·읽기 전용 DB 점검), [guides/CODEX_COLLABORATION](guides/CODEX_COLLABORATION.md) (Claude Code/Codex 협업)
+- 작업 배정: [../TASKS.md](../TASKS.md)
 
-공통 계약은 ../AGENTS.md, 결정 변경은 ../DECISIONS.md, 진행 상태는 ../STATE.md. 이 문서는 구현 전 기준선이며 기존 대화의 상세 FR 번호 체계는 아래 문서에서 새로 묶었다. 구현 시 변경 이력 관리.
+공통 계약은 ../AGENTS.md, 결정 변경은 ../DECISIONS.md, 진행 상태는 ../STATE.md, 작업 배정은 ../TASKS.md. 이 문서는 구현 전 기준선이며 기존 대화의 상세 FR 번호 체계는 아래 문서에서 새로 묶었다. 구현 시 변경 이력 관리.

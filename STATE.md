@@ -1,11 +1,11 @@
 # 작업 상태
-기준선: v0.1 설계 패키지 + ADR-006~025 승인(2026-11-25). 실제 계정 및 API 미연동.
-현재 작업: T01 (IMPLEMENTED — 로컬 검증 완료, CI/Docker 통합 테스트 미실행이므로 DONE 처리 금지). T02 미착수, 계획 초안 [docs/plans/T02_PLAN.md](docs/plans/T02_PLAN.md).
+기준선: v0.1 설계 패키지 + ADR-006~066 승인(2026-11-25). 실제 계정 및 API 미연동.
+현재 상태: T02 DONE (2026-11-25 최종 승인). T03 미착수, 별도 설계 승인 대기. [T02 통합 보고서](docs/reports/T02_REPORT.md), [최종 독립 검토](docs/reviews/T02_FINAL_PATCH_REVIEW.md).
 | ID | 상태 | 작업 |
 |---|---|---|
-| T01 | IMPLEMENTED (CI 통합 검증 대기) | 프로젝트 bootstrap, 버전 고정, DB/Flyway, CI, health check |
-| T02 | TODO (계획 초안, 결정 D-01~D-13 대기) | 인증, 채널, 설정, 비용 원장 |
-| T03 | TODO | 콘텐츠 revision, DB 큐, lease, 재시도 |
+| T01 | DONE (2026-11-25 승인, 커밋 55e33ec, CI run 45440907314) | 프로젝트 bootstrap, 버전 고정, DB/Flyway, CI, health check |
+| T02 | DONE (2026-11-25 최종 승인, 제품 `55ea852`, [PR #1](https://github.com/Hjinsu/ai-studio/pull/1), 사용자 검증 14/14·최종 재확인 6/6) | 인증, 채널, 설정, 비용 원장 |
+| T03 | TODO (선행 조건·필수 설계 제약만 기록: docs/plans/T03_PLAN.md, 착수 금지) | 콘텐츠 revision, DB 큐, lease, 재시도 |
 | T04 | TODO | fake provider, 조사/대본/스토리보드 |
 | T05 | TODO | 이미지/TTS/자막/FFmpeg 로컬 렌더링 |
 | T06 | TODO | 검수/승인/관리자 UI |
@@ -16,8 +16,207 @@
 ## 인수인계 기록
 작업 ID / 상태 / 변경 파일 / 테스트 명령 및 실제 결과 / 미해결 문제 / 다음 작업 / 필요 환경변수. 커밋 해시는 생성된 경우만 기록.
 
-### T01 — IMPLEMENTED, CI 통합 검증 대기 (2026-11-25, 3차 갱신)
-요구사항: ADR-006~014, ADR-023(loopback), ADR-024, ADR-025, docs/02, 03, 04, 13, 14, 15. 커밋 없음(사용자 지시 대기). `gradlew`는 실행 권한(100755)으로 **staged만** 된 상태. 설계 검토용 보고서: [docs/reports/T01_REPORT.md](docs/reports/T01_REPORT.md).
+### T02-FINAL-CLOSE — 종료 승인 및 main 반영 (2026-11-25, DONE)
+- RVX-02-CB 독립 검토 PASS, 종료 권고 APPROVE, 새 종료 차단 결함 없음. 최종 검토 원문과 사용자 검증 14/14·최종 재확인 6/6을 보존했다.
+- 제품 `55ea852`, 종료 전 기준 HEAD `49334bc`의 CI [45578405327](https://github.com/Hjinsu/ai-studio/actions/runs/45578405327) 7/7. [PR 병합 및 최신 검사 기록](https://github.com/Hjinsu/ai-studio/pull/1/checks).
+- 백엔드 단위 133건·격리 MariaDB 통합 97건은 기존 T02 기록, 프론트엔드 Vitest 73건·Edge Mock API E2E 10건은 최종 보강 기록을 근거로 한다. 실제 백엔드 연결 브라우저 E2E 미실행. 종료 작업에서 제품·API·DB·migration 변경 없음.
+- CR-01·CR-02, P-T02-03·P-T02-05, UI-F06·F08·F09·F10 보류 및 T03 선행 제약 유지. 지출 차단을 유지하며 실제 비용 발생과 유료 API 활성화 전에 영속 정산 멱등성과 결과 복구가 필요하다. T03은 별도 설계 승인 전 미착수.
+
+### T02-FINAL-PATCH — RVX-02-CB 최종 보강 (2026-11-25, IMPLEMENTED)
+- Draft PR #1 제품 커밋 `55ea852`. 보호 mutation의 캐시 조회와 토스트를 요청 세대에 결합하고 후속 UI 처리 전에 세대를 재확인했다. [최종 리뷰 원문](docs/reviews/T02_FINAL_REVIEW.md), [보강 및 검증 기록](docs/reports/T02_FINAL_PATCH_REPORT.md).
+- 기존 Vitest 70건에 표적 회귀 3건을 추가했다. 기존 Edge Mock API E2E 10건을 유지했다. API·백엔드·DB·migration 변경 없음. 개발 DB 미사용.
+- 사용자 보고 화면 검증 14/14 및 최종 변경 화면 재확인 6/6을 유지한다. 다음 단계는 변경된 콜백 경계의 별도 세션 확인 및 최종 종료 승인이다.
+
+### T02-UI-FIX-EXT — 세션 경계 및 정산 안전성 — Codex (2026-11-25, IMPLEMENTED)
+- Draft PR #1의 통합 브랜치에서 `7256fe1`을 기준으로 제품 커밋 `53b305b`에 RVX-01~03을 반영했다. [표적 교차 리뷰](docs/reviews/T02_CODEX_UI_FIX_REVIEW.md)와 기존 검토 참조를 보존했다.
+- 프론트엔드 인증 세대·정산 확인 흐름 및 해당 회귀 테스트를 변경했다. Vitest 70건과 Edge Mock API E2E 10건, lint·typecheck·build, OpenAPI lint 및 생성 타입 비교, gitleaks 결과는 [후속 수정 보고서](docs/reports/T02_UI_EXT_FIX_REPORT.md)에 기록했다.
+- DB 및 마이그레이션 적용 상태 변경 없음. 개발 DB 3306, 실제 백엔드 브라우저 E2E, 유료 API 미사용.
+- 다음 단계는 최신 Draft PR HEAD 기준 독립 교차 검토와 사용자 재확인·종료 승인이다. P-T02-05의 근본 해결은 실제 비용 발생 및 유료 API 활성화의 선행 조건이다. main 병합·DONE 전환·T03 착수는 별도 승인 대상이다.
+
+### T02-UI-FIX — Codex UI 리뷰 결함·사용자 확인 항목 수정 — Claude Code (2026-11-25, IMPLEMENTED, DONE 아님)
+요구사항: 사용자 지시(UI-RV-01~06 전체 수정, UI-F01·F02·F03·F04·F05·F07·F11·F12·F13, 안전 검토 A01·A02·A03). 리뷰 [T02_CODEX_FRONTEND_REVIEW](docs/reviews/T02_CODEX_FRONTEND_REVIEW.md), 결과 [T02_UI_FIX_REPORT](docs/reports/T02_UI_FIX_REPORT.md), ADR-066, 제안 P-T02-05.
+- 브랜치 `wip/t02-implementation-checkpoint-2026-11-25`(Draft PR #1). 수정 전 HEAD `6f4589f`. 커밋 `646179a` "fix(T02-UI): resolve Codex UI review UI-RV-01..06 and approved UI-F items" → PR #1 푸시. GitHub Actions run [45567226915](https://github.com/Hjinsu/ai-studio/actions/runs/45567226915) **7/7 job success**(Backend Linux unit+integration, Backend Windows, Frontend ubuntu·windows, Frontend E2E Edge, gitleaks, OpenAPI·생성 타입). 이후 커밋은 기록용 문서만.
+- 변경: `frontend/` 화면·공통 컴포넌트·테스트, 문서. **API·OpenAPI·생성 타입·백엔드·DB·Flyway 변경 없음**, 새 의존성 없음.
+- 실제 결과: frontend lint·typecheck·build 통과, vitest **60/60**(기존 39 유지), Playwright E2E **10/10**(Edge, **Mock API** — 실제 백엔드 연동 아님, 3회 연속 통과), OpenAPI lint 유효(기존 경고 2)·생성 타입 일치, 백엔드 단위 **133/133**·통합 **97/97**(격리 임시 MariaDB 11.8.2 `127.0.0.1:3307`, 종료함)·bootJar 성공. 수정 전 코드(`6f4589f`)에 새 테스트를 적용하면 vitest 16건·E2E 3건 실패(재현 확인, 임시 worktree는 제거).
+- 이전 CI 재실행: `6f4589f` run 45558365457 — 1차 Maven Central HTTP 429로 Backend Linux 실패, 2차 시도 7/7 성공.
+- 사용자 검증(사용자 보고): 통합 UI 주요 화면 확인, 관리자·IFNOVA·예산 정책 6개·테스트 환율·지출 차단 보존, 정합성 검사 정상, 예약·원장 비어 있음 정상, 서버 상태 정상, 실제 유료 예약·정산 미실행.
+- 미해결: A01 새로고침 후 수동 재입력 중복 가능성(P-T02-05, 실제 비용 발생 전 해결 또는 명시적 수용), UI-F06·F08·F09·F10 보류, 실제 백엔드 대상 브라우저 E2E 미실행, CR-01·CR-02(ADR-065).
+- DB: 사용자 개발 DB(3306) 미사용·미변경, 새 migration 없음.
+- 다음 작업: Codex 표적 교차 리뷰(TASKS `T02-UI-FIX-RV`) → 사용자 재확인 → 최종 종료 승인. main 병합·T02 DONE·T03 착수 금지(별도 승인).
+
+### T02-INT — PR #1에 PR #2 통합 및 최종 검증 — Claude Code (2026-11-25, IMPLEMENTED, DONE 아님)
+요구사항: 사용자 T02 조건부 통합 승인(ADR-063·064·065, P-T02-02 승인, P-T02-03 보류, P-T02-04 조건부 수용). 상세: [T02_REPORT §11](docs/reports/T02_REPORT.md).
+- 브랜치 `wip/t02-implementation-checkpoint-2026-11-25`(Draft PR #1, base main). 통합 전 HEAD `862a300`, PR #2 승인 HEAD `6a32c64`(이후 새 커밋 없음 확인).
+- 커밋: 협업 문서 `67d50b9` → 병합 `07f8963`(`--no-ff`, 충돌 없음) → UI 통합 보완 `8319672` → 문서(이 기록).
+- 검증(통합 HEAD): 백엔드 단위 133/133, 통합 97/97(격리 MariaDB 3307), bootJar, 생성 타입 재생성 diff 없음·check 일치, 프론트 lint·typecheck·vitest 39/39·build, Playwright E2E 8/8(**Mock API**, 실제 백엔드 연동 아님).
+- **CI**: 통합 HEAD `ab68286` → run **45557933535 전 7개 job 성공**(Backend Linux unit+Testcontainers integration+bootJar+image, Backend Windows, Frontend ubuntu/windows, Frontend E2E Edge, OpenAPI contract, gitleaks). 이후 커밋은 이 기록만 갱신하는 문서 커밋.
+- PR #2: PR #1 브랜치를 대상으로 하므로 통합 푸시 후 GitHub가 **MERGED로 자동 표시**(2026-11-25T06:04:28Z). main 병합 아님, 브랜치·worktree 삭제 없음.
+- 미완료: Codex UI 독립 리뷰(TASKS `T02-UI-RV`, 기준 `8319672`), 사용자 실제 화면 검증([T02_USER_VERIFICATION](docs/guides/T02_USER_VERIFICATION.md)), 최종 승인. T03 선행 제약은 [T03_PLAN](docs/plans/T03_PLAN.md)(착수 금지).
+- DB: 사용자 개발 DB(3306) 미사용·미변경. 새 migration 없음(V1~V5 그대로). 임시 인스턴스만 사용 후 종료.
+- 다음 작업: Codex UI 리뷰 결과 반영 여부 결정 → 사용자 실제 화면 검증 → 최종 승인 → (별도 지시) main 병합·PR #2·worktree 정리.
+
+### T02-UI · T02 교차 리뷰 — Claude Code (2026-11-25, IMPLEMENTED, DONE 아님)
+작업 ID: T02-UI(통합 UI 개선·디자인 시스템), T02-RV-X 교차 리뷰(Codex 백엔드 `fa32535..6a32c64`). 브랜치 `wip/t02-implementation-checkpoint-2026-11-25`(worktree `C:/Users/PC-94/Desktop/ai-studio`, Draft PR #1). Codex는 별도 worktree `../ai-studio-t02-fix`, 브랜치 `fix/t02-backend`(Draft PR #2, HEAD `6a32c64`) — 읽기 전용으로만 참조, 수정하지 않음.
+
+**완료**
+- UI: 커밋 `5d53065` — 디자인 토큰(라이트/다크), 공통 컴포넌트(`frontend/src/ui`, `frontend/src/layout`, `frontend/src/lib`), T02 전 화면 개편, 화면별 코드 분할, Playwright E2E(`frontend/e2e`, 설치된 Edge), CI job `frontend-e2e`. 문서 `docs/design/UI_DESIGN_SYSTEM.md`, ADR-063, API 보완 후보 P-T02-03. API 계약·생성 타입·백엔드 변경 없음.
+- 교차 리뷰: `docs/reviews/T02_CLAUDE_BACKEND_REVIEW.md` — RV-01~09 해결, 신규 확인 결함 없음, 잠재 위험 CR-01·CR-02(P-T02-04), T03 제약, P-T02-02 범위 적절.
+
+**실제 테스트 결과**
+| 대상 | 결과 |
+|---|---|
+| UI(`5d53065`) lint·typecheck·vitest·build·E2E·생성 타입 check | 통과, vitest 36/36, E2E 8/8 |
+| PR #1 CI run 45554314696 | 7/7 success(Backend Linux/Windows, Frontend ×2, Frontend E2E, OpenAPI, gitleaks) |
+| 검토 worktree `../ai-studio-review-6a32c64`(detached `6a32c64`) + 임시 MariaDB 3307: `:backend:test :backend:integrationTest :backend:bootJar --no-build-cache --rerun-tasks` | 단위 133/133, 통합 97/97, bootJar 성공 |
+| 같은 worktree에 UI(`5d53065` frontend) + Codex 생성 타입 결합 | lint·typecheck 통과, vitest 36/36, build, E2E 8/8, 생성 타입 일치 |
+| `git merge-tree` UI ↔ `6a32c64` | 충돌 없음, 공통 수정 파일 0개 |
+
+**미검증**: 개선된 UI의 사용자 실제 화면 재검증, 실제 백엔드 대상 브라우저 E2E, 통합 HEAD CI(통합 전), 로그인 부하·구버전 데이터 업그레이드 경합(CR-01·02).
+
+**DB**: 3306 작업 DB 미사용·미변경. 임시 인스턴스(3307, scratch)만 사용 후 종료.
+
+**공통 파일 주의**: 작업 트리의 `AGENTS.md`·`CLAUDE.md` 협업 규칙 수정, `TASKS.md`, `docs/guides/CODEX_COLLABORATION.md`, `docs/guides/LOCAL_RUN_GUIDE.md`, `docs/reviews/T02_CODEX_REVIEW.md`는 사용자/Codex가 추가한 미커밋 파일이다. Claude 커밋에 포함하지 않았다(AGENTS.md·CLAUDE.md에는 UI 디자인 시스템 규칙 줄만 별도 반영, TASKS.md는 작업 트리에서 갱신만). `T02_CODEX_REVIEW.md`는 `6a32c64`와 Codex worktree에 없다.
+
+**다음 작업(사용자 승인 필요)**: (1) 통합 승인 → UI 브랜치에 `fix/t02-backend` 병합, `CHECK_CODE`에 `RESERVATION_BUCKET_LINK_MISMATCH`("예산 예약 연결 불일치") 추가, 통합 HEAD 전체 검증·CI (2) 사용자 UI 재검증 (3) P-T02-02·P-T02-04·ADR-063 결정 → 최종 승인 후 T02 DONE. T03 시작 금지.
+
+### T02 — 관리자 CLI 결함 수정 (2026-11-25, IMPLEMENTED 유지, DONE 아님)
+요구사항: 사용자 검증 결함(`java -jar ... admin create --login admin` → BeanCreationException), ADR-031. 상세: [T02_REPORT §8](docs/reports/T02_REPORT.md).
+- **원인**: (1) `AdminCommandRunner` 생성자 2개에 `@Autowired` 없음 → Spring이 기본 생성자 탐색 실패. (2) Spring `ApplicationArguments`는 `--login admin`(공백)을 옵션 값으로 인식하지 않아 문서대로의 명령이 항상 "사용법" 거부.
+- **변경 파일**: `backend/src/main/java/com/aistudio/security/AdminCommandRunner.java`(`@Autowired` 생성자 + `ObjectProvider<PasswordPrompt>`, 엄격 인자 해석 `parse`), `backend/src/main/java/com/aistudio/AiStudioApplication.java`(`adminCli()` 비웹 빌더 분리), `backend/build.gradle.kts`(integrationTest → bootJar 의존, jar 경로 전달), 테스트 `security/AdminCliIT.java`·`security/AdminCliJarIT.java`(신규), `AdminCommandRunnerTest.java`(+2).
+- **실제 결과**: 단위 127/127, 통합 71/71(임시 MariaDB 3307). 실제 bootJar + local profile CLI 실행: create/reset-password/`--login=` → 컨텍스트 정상·웹 서버 없음·콘솔 없음 거부(종료 2), 인자 누락 → 사용법(종료 2). 변이 2종(`@Autowired` 제거, 이전 인자 해석) 모두 검출.
+- **미검증**: 대화형 콘솔 숨김 입력 성공 경로의 실제 터미널 실행(이 환경에 TTY 없음) → 사용자 터미널에서 `java -jar backend/build/libs/backend-0.1.0-SNAPSHOT.jar admin create --login <id>` 재확인 필요. 3306 작업 DB 미사용·미변경.
+- **CI**: 수정 커밋 `6d5cccd` → run 45530093712 전 job 통과(Backend Linux에서 bootJar → integrationTest 순서 확인, AdminCliJarIT 포함). Draft PR #1 유지, 병합 없음.
+- **다음 작업**: 사용자 터미널 재확인 → 설계 담당 최종 검토 → T02 DONE 여부. T03 착수 금지.
+
+### T02 — 2차 재개 세션: 설계 승인 반영·검증 완료 (2026-11-25, IMPLEMENTED, DONE 아님)
+요구사항: P-T02-01 승인(→ADR-062), T02 미완료 항목(T02_PLAN §2 단계 7~10), 예산 필수 검증 14항목, ADR-035 관리자 UI. T03 미착수. 브랜치 `wip/t02-implementation-checkpoint-2026-11-25`(커밋·푸시 승인, main 병합 금지).
+
+**커밋**: `77b4680`(OpenAPI 평탄화·계약 검증기 테스트·예산 IT), `b64fa3e`(예산 동시성·시간·롤백 IT, 운영 권한 IT), `6677f38`(관리자 UI·생성 타입 도구·CI job), `beb7e8f`(보고서·가이드), `e0ae07e`·`93bbde3`(gitleaks 오탐 예외), CI 결과 기록 커밋(`git log`로 확인).
+
+**구현·변경**
+- OpenAPI: allOf 10곳 평탄화(ADR-062, JSON 구조 불변). `unevaluatedProperties` 방식은 검증기의 중첩 스키마 미정의 필드 누락을 실측해 기각. 이전 테스트 헬퍼의 명세 변형(`strictAllOf`) 제거.
+- 테스트(백엔드): `OpenApiContractTest`(단위 4), `budget/BudgetConcurrencyIT`(11), `budget/BudgetTimeIT`(5, MutableClock), `security/ProductionGrantsIT`(2), 이전 세션 추가분 `BudgetFailClosedIT`(1)·`BudgetLedgerIT`(6). Gradle 테스트 입력에 `docs/api/openapi.yaml`, `infra/mariadb/prod-app-grants.sql` 선언.
+- 프론트: `frontend/tools/openapi-typescript`(격리 도구, 자체 lockfile), `src/api/generated/schema.d.ts`(생성물), `src/api/{http,admin}.ts`, `src/ui/*`, `src/pages/*`(T02 화면 전체), `routes.tsx`, `Layout.tsx`, `queryClient.ts`, 테스트 3파일. react-router 8.5.3, @testing-library/user-event 14.6.13 고정.
+- CI: `openapi-contract` job(Redocly lint + 생성 타입 diff).
+- 문서: DECISIONS(ADR-062, P-T02-01 승인), docs/reports/T02_REPORT.md, docs/guides/LOCAL_TEST_GUIDE.md(임시 DB 실행·종료 절차), docs/16_SOURCES.md, docs/00_INDEX.md, .gitignore(`backend/bin/`).
+
+**실제 테스트 결과**
+| 명령 | 결과 |
+|---|---|
+| `./gradlew.bat :backend:test :backend:integrationTest --rerun-tasks` (임시 MariaDB 11.8.2 :3307) | 단위 125/125, 통합 69/69, 실패·skip 0 |
+| frontend `npm run lint`·`typecheck`·`test`·`build` | 성공, vitest 26/26 |
+| tools/openapi-typescript `npm ci`·`lint:openapi`·`check` | Redocly 유효(경고 2, 의도), 생성 타입 일치 |
+| 백엔드(임시 인스턴스의 `ai_studio`)+Vite 프록시 API 스모크 | 전 단계 기대대로(T02_REPORT §5) |
+| 변이 검사 4종 | 모두 검출, 원복 확인 |
+| 비밀정보 | gitleaks 로컬 미설치(다운로드는 권한 정책으로 미실행) → 수동 패턴 검사(누수 없음), CI gitleaks job에 위임. 커밋 대상에 `.env`·node_modules·dist·빌드 산출물 없음 |
+
+**미검증**: GitHub Actions(아래), Docker/Testcontainers 경로, 실제 브라우저 조작, 운영 DB(prod profile, binlog ON 트리거).
+
+**CI**: Draft PR [#1](https://github.com/Hjinsu/ai-studio/pull/1)(main 대상, 사용자 승인, **병합 금지**, 워크플로 트리거 미변경)로 실행. run 45525957400·45526405063은 gitleaks 오탐으로 실패(상세 T02_REPORT §7) → `.gitleaksignore` fingerprint 예외(커밋 e0ae07e, 93bbde3, DECISIONS P-T02-02 승인 대기) → **run 45526843601(93bbde3) 전 job 통과**(Backend Linux unit+Testcontainers integration+image, Windows, Frontend ×2, OpenAPI contract, gitleaks). CI 통합 테스트 개수는 로그에 출력되지 않아 미확인.
+
+**DB 상태**: 3306 작업 DB `ai_studio`는 변경하지 않음(여전히 migration 미적용). 임시 인스턴스(3307, 세션 scratchpad)는 테스트 종료 후 정상 종료. 절차: [docs/guides/LOCAL_TEST_GUIDE.md](docs/guides/LOCAL_TEST_GUIDE.md).
+
+**주의(이 PC)**: vitest는 대문자 드라이브 경로(`C:\...`)에서 실행해야 한다(소문자 `c:\` 작업 경로에서는 모듈 이중 로드로 전 파일 실패). IDE의 Java 오류 표시는 `backend/bin` 오래된 classpath 기준이라 무시(Gradle 빌드 기준).
+
+**다음 작업**: (1) 설계 담당 최종 검토(T02_REPORT, ADR-062, P-T02-02) → 승인 시 T02 DONE·PR 병합 여부 결정 (2) T03은 승인 전 시작 금지.
+
+### T02 — 1차 재개 세션 (2026-11-25, 다른 PC, 당시 IN_PROGRESS)
+요구사항: T02_PLAN §2 단계 6 검증·§4 테스트, ADR-026~061, T02_BUDGET_LEDGER §2~§6. T03 미착수. 커밋 없음(사용자 지시 대기). 브랜치 `wip/t02-implementation-checkpoint-2026-11-25`(origin에서 checkout, 4b29e7b 기준).
+
+**환경 (이 PC)**: Windows 11, Gradle JDK 17.0.8 + toolchain JDK 21.0.13, Node 24.21.0, MariaDB 11.8.2 서비스(3306), Docker 없음. 루트 `.env` 존재(필수 변수 3개 설정). 로컬 `ai_studio` DB: 비어 있음(`flyway_schema_history` 없음, collation `utf8mb4_unicode_ci`, 계정 `ai_studio`@localhost ALL on ai_studio). **V1~V5 미적용 — 의도적**: P-T02-01 결정 전 migration을 로컬 DB에 적용하지 않음(적용 후 수정 금지 규칙). 적용은 `./gradlew.bat :backend:bootRun`(local profile) 시 자동.
+
+**통합 테스트 실행 방법 (Docker 없는 PC)**: 작업 DB 서버가 아닌 **임시 MariaDB 인스턴스**를 띄우고 `AI_STUDIO_IT_DB_*`로 지정한다(TestDatabases가 `ai_studio_test_*` DB 생성).
+```
+"C:/Program Files/MariaDB 11.8/bin/mariadb-install-db.exe" --datadir=<임시폴더>/itdb --port=3307 --password=<임시>
+"C:/Program Files/MariaDB 11.8/bin/mariadbd.exe" --defaults-file=<임시폴더>/itdb/my.ini --bind-address=127.0.0.1 --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --default-time-zone=+00:00 --max-connections=300 --console
+AI_STUDIO_IT_DB_HOST=127.0.0.1 AI_STUDIO_IT_DB_PORT=3307 AI_STUDIO_IT_DB_USER=root AI_STUDIO_IT_DB_PASSWORD=<임시> ./gradlew.bat :backend:integrationTest
+```
+(이번 세션은 세션 scratchpad에 생성, 저장소 밖. 사용 후 프로세스 종료·폴더 삭제 가능.)
+
+**ChannelIT 실패 원인 분석 (이전 기록의 2건)**
+- 두 건 모두 500이 아니라 **OpenAPI 계약 검증 실패**였다(이전 기록의 "500"은 이 PC에서 재현되지 않음, line 97은 contract matcher).
+- (1) `createListGetAndUpdateChannelWithContract`: 검증 라이브러리(openapi-request-validator 3.0.0)가 응답 스키마에 `additionalProperties:false`를 자동 주입하는데 `allOf[PageMeta, {items}]` 하위 스키마마다 주입되어 정상 페이지 응답을 거부. `withResolveCombinators(true)`는 3.1 스펙에서 효과 없음(확인). 1차 조치였던 테스트 헬퍼 `strictAllOf`는 중첩 위반을 숨기는 것으로 확인되어 **제거**(P-T02-01). → 명세 평탄화로 해결, 통과.
+- (2) `configRevisionsAreImmutableHistoryWithOptimisticBase`: **스펙 자체 모순** — `ChannelConfigSettings`가 `additionalProperties:false`를 명시하므로 `ChannelConfig`(allOf) 응답이 어떤 경우에도 유효할 수 없음. DECISIONS.md `P-T02-01` 제안 → **승인(ADR-062)** → `openapi.yaml` 평탄화(allOf 10곳 제거, JSON 구조 불변)로 해결, 통과. 상세는 DECISIONS P-T02-01.
+
+**추가한 테스트 (예산 DB 통합, 이전 기록 "다음 작업 2")**
+- `budget/BudgetFailClosedIT`(1): 지출 차단 기본값→POLICY_VIOLATION, SYSTEM 정책 없음/DAY만/MONTH 비활성, 환율 없음, PAUSED 채널→PREREQUISITE_NOT_MET, 0원 정책→BUDGET_EXCEEDED, SYSTEM 한도 초과·한도와 같은 금액 허용, 정합성 ERROR 시 차단·OK 후 해제, 지출 차단 중 정산 허용. 실패 시 예약·원장·bucket 기록 0건 확인.
+- `budget/BudgetLedgerIT`(6): 설계 §2 USD 계산 예시 전체 단계 값 일치(PROVISIONAL 증감, CONFIRM 초과+BUDGET_OVERRUN audit, KRW 전용 ADJUSTMENT 후 C₀ 유지, 원본 REFUND), 연결 bucket 동일 반영, 불변식 위반 422 무기록, SETTLED→PROVISIONAL 409 / PROVISIONAL 없는 CONFIRM, RELEASE, 지연 과금(근거 필수, LATE_CHARGE), 비용 인식 후 RELEASE 거부, RECONCILIATION_REQUIRED 자동 해제 없음 / request_key 대소문자 구분·같은 키 다른 내용 409·event_key 멱등 / 20스레드 동시 예약(한도 1000, 100원씩) → 정확히 10건 성공·bucket 1개·reserved=1000, 같은 key 10스레드 동시 → 1건 / SYSTEM 사용량 중복 합산 없음, 대시보드·사용량·정책 목록·정합성 검사·환율 등록 API 계약 / cost_log·budget_reservation_bucket·exchange_rate·budget_policy_revision·budget_control 트리거 차단. 각 테스트 끝 정합성 검사 0건.
+- 변이 확인: `BudgetReservationService` 한도 검사를 임시 무력화 → 2건 실패 검출 → `git checkout`으로 원복(diff 없음 확인).
+
+**변경 파일**: `backend/src/test/java/com/aistudio/ApiTestSupport.java`(수정), `backend/src/test/java/com/aistudio/budget/{BudgetFailClosedIT,BudgetLedgerIT}.java`(신규), `DECISIONS.md`(P-T02-01 제안), `STATE.md`. main 코드·migration·openapi.yaml 변경 없음.
+
+**실행한 테스트 (실제 결과)**
+| 명령 | 결과 |
+|---|---|
+| `./gradlew.bat :backend:test` | 121 tests, 실패 0, skip 0 |
+| `./gradlew.bat :backend:integrationTest`(임시 MariaDB 11.8.2 :3307) | **51 tests, 실패 1**(ChannelIT config revision — P-T02-01 대기), 나머지 50 통과: ActuatorExposureIT 13, DatabaseBootstrapIT 8, DatabaseUpgradeIT 1, ErrorDispatchIT 5, AdminBootstrapIT 2, AuthIT 9, ChannelIT 5/6, BudgetFailClosedIT 1, BudgetLedgerIT 6 |
+- 미실행: CI(push 안 함), Docker/Testcontainers 경로, 프론트(변경 없음), gitleaks(미설치 — 변경은 테스트 코드·문서뿐이며 비밀값 없음, 임시 DB 비밀번호는 저장소 밖).
+
+**미해결**
+- P-T02-01 승인 필요 → 승인 시 openapi.yaml 대안 A 반영 후 ChannelIT 재실행.
+- 예산 미검증 항목(T02_PLAN §4): 정책 revision/시간대 변경·채널 일시정지·지출 차단과 예약의 **동시** 실행, 예약 도중 강제 예외 rollback, 운영 앱 계정 권한(`prod-app-grants.sql`) 적용 계정 검증, 환율 만료 시 fallback 없음(DB IT), 채널 설정 revision 동시 생성.
+- IDE(Eclipse/VS Code Java) 진단은 `backend/bin`의 오래된 classpath 기준이라 오류 표시가 실제 Gradle 빌드와 다름(`backend/bin/` untracked, 커밋 금지).
+
+**다음 작업**: (1) P-T02-01 결정 (2) 위 예산 미검증 항목 IT 추가 (3) 서버 검증 완료 후 T02_PLAN §2 단계 7(관리자 UI)·8(타입 생성 도구). T03 시작 금지.
+
+### T02 — WIP 인수인계 (2026-11-25 02:54 KST, IN_PROGRESS 유지)
+이번 작업은 인수인계·저장만 수행했으며 신규 기능 코드는 수정하지 않았다. T02는 DONE이 아니고 T03는 시작하지 않았다.
+
+**구현 확인 (코드 존재 기준, 완료 승인 아님)**
+- 단계 2~3: Flyway V3~V5 신규 파일, `MigrationConventionTest` 해시 등록, Clock/lock retry/page response/audit 공통 코드가 작업 트리에 있다. V1·V2 파일은 변경되지 않았다.
+- 단계 4: 관리자 CLI, 세션/CSRF 인증, rate limit, credential version 검증, audit 코드와 단위·통합 테스트가 있다.
+- 단계 5: 채널 CRUD·상태 전이·설정 revision 및 `ChannelIT`가 있다.
+- 단계 6: 환율·정책·예산 bucket/예약·정산·원장·정합성 검사·대시보드 백엔드와 계산 단위 테스트가 있다. 다만 예산 DB 통합 테스트는 아직 없다.
+- 검증/기반: API 오류 처리 변경, OpenAPI 검증 테스트 의존성 및 일부 인증·채널 contract test가 있다.
+
+**미완료 / 미검증**
+- T02_PLAN.md §2 단계 7~10: 관리자 UI, 격리된 OpenAPI 타입 생성 도구·CI 검사, 전체 계약 검증, T02_REPORT 및 전체 CI 결과가 없다. 프론트엔드 파일은 이번 작업에서 변경되지 않았다.
+- `ChannelIT` 최근 결과 XML(2026-11-25 02:48): 6건 중 4건 통과, 2건 실패. `configRevisionsAreImmutableHistoryWithOptimisticBase`는 응답의 `channelId`가 OpenAPI schema에 정의되지 않았다는 contract 오류. `createListGetAndUpdateChannelWithContract`는 요청 중 예상 200 대신 500. 원인 해결 전 통합 테스트 통과로 간주하지 않는다.
+- 이외 AuthIT/AdminBootstrapIT/DatabaseUpgradeIT 및 예산 동시성·정산 DB 통합 검증은 성공 결과가 확인되지 않았다. 통합 테스트용 격리 DB 환경변수는 설정되지 않았고 Docker 명령도 사용할 수 없어 이번 인수인계 중 통합 테스트를 재실행하지 않았다.
+- 현재 로컬 `ai_studio` DB는 MariaDB 11.8.2, Flyway V1·V2 성공 이력만 확인했다(읽기 전용 JDBC 조회). V3~V5는 미적용이며 이후에도 migration 파일을 수정하지 않는다.
+- 실행한 명령: `.\gradlew.bat :backend:test` — 121 tests, 실패 0, 오류 0, skipped 0; 컴파일 포함 BUILD SUCCESSFUL.
+- 민감정보/산출물: gitleaks는 설치되지 않았다. 변경 소스의 비밀키·일반적인 credential 패턴 수동 검색 결과 없음. 스테이징 목록 재확인에서도 `.env`, 인증 파일, build/node_modules/dist, 로그, 미디어, DB dump는 없었다. `.env`와 build/node_modules/dist는 Git ignore 처리되어 있다.
+
+**현재 변경 및 저장**
+- 기반 브랜치 `main`은 원격 `origin/main`보다 1개 커밋 앞서 있고, 그 커밋 `e1cef2c`는 T02 설계 기준선이다. 기존 작업 변경은 backend T02 코드·테스트와 V3~V5 migration이다.
+- 변경은 별도 브랜치 `wip/t02-implementation-checkpoint-2026-11-25`에 커밋 메시지 `wip: checkpoint T02 implementation`으로 저장·푸시한다. `.env`, 인증 비밀정보, 빌드 산출물은 포함하지 않는다.
+- 다음 작업자는 해당 브랜치를 checkout/pull하고 이 기록 및 `docs/plans/T02_PLAN.md`를 먼저 확인한다.
+
+**정확한 다음 작업**
+1. `ChannelIT`의 위 두 실패를 재현해 원인을 해결한다(contract schema의 `channelId` 누락 여부와 500 발생 경로를 각각 확인).
+2. 예산 정책·예약 동시성·정산/원장·정합성 검사를 격리 MariaDB 기반 통합 테스트로 추가하고 `.\gradlew.bat :backend:integrationTest`를 실행한다. 로컬 `ai_studio`를 테스트 대상으로 사용하지 않는다.
+3. 인증·관리자 생성·V2→V5 upgrade 통합 테스트 결과까지 확인한 뒤, 서버 측 검증이 끝나면 T02_PLAN.md §2 단계 7(관리자 UI)을 이어간다. 그 전에는 T03를 시작하지 않는다.
+
+### T02 — IN_PROGRESS (2026-11-25 구현 승인, ADR-039~061 반영)
+설계 기준선: ADR-026~061, docs/design/*, docs/api/openapi.yaml, docs/plans/T02_PLAN.md, infra/mariadb/prod-app-grants.sql.
+
+#### (이전 기록) 설계 단계
+요구사항: ADR-026~038(D-01~D-13). 이번 단계는 설계 문서·DDL 초안·OpenAPI 초안만 작성, **도메인 코드 없음**. 커밋 없음.
+- 산출물: docs/design/{T02_DATA_MODEL.md, T02_DDL_DRAFT.sql, T02_BUDGET_LEDGER.md, T02_AUTH.md}, docs/api/openapi.yaml, docs/plans/T02_PLAN.md(갱신), docs/reports/T02_DESIGN_REPORT.md, DECISIONS.md(ADR-026~038), docs/00, 03, 04, 09, 12, 13, 14, 16
+- 검증(scratchpad, 저장소에 코드·도구 추가 없음):
+  - DDL: 별도 임시 MariaDB 11.8.2(127.0.0.1:3307, scratch datadir, 기존 서버·데이터 미사용, 검증 후 삭제)에 V1→V2→초안 적용, 제약·트리거 42/42, 권한 분리(앱 계정 원장 UPDATE/DELETE 거부) 확인
+  - OpenAPI: `@redocly/cli@2.83.0 lint` 유효(경고 1, 의도)
+  - 계약 검증: `openapi-request-validator(-mockmvc) 3.0.0` + Boot 4.1.3 BOM 스파이크 17/17
+  - 타입 생성: `openapi-typescript@7.13.0`은 frontend 설치 시 ERESOLVE(peer TS ^5), TS 5.9.3 격리 생성물은 TS 6.0.3 strict 통과
+- 미해결: T2-Q1~Q14(T02_PLAN 5절), 동시성·Flyway 경유 적용은 구현 시 검증
+- 다음 작업: T02_PLAN 2절 순서로 구현
+
+### T01 — DONE (2026-11-25 설계 담당 승인)
+완료 승인 근거: 커밋 55e33ec, GitHub Actions run 45440907314 전 job 성공. 유지되는 한계: CI job 로그를 독립적으로 확인하지 못함(인증 필요), 실제 운영 DB(prod profile·migration 계정 분리·binlog ON 트리거) 미검증.
+요구사항: ADR-006~014, ADR-023(loopback), ADR-024, ADR-025, docs/02, 03, 04, 13, 14, 15. 설계 검토용 보고서: [docs/reports/T01_REPORT.md](docs/reports/T01_REPORT.md).
+
+**커밋·CI**
+- 커밋 `55e33ecb94b00e5384b10e04f7f88a7b918fb0fe` "feat: complete T01 foundation and design hardening"(82개 파일, `gradlew` 100755) → origin/main 푸시.
+- 커밋 전 검사: 스테이징 대상에 `.env`·build·node_modules·dist·로그·영상·덤프 없음, `.env` 비밀번호 문자열 미포함, `gitleaks git --staged` 누수 없음.
+- GitHub Actions run [45440907314](https://github.com/Hjinsu/ai-studio/actions/runs/45440907314) (2026-11-24T16:45:55Z~16:48:51Z UTC) **전 job success**:
+  | job | 단계 결과 |
+  |---|---|
+  | Backend (Linux, unit + integration) | Unit tests ✓, Integration tests(Testcontainers MariaDB) ✓ 23초, Build boot jar ✓, Validate Docker Compose ✓, Build backend image ✓ |
+  | Backend (Windows, unit only) | `gradlew.bat :backend:test :backend:bootJar` ✓ |
+  | Frontend (ubuntu-24.04) / (windows-2025) | npm ci, lint, typecheck, test, build ✓ |
+  | Secret scan (gitleaks) | ✓ |
+- 한계: job 로그는 GitHub 인증이 필요해(API 403) 테스트별 개수를 직접 확인하지 못함. 통합 단계 성공은 Gradle 9가 테스트 미발견 시 실패하는 동작과 단계 소요(23초)로 DatabaseBootstrapIT·DatabaseUpgradeIT 실행을 간접 확인. 필요 시 Actions 화면에서 로그 확인.
+- 커밋 이후 변경(미커밋): 이 CI 결과 기록, T02 설계 문서 일체.
 
 **3차 변경 (설계 확정 반영)**
 - 오류 처리(ADR-012, 024): ErrorCode 19개, `ErrorCode.fromStatus`(미분류 상태 유지), `ErrorResponses`(JSON Content-Type 고정 → 406도 본문), `ApiErrorController`(`/error`: 필터·sendError 오류 공통 형식), `GlobalExceptionHandler` 수정
@@ -50,10 +249,10 @@
 | `gitleaks dir`(커밋 대상) / `gitleaks git` v8.30.1 | 누수 없음. `.env` ignored 확인 |
 | `git ls-files -s gradlew` | `100755`(staged) |
 
-**실패 / 미실행 테스트 (전체 통과 아님)**
-- `./gradlew :backend:integrationTest` — **실패(환경: Docker 없음)**. DatabaseBootstrapIT(신규 DB V1→V2), DatabaseUpgradeIT(V1→V2 업그레이드, 불허 DB 차단)는 **로컬 미실행, 작성만 됨**. CI Linux job에서 첫 실행 필요.
-- `docker build` / `docker compose` — 미실행(Docker 없음).
-- GitHub Actions — 미실행(push 안 함). Windows job의 `shell: cmd` 변경 포함 미검증.
+**로컬 미실행 → CI에서 실행된 테스트**
+- `./gradlew :backend:integrationTest` — 로컬은 Docker 없음으로 실패. **CI Linux job에서 성공**(DatabaseBootstrapIT, DatabaseUpgradeIT; 테스트별 개수는 로그 인증 필요로 미확인).
+- `docker build` / `docker compose config` — 로컬 미실행, **CI에서 성공**. Compose 실제 기동(up)은 미실행.
+- GitHub Actions — run 45440907314 전 job 성공(Windows `gradlew.bat` 포함).
 - prod profile(migration 계정 분리) — 단위 테스트만, 실제 운영 DB 미검증. 검증 범위: (1) 기동 전 URL의 DB 이름(두 계정 공통 URL) (2) Flyway 직전 migration 계정 `SELECT DATABASE()` (3) 계정이 분리된 경우 애플리케이션 계정 `SELECT DATABASE()`도 Flyway 전에 확인(DatabaseGuardConfigurationTest 6).
 
 **미해결 / 주의**
@@ -62,6 +261,6 @@
 - 사용자 로컬 `.env`의 `AI_STUDIO_BACKEND_URL`은 이전 값(localhost) — Vite는 OS 환경변수만 읽으므로 영향 없음.
 - Actuator health 하위 경로는 빈 본문 404(ADR-024 별도 계약).
 
-**다음 작업**: (1) 사용자 지시로 커밋/푸시 → CI 전 job 통과 확인(Linux 통합 테스트 2종, Docker build, Windows job) → T01 DONE. (2) T02_PLAN의 D-01~D-13 및 OpenAPI 초안 설계 검토 → T02 착수.
+**다음 작업**: 없음(T01 완료). T02 진행.
 
 **필요 환경변수 (ADR-013, `AI_STUDIO_` 접두사만)**: 필수(local/docker/prod) `AI_STUDIO_DB_URL`, `AI_STUDIO_DB_USER`, `AI_STUDIO_DB_PASSWORD`; prod 추가 필수 `AI_STUDIO_DB_MIGRATION_USER`, `AI_STUDIO_DB_MIGRATION_PASSWORD`; 선택 `AI_STUDIO_BACKEND_URL`(기본 `http://127.0.0.1:8080`). 선행 조건: 루트 `.env`, JDK 17+, 인터넷(최초 JDK 21/의존성), Node 24 LTS, MariaDB 11.8 + 전용 DB/계정, Docker(선택).

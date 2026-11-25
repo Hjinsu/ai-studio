@@ -11,7 +11,10 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
+import java.util.TreeSet;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.junit.jupiter.api.Test;
@@ -28,7 +31,10 @@ class MigrationConventionTest {
     /** 적용된 migration은 수정 금지. 새 migration은 여기에 추가하고, 기존 값은 바꾸지 않는다. */
     private static final Map<String, String> APPLIED_SHA256 = Map.of(
             "V1__initial_baseline.sql", "ad01a05c036f7d63f690a1197e83706a67c83b0c0dd6652744cb481cbf8dbc79",
-            "V2__fix_database_collation.sql", "7e65c9546f7333d41c6611d5e9eccca75e7d936cc0572ac2d4796c687e977151");
+            "V2__fix_database_collation.sql", "7e65c9546f7333d41c6611d5e9eccca75e7d936cc0572ac2d4796c687e977151",
+            "V3__create_admin_and_audit.sql", "4224b08f5e0149829b27e1dcef51fd7b7e3f33faa6720a975834eed23b1b6384",
+            "V4__create_channel.sql", "06d9de8f625d4575f9bc278263cd70a336535305a018bc3e977dcfd2e47d98ec",
+            "V5__create_budget_and_ledger.sql", "a5d798c38c636d56d1974d8eb4494db46e9fcd8916ebd65d8ac3de325aa9ea5d");
 
     /** V1은 ADR-014 이전 기준선이므로 collation 규칙 검사에서 제외한다 (수정 금지). */
     private static final List<String> COLLATION_RULE_EXEMPT = List.of("V1__initial_baseline.sql");
@@ -79,6 +85,53 @@ class MigrationConventionTest {
                             .containsPattern("collate\\s*=?\\s*utf8mb4_unicode_ci"));
             assertThat(sql).as("%s: uca1400 collation 사용 금지", name).doesNotContain("uca1400");
         });
+    }
+
+    /**
+     * 정확 비교가 필요한 컬럼만 utf8mb4_bin을 허용한다(ADR-053). 그 외 COLLATE 지정은 utf8mb4_unicode_ci만 허용.
+     * 목록을 바꾸려면 설계(docs/design/T02_DATA_MODEL.md §2)와 함께 바꾼다.
+     */
+    private static final Set<String> BINARY_COLLATION_COLUMNS = Set.of(
+            "admin_user.password_hash",
+            "budget_reservation.request_key",
+            "budget_reservation.request_fingerprint",
+            "cost_log.event_key",
+            "cost_log.event_fingerprint",
+            "cost_log.request_key");
+
+    private static final Pattern CREATE_TABLE = Pattern.compile("create\\s+table\\s+(\\w+)");
+    private static final Pattern COLUMN_COLLATE = Pattern.compile("^\\s*(\\w+)\\s+[^\\n]*?\\bcollate\\s*=?\\s*(\\w+)");
+
+    @Test
+    void columnCollationsAreUnicodeCiOrAllowedBinary() throws IOException {
+        Set<String> binaryColumnsFound = new TreeSet<>();
+        migrations().forEach((name, text) -> {
+            if (COLLATION_RULE_EXEMPT.contains(name)) {
+                return;
+            }
+            String sql = text.replaceAll("--[^\n]*", "").toLowerCase(Locale.ROOT);
+            for (String statement : sql.split(";")) {
+                Matcher table = CREATE_TABLE.matcher(statement);
+                String tableName = table.find() ? table.group(1) : "(none)";
+                for (String line : statement.split("\n")) {
+                    Matcher column = COLUMN_COLLATE.matcher(line);
+                    if (!column.find() || line.trim().startsWith("alter database")) {
+                        continue;
+                    }
+                    String collation = column.group(2);
+                    String qualified = tableName + "." + column.group(1);
+                    if (collation.equals("utf8mb4_bin")) {
+                        assertThat(BINARY_COLLATION_COLUMNS)
+                                .as("%s: utf8mb4_bin 허용 목록에 없는 컬럼 %s", name, qualified)
+                                .contains(qualified);
+                        binaryColumnsFound.add(qualified);
+                    } else {
+                        assertThat(collation).as("%s: %s collation", name, qualified).isEqualTo("utf8mb4_unicode_ci");
+                    }
+                }
+            }
+        });
+        assertThat(binaryColumnsFound).as("허용 목록과 실제 utf8mb4_bin 컬럼 일치").isEqualTo(BINARY_COLLATION_COLUMNS);
     }
 
     private static String sha256(String text) {

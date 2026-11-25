@@ -7,22 +7,31 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
 /**
- * DB 없이 Actuator 노출 정책(ADR-008)을 검증한다. DB 연결 health는 DatabaseBootstrapIT에서 검증한다.
+ * Actuator 노출 정책(ADR-008). T02부터 보안·감사가 DB를 쓰므로 격리 DB로 실행한다.
  */
-@SpringBootTest(properties = "spring.autoconfigure.exclude="
-        + "org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration,"
-        + "org.springframework.boot.flyway.autoconfigure.FlywayAutoConfiguration")
+@Tag("integration")
+@SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
-class ActuatorExposureTest {
+class ActuatorExposureIT {
+
+    static final TestDatabases.TestDatabase DB = TestDatabases.create();
+
+    @DynamicPropertySource
+    static void database(DynamicPropertyRegistry registry) {
+        DB.register(registry);
+    }
 
     @Autowired
     private MockMvc mockMvc;

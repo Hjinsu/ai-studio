@@ -1,0 +1,159 @@
+/*
+ * AI Studio 디자인 토큰 (docs/design/UI_DESIGN_SYSTEM.md).
+ * 색은 CSS 변수(라이트 :root / 다크 .dark)로 정의하고 Tailwind @theme에 연결한다. 컴포넌트는 토큰 이름만 쓴다
+ * (bg-surface, text-muted, border-line 등). 임의 hex 색을 컴포넌트에 직접 쓰지 않는다.
+ */
+@import 'tailwindcss';
+@import 'pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  color-scheme: light;
+  --c-bg: #f6f7f9;
+  --c-surface: #ffffff;
+  --c-subtle: #f0f2f5;
+  --c-line: #e1e4ea;
+  --c-line-strong: #c9ced8;
+  /* 입력 경계: 표면·바탕·subtle 대비 3:1 이상(WCAG 1.4.11, UI-RV-06) */
+  --c-input-border: #7d8696;
+  --c-text: #171b24;
+  --c-muted: #5b6474;
+  --c-primary: #3451d1;
+  --c-primary-hover: #2a43b4;
+  --c-primary-fg: #ffffff;
+  --c-primary-soft: #e8ecfc;
+  --c-secondary: #e9ecf2;
+  --c-secondary-hover: #dfe3eb;
+  --c-success: #157a47;
+  --c-success-soft: #e4f3ea;
+  --c-warning: #9a5304;
+  --c-warning-soft: #fcf0de;
+  --c-danger: #c0362c;
+  --c-danger-hover: #a52d24;
+  --c-danger-soft: #fbe9e7;
+  --c-focus: #3451d1;
+  --c-sidebar: #ffffff;
+}
+
+.dark {
+  color-scheme: dark;
+  --c-bg: #0e1116;
+  --c-surface: #151922;
+  --c-subtle: #1b2030;
+  --c-line: #262c3a;
+  --c-line-strong: #364056;
+  --c-input-border: #6b7690;
+  --c-text: #e7eaf0;
+  --c-muted: #98a1b3;
+  --c-primary: #7b92f5;
+  --c-primary-hover: #94a6f7;
+  --c-primary-fg: #0e1116;
+  --c-primary-soft: #1e2647;
+  --c-secondary: #222838;
+  --c-secondary-hover: #2b3245;
+  --c-success: #4cc38a;
+  --c-success-soft: #12291e;
+  --c-warning: #e9a23b;
+  --c-warning-soft: #2e2210;
+  --c-danger: #f0766b;
+  --c-danger-hover: #f48d84;
+  --c-danger-soft: #351816;
+  --c-focus: #94a6f7;
+  --c-sidebar: #12161e;
+}
+
+@theme inline {
+  --color-bg: var(--c-bg);
+  --color-surface: var(--c-surface);
+  --color-subtle: var(--c-subtle);
+  --color-line: var(--c-line);
+  --color-line-strong: var(--c-line-strong);
+  --color-input-border: var(--c-input-border);
+  --color-text: var(--c-text);
+  --color-muted: var(--c-muted);
+  --color-primary: var(--c-primary);
+  --color-primary-hover: var(--c-primary-hover);
+  --color-primary-fg: var(--c-primary-fg);
+  --color-primary-soft: var(--c-primary-soft);
+  --color-secondary: var(--c-secondary);
+  --color-secondary-hover: var(--c-secondary-hover);
+  --color-success: var(--c-success);
+  --color-success-soft: var(--c-success-soft);
+  --color-warning: var(--c-warning);
+  --color-warning-soft: var(--c-warning-soft);
+  --color-danger: var(--c-danger);
+  --color-danger-hover: var(--c-danger-hover);
+  --color-danger-soft: var(--c-danger-soft);
+  --color-focus: var(--c-focus);
+  --color-sidebar: var(--c-sidebar);
+}
+
+@theme {
+  --font-sans: 'Pretendard Variable', Pretendard, system-ui, -apple-system, 'Segoe UI', 'Noto Sans KR', sans-serif;
+  /* 타입 스케일: 12 / 13 / 14(본문) / 16 / 20 / 24 */
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1rem;
+  --text-sm: 0.8125rem;
+  --text-sm--line-height: 1.25rem;
+  --text-base: 0.875rem;
+  --text-base--line-height: 1.375rem;
+  --text-md: 1rem;
+  --text-md--line-height: 1.5rem;
+  --text-lg: 1.25rem;
+  --text-lg--line-height: 1.75rem;
+  --text-xl: 1.5rem;
+  --text-xl--line-height: 2rem;
+  /* 반경: 입력·버튼 6px, 패널 10px, 배지 pill */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  /* 그림자: 떠 있는 레이어(대화상자·토스트·툴팁)만 */
+  --shadow-overlay: 0 8px 28px rgb(15 20 30 / 18%), 0 1px 3px rgb(15 20 30 / 12%);
+}
+
+@layer base {
+  html {
+    font-family: var(--font-sans);
+    background: var(--c-bg);
+    color: var(--c-text);
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    margin: 0;
+    font-size: var(--text-base);
+    line-height: var(--text-base--line-height);
+    font-feature-settings: 'tnum' 0;
+  }
+
+  /* 숫자 데이터는 표 정렬용 고정폭 숫자 */
+  .num {
+    font-variant-numeric: tabular-nums;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--c-focus);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      transition-duration: 0.01ms !important;
+      animation-duration: 0.01ms !important;
+    }
+  }
+}
+
+/* 예산 미터의 예약 구간: 실제 지출과 색이 아닌 무늬로도 구분(색만으로 의미 전달 금지) */
+.meter-reserved {
+  background-color: var(--c-primary-soft);
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent 0 3px,
+    color-mix(in srgb, var(--c-primary) 45%, transparent) 3px 5px
+  );
+}

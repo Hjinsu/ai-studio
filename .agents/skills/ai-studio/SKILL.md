@@ -3,10 +3,10 @@ name: ai-studio
 description: AI Studio 프로젝트의 설계 검토, 구현, 테스트, 장애 분석, 작업 인수인계에 사용한다.
 ---
 # AI Studio 개발 스킬
-저장소 루트에서 AGENTS.md, STATE.md, DECISIONS.md를 읽는다. docs/00_INDEX.md로 필요한 설계 문서를 찾는다.
-1. 현재 브랜치와 변경사항, 미완료 작업을 확인한다.
+저장소 루트에서 AGENTS.md, STATE.md, DECISIONS.md, TASKS.md와 docs/guides/CODEX_COLLABORATION.md를 읽는다. docs/00_INDEX.md로 필요한 설계 문서를 찾는다.
+1. 현재 브랜치·worktree와 변경사항을 확인하고, TASKS.md와 사용자 지시에서 자신에게 배정된 작업만 선택한다(배정이 없으면 사용자에게 확인).
 2. 작업 ID, 요구사항, 수정 범위, 테스트 계획을 짧게 제시한다.
 3. 계약을 유지하며 최소 단위로 구현한다. 실제 외부 호출 대신 fake provider를 우선 사용한다.
 4. 테스트 실행 및 오류 수정. 외부 호출·게시·파괴적 migration은 명시적 허가 없이는 금지한다.
-5. STATE.md에 결과를 기록한다. 설계 변경은 DECISIONS.md에 제안으로 남기고 승인 전 반영하지 않는다.
+5. STATE.md에 결과를 기록한다(병렬 작업이면 자신의 작업 보고서에 남기고 공통 파일은 통합 담당자가 갱신). 설계 변경은 DECISIONS.md에 제안으로 남기고 승인 전 반영하지 않는다.
 6. 다음 PC에서 재개할 수 있도록 명령과 선행 조건을 기록한다. 대화 기억에 의존하지 않는다.

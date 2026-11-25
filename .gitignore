@@ -14,3 +14,8 @@
 .idea/
 .claude/settings.local.json
 **/coverage/
+# IDE(Eclipse/VS Code Java) 출력
+backend/bin/
+# Playwright E2E 산출물
+frontend/test-results/
+frontend/playwright-report/

@@ -82,6 +82,46 @@ jobs:
       - run: npm test
       - run: npm run build
 
+  # 브라우저 E2E(Playwright, API는 브라우저 네트워크 계층 대역 — 백엔드·DB·유료 호출 없음).
+  # Windows 러너에 설치된 Edge를 사용해 브라우저를 내려받지 않는다.
+  frontend-e2e:
+    name: Frontend E2E (Edge, windows-2025)
+    runs-on: windows-2025
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run e2e
+        env:
+          PLAYWRIGHT_CHANNEL: msedge
+
+  # OpenAPI 계약: Redocly lint + 생성 TS 타입 재생성 diff (ADR-033, ADR-040, ADR-041)
+  openapi-contract:
+    name: OpenAPI contract and generated types
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend/tools/openapi-typescript
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: frontend/tools/openapi-typescript/package-lock.json
+      - run: npm ci
+      - name: Lint OpenAPI (Redocly)
+        run: npm run lint:openapi
+      - name: Generated types match docs/api/openapi.yaml
+        run: npm run check
+
   secret-scan:
     name: Secret scan (gitleaks)
     runs-on: ubuntu-24.04
