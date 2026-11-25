@@ -1,11 +1,11 @@
 # 작업 상태
-기준선: v0.1 설계 패키지 + ADR-006~062 승인, ADR-063 적용(최종 승인 대기)(2026-11-25). 실제 계정 및 API 미연동.
-현재 작업: T02 (IMPLEMENTED — UI 개선 `5d53065`(PR #1)·백엔드 수정 `6a32c64`(PR #2, Codex)·Claude 교차 리뷰 완료, **브랜치 통합 승인 대기**, DONE 아님). 보고서 [docs/reports/T02_REPORT.md](docs/reports/T02_REPORT.md), 교차 리뷰 [docs/reviews/T02_CLAUDE_BACKEND_REVIEW.md](docs/reviews/T02_CLAUDE_BACKEND_REVIEW.md).
+기준선: v0.1 설계 패키지 + ADR-006~065 승인(2026-11-25). 실제 계정 및 API 미연동.
+현재 작업: T02 (IMPLEMENTED — UI(PR #1)와 백엔드 수정(PR #2 `6a32c64`) **통합 완료**, Codex UI 독립 리뷰·사용자 실제 화면 검증·최종 승인 대기, DONE 아님). 보고서 [docs/reports/T02_REPORT.md](docs/reports/T02_REPORT.md) §11, 사용자 검증 [docs/guides/T02_USER_VERIFICATION.md](docs/guides/T02_USER_VERIFICATION.md).
 | ID | 상태 | 작업 |
 |---|---|---|
 | T01 | DONE (2026-11-25 승인, 커밋 55e33ec, CI run 45440907314) | 프로젝트 bootstrap, 버전 고정, DB/Flyway, CI, health check |
-| T02 | IMPLEMENTED (UI PR #1 CI 45554314696 7/7, 백엔드 PR #2 CI 45549256094 6/6, 통합·사용자 UI 재검증·최종 승인 대기) | 인증, 채널, 설정, 비용 원장 |
-| T03 | TODO | 콘텐츠 revision, DB 큐, lease, 재시도 |
+| T02 | IMPLEMENTED (PR #1에 PR #2 통합, 통합 HEAD CI는 아래 기록, Codex UI 리뷰·사용자 검증·최종 승인 대기) | 인증, 채널, 설정, 비용 원장 |
+| T03 | TODO (선행 조건·필수 설계 제약만 기록: docs/plans/T03_PLAN.md, 착수 금지) | 콘텐츠 revision, DB 큐, lease, 재시도 |
 | T04 | TODO | fake provider, 조사/대본/스토리보드 |
 | T05 | TODO | 이미지/TTS/자막/FFmpeg 로컬 렌더링 |
 | T06 | TODO | 검수/승인/관리자 UI |
@@ -15,6 +15,15 @@
 | T10 | TODO | 트렌드 및 멀티채널 확장 |
 ## 인수인계 기록
 작업 ID / 상태 / 변경 파일 / 테스트 명령 및 실제 결과 / 미해결 문제 / 다음 작업 / 필요 환경변수. 커밋 해시는 생성된 경우만 기록.
+
+### T02-INT — PR #1에 PR #2 통합 및 최종 검증 — Claude Code (2026-11-25, IMPLEMENTED, DONE 아님)
+요구사항: 사용자 T02 조건부 통합 승인(ADR-063·064·065, P-T02-02 승인, P-T02-03 보류, P-T02-04 조건부 수용). 상세: [T02_REPORT §11](docs/reports/T02_REPORT.md).
+- 브랜치 `wip/t02-implementation-checkpoint-2026-11-25`(Draft PR #1, base main). 통합 전 HEAD `862a300`, PR #2 승인 HEAD `6a32c64`(이후 새 커밋 없음 확인).
+- 커밋: 협업 문서 `67d50b9` → 병합 `07f8963`(`--no-ff`, 충돌 없음) → UI 통합 보완 `8319672` → 문서(이 기록).
+- 검증(통합 HEAD): 백엔드 단위 133/133, 통합 97/97(격리 MariaDB 3307), bootJar, 생성 타입 재생성 diff 없음·check 일치, 프론트 lint·typecheck·vitest 39/39·build, Playwright E2E 8/8(**Mock API**, 실제 백엔드 연동 아님). gitleaks·GitHub Actions 7 job은 푸시 후 CI(아래 줄에 갱신).
+- 미완료: Codex UI 독립 리뷰(TASKS `T02-UI-RV`, 기준 `8319672`), 사용자 실제 화면 검증([T02_USER_VERIFICATION](docs/guides/T02_USER_VERIFICATION.md)), 최종 승인. T03 선행 제약은 [T03_PLAN](docs/plans/T03_PLAN.md)(착수 금지).
+- DB: 사용자 개발 DB(3306) 미사용·미변경. 새 migration 없음(V1~V5 그대로). 임시 인스턴스만 사용 후 종료.
+- 다음 작업: Codex UI 리뷰 결과 반영 여부 결정 → 사용자 실제 화면 검증 → 최종 승인 → (별도 지시) main 병합·PR #2·worktree 정리.
 
 ### T02-UI · T02 교차 리뷰 — Claude Code (2026-11-25, IMPLEMENTED, DONE 아님)
 작업 ID: T02-UI(통합 UI 개선·디자인 시스템), T02-RV-X 교차 리뷰(Codex 백엔드 `fa32535..6a32c64`). 브랜치 `wip/t02-implementation-checkpoint-2026-11-25`(worktree `C:/Users/PC-94/Desktop/ai-studio`, Draft PR #1). Codex는 별도 worktree `../ai-studio-t02-fix`, 브랜치 `fix/t02-backend`(Draft PR #2, HEAD `6a32c64`) — 읽기 전용으로만 참조, 수정하지 않음.

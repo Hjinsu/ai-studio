@@ -63,7 +63,9 @@
 | ADR-060 | 승인(2026-11-25, F-08) | JSON 로그인의 세션 인증 전략·SecurityContext 저장·세션 ID 변경·CSRF 무효화 검증. credential_version으로 비밀번호 변경 후 세션 무효화(시각 비교 단독 금지) |
 | ADR-061 | 승인(2026-11-25, F-09) | budget_control.spending_enabled 기본 false, 관리자 긴급 지출 차단. 차단 중에도 기존 정산·조회 허용. 실제 provider 호출은 T07 승인 전 금지 |
 | ADR-062 | 승인(2026-11-25, P-T02-01) | OpenAPI는 allOf/anyOf 조합 대신 평탄화된 최종 스키마 사용(검증 라이브러리의 unevaluatedProperties 지원 불완전 실측). 공통 필드 일치·미정의 필드 거부를 OpenApiContractTest로 강제. JSON 구조 불변 |
-| ADR-063 | 적용(2026-11-25, T02 UI 개선 지시) · 최종 설계 승인 대기 | 관리자 UI 디자인 시스템: Tailwind CSS 4.3.5(+@tailwindcss/vite), Lucide React 1.79.0, Pretendard 1.3.9(OFL, 로컬 번들), Radix Dialog 1.3.1·Tooltip 1.4.1·Tabs 1.2.1, clsx 2.1.1, tailwind-merge 3.7.1, Playwright 1.65.1(E2E, 설치된 Edge 사용). shadcn/ui는 CLI 생성 대신 같은 패턴으로 필요한 컴포넌트만 직접 작성. Recharts 미채택(시계열 API 없음). 규칙: docs/design/UI_DESIGN_SYSTEM.md |
+| ADR-063 | 승인(2026-11-25, T02 통합 승인) | 관리자 UI 디자인 시스템과 기술 선택(Tailwind CSS 4, Lucide, Pretendard 로컬 번들, Radix Dialog·Tooltip·Tabs, clsx, tailwind-merge, Playwright E2E). 전문은 아래 "ADR-063 전문" |
+| ADR-064 | 승인(2026-11-25, T02 통합 승인) | Codex 백엔드 수정 RV-01~RV-09(`fix/t02-backend` `6a32c64`)와 Claude 교차 리뷰(`docs/reviews/T02_CLAUDE_BACKEND_REVIEW.md`) 승인, PR #1 통합 승인. RV-07 정합성 코드 `RESERVATION_BUCKET_LINK_MISMATCH` 추가 포함. T02 최종 종료·main 병합 승인은 아님 |
+| ADR-065 | 승인(2026-11-25, P-T02-04 조건부 수용) | CR-01(프록시 뒤 로그인 제한)은 **운영 배포 전 해결 조건**, CR-02(정합성 오류 복구 절차 부재)는 **실제 유료 API 연동 전 복구 절차 마련 조건**으로 수용. T03 선행 제약은 `docs/plans/T03_PLAN.md` |
 
 ## 미결 설계 이슈 상태
 | ID | 결정 | 상태 | 구현 예정 |
@@ -90,21 +92,43 @@
 - 검증기 동작 테스트: 정상 허용, 최상위·설정·페이지 항목 내부 미정의 필드 거부, 필수 누락(메타·설정·페이지) 거부, 자료형 오류 거부. 변이 확인(ChannelConfig에 additionalProperties: true + required 제거 → 실패 검출).
 - 부수: Gradle 테스트 태스크에 `docs/api/openapi.yaml` 입력 선언(명세만 바뀌면 up-to-date로 계약 테스트가 건너뛰어지던 문제).
 
-### P-T02-02 — gitleaks 오탐 처리 방식 (2026-11-25, 제안, **승인 대기**)
+### P-T02-02 — gitleaks 오탐 처리 방식 (2026-11-25 제안 → **최종 승인(2026-11-25), 기존 fingerprint 두 건에 한함**)
 - 배경: CI gitleaks가 커밋 4b29e7b(이미 원격에 푸시된 WIP 커밋)의 정합성 검사 SQL(두 bucket의 subject 컬럼 비교)을 generic-api-key로 탐지. 비밀값 아님. 푸시된 히스토리 재작성은 파괴적이라 배제.
 - 적용(PR #1 CI 통과를 위해 작업 브랜치에 반영, 되돌릴 수 있음): 저장소 루트 `.gitleaksignore`에 **fingerprint(커밋:파일:규칙:줄) 단위**로만 예외 등록, 규칙·워크플로 변경 없음. 항목마다 근거 주석, 주석에 탐지 문자열 인용 금지.
 - 대안: `.gitleaks.toml` 경로·정규식 allowlist(범위가 넓어 비권장), 코드 줄에 `gitleaks:allow` 주석(히스토리 탐지는 해결 못 함).
-- 승인 여부: 대기(설계 담당 검토)
+- 승인 여부: **승인** — `.gitleaksignore`의 fingerprint 2건(`4b29e7b…:BudgetMapper.java:generic-api-key:485`, `e0ae07e…:.gitleaksignore:generic-api-key:2`)에 한한다. 새 예외는 별도 승인 필요. 범위 검증: Codex·Claude 리뷰(CI run 45525957400·45526405063·45526843601의 탐지 건수 변화)
 
-### P-T02-03 — UI 개선 중 확인한 API 보완 후보 (2026-11-25, 제안, **승인 대기**, 이번 작업에서 미구현)
+### P-T02-03 — UI 개선 중 확인한 API 보완 후보 (2026-11-25 제안 → **보류(후속 작업)**, 2026-11-25 결정)
 - 채널 목록에 현재 설정 요약(기본 콘텐츠 유형, 설정 revision 시각) 필드 추가 — 현재 UI는 목록 행마다 `GET /channels/{id}/config`를 호출(N+1).
 - 예약 상태별 건수 조회 — 상태 필터 배지용. 현재는 대시보드의 정산 확인 필요 건수만 사용.
 - 통화별 현재 환율을 한 번에 조회 — 현재 UI는 목록으로 상태를 계산(서버 판단과 같은 규칙, 표시용).
 - 일·월 예산 사용 시계열 — 차트(Recharts 등) 도입의 전제.
 - 영향: OpenAPI·백엔드 추가(기존 계약 변경 없음). DB 변경 없음.
 
-### P-T02-04 — 백엔드 교차 리뷰 잠재 위험 (2026-11-25, Claude 교차 리뷰 `docs/reviews/T02_CLAUDE_BACKEND_REVIEW.md`, **결정 대기**)
+### P-T02-04 — 백엔드 교차 리뷰 잠재 위험 (2026-11-25 제안 → **조건부 수용, ADR-065**)
 - CR-01: 로그인 동시 인증 상한(전체 4, IP 2)과 실패 차단이 `remoteAddr` 기준 — 역방향 프록시 뒤 운영 배포 시 관리자 전체가 한 IP로 묶인다. 운영 배포 설계(신뢰 프록시, ADR-045 후속)와 함께 결정.
 - CR-02: `RESERVATION_BUCKET_LINK_MISMATCH` 발생 시 진단·수동 복구 절차가 없다(자동 수정 금지는 유지). 운영 전 복구 절차 ADR 필요.
 - T03 제약: 콘텐츠(LIFETIME)·content bucket 연결 시 링크 검사 확장 필수, 재시도 경계는 상위 트랜잭션 안에서 호출 불가(작업 큐와 예산의 원자성은 멱등 키·아웃박스 등으로 별도 설계), `reserve:`·`reserve-v2:` 이벤트 키 접두사 예약.
+
+### ADR-063 전문 — 관리자 UI 디자인 시스템과 기술 선택 (승인 2026-11-25)
+- **배경**: T02 관리자 화면을 상용 관리자 콘솔 수준으로 개선하고, T03~T10 화면이 같은 규칙을 쓰도록 확장 가능한 디자인 시스템이 필요했다. React 19.3.1·TypeScript 6.0.3·Vite 8.3.8은 유지하고 다운그레이드·의존성 충돌 무시 옵션(--force, --legacy-peer-deps)은 쓰지 않는다.
+- **결정**:
+  1. 스타일은 Tailwind CSS 4(CSS 우선 설정). 색·반경·그림자·타입 스케일을 라이트(`:root`)/다크(`.dark`) CSS 변수 토큰으로 정의하고 `@theme`에 연결한다. 컴포넌트는 토큰 클래스만 사용한다.
+  2. 아이콘은 Lucide React, 접근성 프리미티브는 Radix(Dialog·Tooltip·Tabs)만 사용한다. shadcn/ui는 CLI 생성 대신 같은 패턴(Radix + Tailwind 토큰)으로 필요한 컴포넌트만 `frontend/src/ui`에 직접 작성한다.
+  3. 서체는 Pretendard(SIL OFL 1.1)를 npm 패키지로 고정해 Vite가 로컬 번들로 제공한다(외부 CDN 없음, 폰트 바이너리 Git 커밋 없음).
+  4. 차트 라이브러리(Recharts)는 채택하지 않는다 — 시계열 API가 없고 예산 미터로 충분하다(P-T02-03 이후 재검토).
+  5. 금액·환율은 문자열로만 다루며(`frontend/src/lib/decimal.ts`, BigInt 고정소수점) Number 변환을 금지한다.
+  6. 브라우저 E2E는 Playwright로 설치된 Edge 채널을 사용하고 API는 브라우저 네트워크 계층 대역으로 대체한다(실제 백엔드 연동 검증과 구분). CI는 windows-2025 러너의 Edge로 실행한다.
+- **고정 의존성(버전과 선택 이유)**:
+  | 패키지 | 버전 | 범위 | 이유 |
+  |---|---|---|---|
+  | tailwindcss / @tailwindcss/vite | 4.3.5 / 4.3.5 | dependencies | 토큰 기반 스타일, Vite 8 peer 지원(`^5.2.0 \|\| ^6 \|\| ^7 \|\| ^8`) |
+  | lucide-react | 1.79.0 | dependencies | 일관된 선형 아이콘, React 19 peer |
+  | pretendard | 1.3.9 | dependencies | 한국어 가독성, OFL-1.1, 동적 서브셋 로컬 번들 |
+  | @radix-ui/react-dialog / -tooltip / -tabs | 1.3.1 / 1.4.1 / 1.2.1 | dependencies | 포커스 가두기·키보드·aria 처리(직접 구현 위험 회피), React 19 peer |
+  | clsx / tailwind-merge | 2.1.1 / 3.7.1 | dependencies | 조건부 클래스 결합·충돌 정리 |
+  | @playwright/test | 1.65.1 | devDependencies | 실제 브라우저 렌더링 E2E(Node ≥20) |
+  | react-router(기존 T02) | 8.5.3 | dependencies | 화면 라우팅·route.lazy 코드 분할 |
+  | @testing-library/user-event(기존 T02) | 14.6.13 | devDependencies | 사용자 입력 시뮬레이션 |
+- **결과**: 규칙 문서 `docs/design/UI_DESIGN_SYSTEM.md`, AGENTS.md UI 규칙 1줄. 새 UI 라이브러리 추가·임의 색 사용은 ADR 제안이 필요하다.
 

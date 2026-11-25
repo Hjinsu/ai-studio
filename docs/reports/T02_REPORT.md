@@ -1,5 +1,5 @@
 # T02 구현 보고서 (설계 검토용)
-작성 2026-11-25 · 작성 Claude Code · 브랜치 `wip/t02-implementation-checkpoint-2026-11-25` · 상태: **IMPLEMENTED — UI 개선(§9)·백엔드 교차 리뷰(§10) 완료, 브랜치 통합·최종 승인 대기(DONE 아님)** · T03 미착수
+작성 2026-11-25 · 작성 Claude Code · 브랜치 `wip/t02-implementation-checkpoint-2026-11-25` · 상태: **IMPLEMENTED — PR #1에 PR #2 통합 완료(§11), Codex UI 리뷰·사용자 실제 화면 검증·최종 승인 대기(DONE 아님)** · T03 미착수
 
 ## 1. 범위와 결과 요약
 | 영역 | 상태 | 근거 |
@@ -136,3 +136,63 @@ CI는 Draft PR [#1](https://github.com/Hjinsu/ai-studio/pull/1)(main 대상, **�
 ## 10. 백엔드 독립 교차 리뷰 (Claude Code, `fa32535..6a32c64`)
 보고서: [T02_CLAUDE_BACKEND_REVIEW.md](../reviews/T02_CLAUDE_BACKEND_REVIEW.md). RV-01~09 모두 해결 판정, **새로 확인된 결함 없음**, 잠재 위험 CR-01(프록시 뒤 로그인 제한)·CR-02(링크 오류 복구 절차 부재)는 P-T02-04로 기록. 독립 재실행: 검토 전용 worktree에서 단위 133/133·통합 97/97·bootJar 성공, UI+Codex 생성 타입 결합 시 프론트 36/36·E2E 8/8·타입 일치, `git merge-tree` 충돌·공통 수정 파일 0개. 통합 시 `CHECK_CODE`에 `RESERVATION_BUCKET_LINK_MISMATCH` 레이블 추가 필요.
 
+## 11. T02 통합 (PR #1 ← PR #2) 및 최종 검증 (2026-11-25, Claude Code)
+**승인 근거**: 사용자 T02 조건부 통합 승인(ADR-063·064·065, P-T02-02 최종 승인, P-T02-03 보류, P-T02-04 조건부 수용). T02 최종 종료·main 병합 승인은 아니다.
+
+### 11.1 커밋
+| 구분 | 커밋 | 내용 |
+|---|---|---|
+| 통합 전 PR #1 HEAD | `862a300` | UI `5d53065` + 교차 리뷰·문서 |
+| 통합 전 PR #2 HEAD(승인) | `6a32c64` | Codex RV-01~09 (`25bcf75`, `52c6f97`, `7b7a573`, `bb865f4`, `396575c`, `6a32c64`), 작성자 정보 보존 |
+| 협업 문서 | `67d50b9` | AGENTS.md·CLAUDE.md 협업 규칙(UI 규칙 보존), TASKS.md, `docs/guides/CODEX_COLLABORATION.md`, `docs/guides/LOCAL_RUN_GUIDE.md`, `docs/reviews/T02_CODEX_REVIEW.md`, ai-studio 스킬 2곳 정렬 |
+| 병합 | `07f8963` | `git merge --no-ff 6a32c64` — 충돌 없음, 이력 재작성·강제 푸시 없음. 병합 후 `backend/`, `docs/api/openapi.yaml`, 생성 타입이 `6a32c64`와 동일(`git diff 6a32c64 HEAD` 해당 경로 0) |
+| UI 통합 보완 | `8319672` | 정합성 코드 `RESERVATION_BUCKET_LINK_MISMATCH` 레이블("예산 예약 연결 불일치")·설명, 로그인 429 중립 안내 + `Retry-After` 대기 시간, 회귀 테스트 3건 |
+| 문서 | 이 보고서 커밋 | DECISIONS, T03_PLAN, 사용자 검증 가이드, 00_INDEX, STATE, TASKS |
+
+- PR #2의 모든 커밋이 PR #1 브랜치에 포함됨(`git merge-base --is-ancestor 6a32c64 HEAD`). PR #2는 PR #1 브랜치를 대상으로 하므로 푸시 후 GitHub에서 **병합됨으로 자동 표시**될 수 있다(main 병합 아님, PR 삭제 없음).
+- Codex worktree(`../ai-studio-t02-fix`, `fix/t02-backend`)는 수정·삭제하지 않았다.
+
+### 11.2 협업 문서와 스킬 충돌 검토
+- 프로젝트 스킬(`.claude/skills/ai-studio`, `.agents/skills/ai-studio`, 동일 내용)은 필수 문서에 TASKS.md·협업 가이드가 없고 "미완료 작업 확인"·"STATE.md에 기록"만 있어 새 규칙(배정된 작업만, 병렬 시 공통 파일은 통합 담당자)과 어긋났다 → 두 사본에 같은 최소 수정(3줄). 그 외 충돌 없음. AGENTS.md의 UI 디자인 시스템 규칙(`862a300`)은 보존.
+- 비밀정보 패턴 검사: 커밋한 협업 문서 8개에서 해당 없음. `.env`·DB 덤프·임시 데이터·빌드 산출물 미포함(경로 지정 `git add`만 사용).
+
+### 11.3 통합 UI 보완과 계약 호환성
+| 항목 | 결과 |
+|---|---|
+| `RESERVATION_BUCKET_LINK_MISMATCH` | 지출 제어 화면 정합성 오류 표에 제목·설명·원 코드·대상(예약 #id) 표시. 회귀 테스트 추가 |
+| 로그인 429 | 서버는 실패 반복 차단과 동시 인증 제한(RV-08)에 같은 코드·메시지를 쓰므로 원인을 단정하지 않는 안내("실패한 로그인이 반복되었거나 동시에 처리 중인 로그인 요청이 많으면 제한됩니다.") + 계약 헤더 `Retry-After`(정수 초)로 "N초 후/약 N분 후" 안내. HTTP-date 형식은 무시. 회귀 테스트 2건 |
+| KRW 정산 금액 | UI 검증 = 서버 계약(정수 12자리, KRW 기준 소수 6·원본 12). 변경 불필요 |
+| BIGINT ID | UI는 서버가 준 ID만 사용. 원장 화면 예약 번호 입력의 범위 초과는 서버 400 `VALIDATION_FAILED`가 공통 오류로 표시(신규 UI 기능 미추가) |
+| 생성 TypeScript 타입 | `frontend/tools/openapi-typescript`에서 `npm ci` → `npm run generate` → 변경 없음, `npm run check` 일치, Redocly 유효(기존 경고 2) |
+
+### 11.4 통합 후보 HEAD 검증(실제 결과)
+| 검증 | 환경 | 결과 |
+|---|---|---|
+| 백엔드 단위 | 통합 HEAD(`8319672` 제품 코드), `--no-build-cache --rerun-tasks`, DEBUG=false | **133/133** (OpenApiContractTest 5, AuthControllerTest 5 포함) |
+| 백엔드 통합(동시성·보안 회귀 포함) | 격리 임시 MariaDB 11.8.2 `127.0.0.1:3307`(deadlock detect ON) | **97/97** — BudgetConcurrencyIT 21, BudgetLedgerIT 18, BudgetTimeIT 6, BudgetFailClosedIT 1, AuthIT 12, AdminCliIT 1, AdminCliJarIT 1, ProductionGrantsIT 2 등 |
+| Boot JAR | 같은 실행 | 성공(`backend/build/libs/backend-0.1.0-SNAPSHOT.jar`) |
+| OpenAPI 계약·생성 타입 | 위 11.3 | 통과 |
+| 프론트 lint·typecheck(앱+E2E)·단위·build | `frontend` | 통과, **vitest 39/39**, 초기 번들 354KB(gzip 113KB) |
+| 브라우저 E2E | Playwright, 설치된 Edge, **Mock API**(브라우저 네트워크 계층 대역) | **8/8** — 실제 백엔드 연동 검증이 아님 |
+| gitleaks | 로컬 미설치(다운로드는 권한 정책상 미실행) | CI job으로 검증 |
+| GitHub Actions 7개 job | 통합 HEAD | STATE.md의 이 단계 기록 참조(푸시 후 기록) |
+
+### 11.5 Codex UI 독립 리뷰
+- 요청: TASKS.md `T02-UI-RV`(Codex). 기준 = 제품 코드 최종 커밋 `8319672`(이후 커밋은 문서만), 범위 `fa32535..8319672`의 `frontend/`와 `docs/design/UI_DESIGN_SYSTEM.md`. 보고서 `docs/reviews/T02_CODEX_UI_REVIEW.md` 권장.
+- 상태: **미착수(요청됨)**. 이 리뷰 완료 전에는 T02 종료 처리하지 않는다. 결함이 나오면 심각도·영향 범위 보고 후 수정 범위 승인을 받는다.
+
+### 11.6 사용자 실제 테스트 절차
+[T02_USER_VERIFICATION.md](../guides/T02_USER_VERIFICATION.md): 기존 `ai_studio` 폴더에서 `git pull --ff-only` → `bootRun`(새 migration 없음, V5 `up to date`) → `npm.cmd ci`(새 UI 의존성) → `npm.cmd run dev`. 기존 개발 DB·관리자·IFNOVA·정책·환율 보존, **지출 차단 유지**, 읽기 전용 SELECT 점검(스키마 버전·데이터·지출 상태·링크 오류 미리보기), 화면별 확인표. "지금 검사"는 `budget_control` 정합성 상태와 감사 로그를 갱신함을 안내. 누락 연결 자동 복구·원장 수정 없음.
+
+### 11.7 미검증 항목과 잔여 위험
+- 미검증: 통합 UI의 사용자 실제 화면 검증, 실제 백엔드 대상 브라우저 E2E, Codex UI 독립 리뷰, 로컬 gitleaks(CI로 대체), 운영 프록시·부하 환경 로그인 제한(CR-01), 운영 DB(binlog ON 트리거·권한).
+- 잔여 위험(조건부 수용): CR-01 운영 배포 전 해결, CR-02 실제 유료 API 연동 전 복구 절차 마련(ADR-065). P-T02-03(새 API가 필요한 UI 개선) 보류.
+
+### 11.8 T03 필수 설계 제약
+[T03_PLAN.md](../plans/T03_PLAN.md)에 9개 선행 조건 기록(콘텐츠·LIFETIME 링크 검사 확장, 상위 트랜잭션 내 재시도 경계 금지, 작업 큐–예산 멱등 일관성·복구, `reserve:`·`reserve-v2:` 접두사 예약, 판정 재계획 503 재시도, 정합성 검사 스캔·잠금 시간, 프록시·클라이언트 IP, 비용 발생 전 정합성 복구 절차, 다중 인스턴스 시계·분산 로그인 제한). `T02_BUDGET_LEDGER.md`·`T02_AUTH.md`에서 참조. T03 제품 코드는 시작하지 않았다.
+
+### 11.9 PR #2와 임시 worktree 정리 계획(최종 승인 후, 별도 승인 범위)
+1. 사용자 최종 승인 후 PR #2 상태 확인(통합으로 병합됨 표시 여부) → 필요 시 사용자 결정으로 닫기. 브랜치 `fix/t02-backend` 삭제는 사용자 승인 후.
+2. Codex worktree `../ai-studio-t02-fix` 제거는 Codex 작업 종료 확인 + 사용자 승인 후(`git worktree remove`, 강제 삭제 금지).
+3. Claude 검토용 임시 worktree(`../ai-studio-review-6a32c64`)는 이미 제거·prune 완료. 임시 MariaDB(scratch, 3307)는 종료.
+4. PR #1의 main 병합은 T02 최종 승인 이후 별도 지시로만.

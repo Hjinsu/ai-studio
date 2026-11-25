@@ -10,11 +10,13 @@
 
 | ID | 작업 | 담당 제안 | 상태 | 수정 범위 | 선행 조건 |
 |---|---|---|---|---|---|
-| T02-UI | 통합 UI 개선·디자인 시스템 | Claude Code | IMPLEMENTED (커밋 `5d53065`, PR #1 CI 45554314696 7/7, 사용자 재검증 대기) | frontend, UI 디자인 문서 | 기존 UI 개선 지시 승인 |
+| T02-UI | 통합 UI 개선·디자인 시스템 | Claude Code | IMPLEMENTED (UI `5d53065`, 통합 보완 `8319672`, 승인 2026-11-25, 사용자 재검증 대기) | frontend, UI 디자인 문서 | 기존 UI 개선 지시 승인 |
 | T02-RV | 백엔드 독립 리뷰 및 gitleaks 예외 검토 | Codex | 완료(사용자 보고, 기준 `fa32535`) | 리뷰 보고서만 | 검토 대상 커밋 지정 |
 | T02-RV-X | 백엔드 수정 교차 리뷰(`fa32535..6a32c64`) | Claude Code | 완료 — `docs/reviews/T02_CLAUDE_BACKEND_REVIEW.md`, 통합 승인 권고(조건부) | 리뷰 보고서만 | T02-FIX 완료 |
 | T02-FIX | 리뷰 결함 수정(RV-01~09) | Codex | IMPLEMENTED(사용자 보고: `fix/t02-backend` `6a32c64`, PR #2, CI 45549256094 6/6) | 백엔드·계약 | 결함 및 수정 범위 승인 |
-| T02-VERIFY | 통합·회귀·CI 및 사용자 검증 | 미배정 | TODO | 테스트 및 보고서 | UI 및 결함 수정 완료 |
+| T02-INT | PR #1에 PR #2(`6a32c64`) 통합·협업 문서 반영·통합 검증 | Claude Code | IMPLEMENTED (병합 `07f8963`, 협업 문서 `67d50b9`; 통합 HEAD CI는 STATE.md) | 통합·문서·UI 보완 | ADR-064 통합 승인 |
+| T02-UI-RV | 통합 후보 UI 독립 리뷰 | Codex | TODO(요청됨) — 기준: 제품 코드 최종 커밋 `8319672`(이후 문서만 변경), 범위 `fa32535..8319672`의 `frontend/` | 리뷰 보고서만(`docs/reviews/T02_CODEX_UI_REVIEW.md`) | 통합 완료 |
+| T02-VERIFY | 통합·회귀·CI 및 사용자 검증 | 사용자 | TODO(자동 검증 완료, 사용자 실제 화면 검증 대기 — `docs/guides/T02_USER_VERIFICATION.md`) | 테스트 및 보고서 | UI 및 결함 수정 완료 |
 | T02-CLOSE | 최종 승인 및 PR 병합 | 사용자 | TODO | 상태·결정 기록 | 최신 HEAD CI 및 최종 검토 |
 | T03 | 콘텐츠 revision·DB 작업 큐·lease·재시도 | 미배정 | BLOCKED | 설계 후 배정 | T02 DONE 및 T03 설계 승인 |
 

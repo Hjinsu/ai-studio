@@ -126,3 +126,6 @@ stateDiagram-v2
 | BUCKET_OVERLAP | 같은 정책·대상 bucket 기간 겹침 |
 | BUCKET_REVISION_MISMATCH | bucket.limit_krw = 해당 limit_policy_revision_no의 limit, 열린 bucket은 현재 revision |
 | CLOSED_RESERVATION_HAS_RESERVE / MISSING_RESERVE_EVENT | 종료 예약 RR=0, 모든 예약에 RESERVE 1건 |
+
+## 10. 후속 단계 필수 제약 (T02 통합 승인, 2026-11-25)
+T03 이후 콘텐츠 예산 연결 시 링크 정합성 검사(`RESERVATION_BUCKET_LINK_MISMATCH`) 확장, 재시도 경계의 상위 트랜잭션 금지, 작업 큐와 예산의 멱등 키 기반 일관성, `reserve:`·`reserve-v2:` 접두사 예약, 판정 재계획 503 재시도, 정합성 검사 스캔·잠금 시간, 비용 발생 전 정합성 오류 복구 절차는 [T03_PLAN](../plans/T03_PLAN.md)의 선행 조건을 따른다.
