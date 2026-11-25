@@ -9,6 +9,7 @@ import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
@@ -30,7 +31,11 @@ public class LockRetryingTransactions {
         this.template.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
     }
 
+    /** Starts the top-level transaction for each attempt so rollback finishes before a retry. */
     public <T> T execute(Supplier<T> work) {
+        if (TransactionSynchronizationManager.isActualTransactionActive()) {
+            throw new IllegalStateException("Budget lock retry cannot run inside an active transaction");
+        }
         for (int attempt = 0; ; attempt++) {
             try {
                 return template.execute(status -> work.get());

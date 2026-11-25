@@ -32,8 +32,10 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.transaction.ConfigurableTransactionManager;
 import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.TransactionExecution;
+import org.springframework.transaction.TransactionExecutionListener;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import com.aistudio.ApiTestSupport;
@@ -115,8 +117,20 @@ class BudgetConcurrencyIT {
     private Actor admin;
     private final ExecutorService executor = Executors.newCachedThreadPool();
 
+    private final ThreadLocal<Runnable> pauseBeforeCommit = new ThreadLocal<>();
+    private final TransactionExecutionListener commitListener = new TransactionExecutionListener() {
+        @Override
+        public void beforeCommit(TransactionExecution transaction) {
+            Runnable pause = pauseBeforeCommit.get();
+            if (pause != null && !transaction.isReadOnly()) {
+                pause.run();
+            }
+        }
+    };
+
     @BeforeEach
     void setUp() {
+        ((ConfigurableTransactionManager) transactionManager).addListener(commitListener);
         admin = Actor.admin(ApiTestSupport.admin(accounts, jdbc).id());
         synchronized (BudgetConcurrencyIT.class) {
             if (!initialized) {
@@ -133,6 +147,8 @@ class BudgetConcurrencyIT {
     @AfterEach
     void tearDown() {
         executor.shutdownNow();
+        var manager = (ConfigurableTransactionManager) transactionManager;
+        manager.getTransactionExecutionListeners().remove(commitListener);
         assertThat(control.runConsistencyCheck(admin).issues()).isEmpty();
     }
 
@@ -144,18 +160,25 @@ class BudgetConcurrencyIT {
         final Future<T> result;
 
         Held(Supplier<T> work) {
-            TransactionTemplate template = new TransactionTemplate(transactionManager);
-            template.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
-            result = executor.submit(() -> template.execute(status -> {
-                T value = work.get();
-                acquired.countDown();
+            result = executor.submit(() -> {
+                pauseBeforeCommit.set(this::awaitRelease);
                 try {
-                    release.await();
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
+                    return work.get();
+                } finally {
+                    pauseBeforeCommit.remove();
                 }
-                return value;
-            }));
+            });
+        }
+
+        private void awaitRelease() {
+            pauseBeforeCommit.remove();
+            acquired.countDown();
+            try {
+                release.await();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException("Interrupted while holding commit", e);
+            }
         }
 
         T commit() throws Exception {
@@ -168,6 +191,14 @@ class BudgetConcurrencyIT {
         Held<T> held = new Held<>(work);
         assertThat(held.acquired.await(30, TimeUnit.SECONDS)).as("holder acquired locks").isTrue();
         return held;
+    }
+
+    private Held<Void> holdControlLock() throws InterruptedException {
+        var template = new TransactionTemplate(transactionManager);
+        return hold(() -> template.execute(status -> {
+            controlLock.exclusive();
+            return null;
+        }));
     }
 
     /** 경쟁 작업이 잠금 대기 중(완료되지 않음)인지 확인한다. */
@@ -473,10 +504,7 @@ class BudgetConcurrencyIT {
         CLOCK.set(latest.validUntil().minusSeconds(1));
         var existing = new ReserveCommand(ApiTestSupport.uniqueKey("fx-ok"), null, "race", "EUR", BigDecimal.ONE);
         var first = reservations.reserve(existing);
-        Held<?> holder = hold(() -> {
-            controlLock.exclusive();
-            return null;
-        });
+        Held<?> holder = holdControlLock();
         var pending = new ReserveCommand(ApiTestSupport.uniqueKey("fx-wait"), null, "race", "EUR", BigDecimal.ONE);
         Future<ReservationResult> waiting = executor.submit(() -> reservations.reserve(pending));
         awaitLockQuery("budget_control", waiting);
@@ -508,10 +536,7 @@ class BudgetConcurrencyIT {
     void realLockTimeoutExhaustsRetriesAndRollsBackEveryAttempt() throws Exception {
         createRetryProbe();
         var attempts = new java.util.concurrent.atomic.AtomicInteger();
-        Held<?> holder = hold(() -> {
-            controlLock.exclusive();
-            return null;
-        });
+        Held<?> holder = holdControlLock();
         try {
             assertThatThrownBy(() -> lockRetries.run(() -> {
                 attempts.incrementAndGet();
@@ -536,18 +561,16 @@ class BudgetConcurrencyIT {
     }
 
     @Test
-    void participatingRetriesDoNotClearOuterRollbackOnlyFlag() {
+    void rejectsParticipatingRetryBeforeCallbackOrSql() {
         createRetryProbe();
         var attempts = new java.util.concurrent.atomic.AtomicInteger();
         var outer = new TransactionTemplate(transactionManager);
         try {
             assertThatThrownBy(() -> outer.executeWithoutResult(status -> lockRetries.run(() -> {
+                attempts.incrementAndGet();
                 incrementProbe(1);
-                if (attempts.incrementAndGet() == 1) {
-                    throw new org.springframework.dao.PessimisticLockingFailureException("test retry");
-                }
-            }))).isInstanceOf(org.springframework.transaction.UnexpectedRollbackException.class);
-            assertThat(attempts.get()).isEqualTo(2);
+            }))).isInstanceOf(IllegalStateException.class).hasMessageContaining("active transaction");
+            assertThat(attempts.get()).isZero();
             assertThat(jdbc.queryForList("SELECT n FROM retry_probe ORDER BY id", Integer.class))
                     .containsExactly(0, 0);
         } finally {

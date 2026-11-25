@@ -62,6 +62,7 @@ public class AuthController {
     private final SessionAuthenticationStrategy sessionAuthenticationStrategy;
     private final SecurityContextRepository securityContextRepository;
     private final LoginRateLimiter rateLimiter;
+    private final LoginAdmission admission;
     private final AdminUserMapper users;
     private final AuditService audit;
     private final AdminAccountService accounts;
@@ -69,11 +70,12 @@ public class AuthController {
     AuthController(AuthenticationManager authenticationManager,
             SessionAuthenticationStrategy sessionAuthenticationStrategy,
             SecurityContextRepository securityContextRepository, LoginRateLimiter rateLimiter, AdminUserMapper users,
-            AuditService audit, AdminAccountService accounts) {
+            AuditService audit, AdminAccountService accounts, LoginAdmission admission) {
         this.authenticationManager = authenticationManager;
         this.sessionAuthenticationStrategy = sessionAuthenticationStrategy;
         this.securityContextRepository = securityContextRepository;
         this.rateLimiter = rateLimiter;
+        this.admission = admission;
         this.users = users;
         this.audit = audit;
         this.accounts = accounts;
@@ -89,14 +91,26 @@ public class AuthController {
             HttpServletResponse response) {
         String login = PasswordPolicy.normalizeLogin(body.login());
         String ip = request.getRemoteAddr();
+        requireNotBlocked(login, ip);
+        return admission.execute(login, ip, () -> {
+            requireNotBlocked(login, ip);
+            return authenticate(login, ip, body.password(), request, response);
+        });
+    }
+
+    private void requireNotBlocked(String login, String ip) {
         Optional<java.time.Duration> blocked = rateLimiter.blockedFor(login, ip);
         if (blocked.isPresent()) {
             throw ApiException.rateLimited(blocked.get().toSeconds());
         }
+    }
+
+    private CurrentUserResponse authenticate(String login, String ip, String password, HttpServletRequest request,
+            HttpServletResponse response) {
         Authentication authentication;
         try {
             authentication = authenticationManager.authenticate(
-                    UsernamePasswordAuthenticationToken.unauthenticated(login, body.password()));
+                    UsernamePasswordAuthenticationToken.unauthenticated(login, password));
         } catch (AuthenticationException e) {
             LoginRateLimiter.FailureResult result = rateLimiter.recordFailure(login, ip);
             audit.record(Actor.anonymous(), "AUTH_LOGIN", Outcome.FAILURE, "ADMIN_LOGIN", null, ip,

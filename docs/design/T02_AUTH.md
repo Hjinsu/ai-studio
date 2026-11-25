@@ -52,7 +52,7 @@ sequenceDiagram
     API-->>UI: {headerName, token}
     UI->>API: POST /api/v1/auth/login (X-XSRF-TOKEN, {login,password})
     API->>RL: 차단 여부(login+IP, login, IP)
-    alt 차단 중
+    alt 실패 횟수 차단 중 또는 동시 인증 한도 초과
         API-->>UI: 429 RATE_LIMIT_EXCEEDED (Retry-After)
     else
         API->>DB: 사용자 조회(소문자 정규화)
@@ -61,6 +61,7 @@ sequenceDiagram
             API->>RL: 실패 기록
             API-->>UI: 401 UNAUTHORIZED "Invalid login or password."
         else 성공
+            API->>DB: last_login_at 갱신과 AUTH_LOGIN SUCCESS 기록 후 커밋
             API->>API: SessionAuthenticationStrategy(세션 ID 교체 + CSRF 토큰 무효화), SecurityContext 저장, credential_version 세션 저장
             API->>RL: login+IP 실패 카운트 초기화
             API-->>UI: 200 {user}
@@ -75,6 +76,7 @@ sequenceDiagram
 - 계정 존재 비노출: 미존재·비밀번호 오류·비활성 계정 모두 같은 401 코드·메시지, 비슷한 처리 시간. rate limit은 계정 존재와 무관하게 적용.
 - 세션 검증 필터(ADR-060): 인증된 요청마다 admin_user를 조회해 `enabled=false` 또는 `credential_version ≠ 세션의 credential_version`이면 세션 무효화 후 401.
 - JSON 로그인은 `AuthenticationManager` 인증 후 `CompositeSessionAuthenticationStrategy`(ChangeSessionIdAuthenticationStrategy + CsrfAuthenticationStrategy)를 직접 호출하고 `HttpSessionSecurityContextRepository`에 저장한다. 테스트로 세션 ID 변경, 이전 CSRF 토큰 거부, 저장된 컨텍스트로 다음 요청 인증을 확인한다.
+- `AUTH_LOGIN`의 SUCCESS와 `last_login_at`은 관리자의 자격 증명 확인 및 필수 DB 기록 커밋을 의미한다. 세션 발급은 이후 별도 단계다. 세션 저장 실패 시 인증 컨텍스트와 세션을 폐기하고 오류를 반환하며, 이미 커밋된 감사 및 시각은 보존한다.
 - audit(ADR-051): AUTH_LOGIN(SUCCESS/FAILURE, 정규화 login·IP, 비밀번호·토큰·세션 ID 제외), AUTH_LOGOUT, AUTH_RATE_LIMITED(차단 키·창마다 1건만 — 차단 중 반복 시도는 기록하지 않음), 관리자 CLI 작업. 보존 기본 90일(정책), 삭제는 별도 관리 절차.
 
 ## 4. 로그인 제한 (ADR-036)
@@ -84,6 +86,7 @@ sequenceDiagram
 | login | 실패 10회 | 15분 | 15분 차단, 429 |
 | IP | 실패 30회 | 15분 | 15분 차단, 429 |
 - 구현: Caffeine 캐시 3개(`expireAfterWrite` 15분+차단 15분, `maximumSize` 각 10,000 — 설정 가능). 고정 창 카운터 + 차단 만료 시각. 최대 크기 초과 시 Caffeine이 오래된 항목 제거(메모리 상한), 제거 시 WARN 로그.
+- 동시 인증은 요청의 정규화 login당 1건, IP당 2건, 인스턴스 전체 4건까지 허용한다. 인증 및 더미 BCrypt 이전에 적용하며 대기 없이 기존 429와 `Retry-After: 1`을 반환한다. 과부하 응답은 실패 횟수에 더하지 않는다. 기존 실패 차단을 독립적으로 확인하고 요청 종료 시 동시 인증 상태를 제거한다.
 - 성공 로그인은 해당 login+IP 카운터만 초기화(login·IP 전체 카운터는 유지 — 분산 공격 대비).
 - IP = `request.getRemoteAddr()`만(ADR-045). `X-Forwarded-For` 등은 사용하지 않음, `server.forward-headers-strategy=none` 명시. Docker 개발 포트는 127.0.0.1에만 노출.
 - 알려진 한계: 재기동 시 초기화, 다중 인스턴스 미지원, 운영에서 리버스 프록시 뒤면 모든 요청 IP가 같아 IP 한도가 전체 한도가 됨(신뢰 프록시는 운영 배포 단계, ADR-045).
