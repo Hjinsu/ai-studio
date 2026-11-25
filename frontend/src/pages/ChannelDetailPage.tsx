@@ -1,5 +1,7 @@
 import { useState, type FormEvent, type ReactNode } from 'react'
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
+import { currentSession } from '../api/http'
+import { useSessionMutation } from '../api/useSessionMutation'
 import { useParams, useSearchParams } from 'react-router'
 import { Archive, Pause, Pencil, Play, Plus } from 'lucide-react'
 import {
@@ -71,9 +73,11 @@ export function ChannelDetailPage() {
 function useRefreshChannel(channelId: string) {
   const queryClient = useQueryClient()
   return async () => {
-    await queryClient.invalidateQueries({ queryKey: ['channel', channelId] })
-    await queryClient.invalidateQueries({ queryKey: ['channels'] })
-    await queryClient.invalidateQueries({ queryKey: ['channel-config', channelId] })
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['channel', channelId] }),
+      queryClient.invalidateQueries({ queryKey: ['channels'] }),
+      queryClient.invalidateQueries({ queryKey: ['channel-config', channelId] }),
+    ])
   }
 }
 
@@ -81,7 +85,7 @@ function StatusActions({ channel }: { channel: Channel }) {
   const refresh = useRefreshChannel(channel.id)
   const toast = useToast()
   const [pending, setPending] = useState<StatusAction | null>(null)
-  const change = useMutation({
+  const change = useSessionMutation({
     mutationFn: (action: StatusAction) => changeChannelStatus(channel.id, action, channel.version),
     onSuccess: async (_result, action) => {
       setPending(null)
@@ -170,7 +174,7 @@ function EditChannelDialog({ channel, onClose }: { channel: Channel; onClose: ()
   const [name, setName] = useState(channel.name)
   const [language, setLanguage] = useState(channel.language)
   const [timezone, setTimezone] = useState(channel.timezone)
-  const update = useMutation({
+  const update = useSessionMutation({
     mutationFn: () => {
       const body: Parameters<typeof updateChannel>[1] = { version: channel.version }
       if (name !== channel.name) body.name = name.trim()
@@ -178,9 +182,10 @@ function EditChannelDialog({ channel, onClose }: { channel: Channel; onClose: ()
       if (timezone !== channel.timezone) body.timezone = timezone.trim()
       return updateChannel(channel.id, body)
     },
-    onSuccess: async () => {
+    onSuccess: async (_data, _variables, generation) => {
       toast.success('기본 정보를 저장했습니다.')
       await refresh()
+      if (generation !== currentSession()) return
       onClose()
     },
   })
@@ -254,12 +259,13 @@ function RevisionDialog({ channel, base, onClose }: { channel: Channel; base: Ch
   const [draft, setDraft] = useState(draftOf(settingsOf(base)))
   const [changeNote, setChangeNote] = useState('')
   const [localErrors, setLocalErrors] = useState<Record<string, string>>({})
-  const create = useMutation({
+  const create = useSessionMutation({
     mutationFn: (settings: ReturnType<typeof settingsOf>) =>
       createChannelConfig(channel.id, { baseRevisionNo: base.revisionNo, settings, ...(changeNote.trim() ? { changeNote: changeNote.trim() } : {}) }),
-    onSuccess: async (config) => {
+    onSuccess: async (config, _variables, generation) => {
       toast.success(`설정 r${config.revisionNo}을 저장했습니다.`)
       await refresh()
+      if (generation !== currentSession()) return
       onClose()
     },
   })

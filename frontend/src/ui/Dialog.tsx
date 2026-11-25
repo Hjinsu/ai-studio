@@ -66,6 +66,7 @@ export function ConfirmDialog({
   tone = 'danger',
   busy = false,
   confirmDisabled = false,
+  cancelDisabled = false,
   onConfirm,
   onCancel,
   children,
@@ -76,6 +77,7 @@ export function ConfirmDialog({
   tone?: 'danger' | 'risk' | 'primary'
   busy?: boolean
   confirmDisabled?: boolean
+  cancelDisabled?: boolean
   onConfirm: () => void
   onCancel: () => void
   children?: ReactNode
@@ -84,7 +86,7 @@ export function ConfirmDialog({
     <RadixDialog.Root
       open={open}
       onOpenChange={(next) => {
-        if (!next && !busy) onCancel()
+        if (!next && !busy && !cancelDisabled) onCancel()
       }}
     >
       <RadixDialog.Portal>
@@ -98,7 +100,7 @@ export function ConfirmDialog({
             <div className="mt-2 grid gap-3 text-base text-text">{children}</div>
           </RadixDialog.Description>
           <div className="mt-5 flex flex-wrap justify-end gap-2">
-            <Button onClick={onCancel} disabled={busy}>
+            <Button onClick={onCancel} disabled={busy || cancelDisabled}>
               취소
             </Button>
             <Button

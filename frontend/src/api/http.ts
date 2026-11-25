@@ -11,18 +11,43 @@ import type { components } from './generated/schema'
 type CsrfToken = components['schemas']['CsrfToken']
 
 let csrf: CsrfToken | null = null
+let session = new AbortController()
+
+export class SessionChangedError extends Error {
+  constructor() {
+    super('Authentication session changed')
+    this.name = 'SessionChangedError'
+  }
+}
+
+export const currentSession = () => session.signal
+
+export function assertSession(generation: AbortSignal): void {
+  if (generation !== currentSession()) throw new SessionChangedError()
+}
+
+export function advanceSession(): void {
+  const previous = session
+  session = new AbortController()
+  resetCsrf()
+  previous.abort()
+}
 
 export function resetCsrf(): void {
   csrf = null
 }
 
-async function csrfToken(): Promise<CsrfToken> {
+async function csrfToken(generation: AbortSignal): Promise<CsrfToken> {
+  assertSession(generation)
   if (csrf === null) {
     const response = await fetch('/api/v1/auth/csrf', {
       credentials: 'same-origin',
       headers: { Accept: 'application/json' },
+      signal: generation,
     })
+    assertSession(generation)
     const body = await readJson(response)
+    assertSession(generation)
     if (!response.ok) {
       throw toApiError(response.status, body)
     }
@@ -53,32 +78,50 @@ export function buildUrl(path: string, query?: Query): string {
   return text === '' ? path : `${path}?${text}`
 }
 
-async function send(method: string, path: string, options: RequestOptions, withCsrf: boolean): Promise<Response> {
+async function send(method: string, path: string, options: RequestOptions, withCsrf: boolean, generation: AbortSignal): Promise<Response> {
   const headers: Record<string, string> = { Accept: 'application/json', ...options.headers }
   if (options.body !== undefined) {
     headers['Content-Type'] = 'application/json'
   }
   if (withCsrf) {
-    const token = await csrfToken()
+    const token = await csrfToken(generation)
     headers[token.headerName] = token.token
   }
+  assertSession(generation)
   return fetch(buildUrl(path, options.query), {
     method,
     credentials: 'same-origin',
+    signal: generation,
     headers,
     body: options.body === undefined ? undefined : JSON.stringify(options.body),
   })
 }
 
 export async function request<T>(method: 'GET' | 'POST' | 'PATCH', path: string, options: RequestOptions = {}): Promise<T> {
+  const generation = currentSession()
+  try {
+    const result = await requestInSession<T>(method, path, options, generation)
+    assertSession(generation)
+    return result
+  } catch (error) {
+    assertSession(generation)
+    if (error instanceof ApiError) error.generation = generation
+    throw error
+  }
+}
+
+async function requestInSession<T>(method: string, path: string, options: RequestOptions, generation: AbortSignal): Promise<T> {
   const mutating = method !== 'GET'
-  let response = await send(method, path, options, mutating)
+  let response = await send(method, path, options, mutating, generation)
+  assertSession(generation)
   if (mutating && response.status === 403) {
     // 세션 교체 등으로 토큰이 바뀌었을 수 있다: 토큰을 다시 받아 한 번만 재시도(멱등 키는 호출자가 유지)
     resetCsrf()
-    response = await send(method, path, options, true)
+    response = await send(method, path, options, true, generation)
   }
+  assertSession(generation)
   const body = await readJson(response)
+  assertSession(generation)
   if (!response.ok) {
     throw toApiError(response.status, body, parseRetryAfter(response.headers.get('Retry-After')))
   }
@@ -87,4 +130,8 @@ export async function request<T>(method: 'GET' | 'POST' | 'PATCH', path: string,
 
 export function isUnauthorized(error: unknown): boolean {
   return error instanceof ApiError && error.status === 401
+}
+
+export function isCurrentUnauthorized(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 401 && error.generation === currentSession()
 }

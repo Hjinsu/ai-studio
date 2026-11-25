@@ -1,7 +1,59 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { ApiError } from './client'
-import { buildUrl, request, resetCsrf } from './http'
+import { advanceSession, buildUrl, request, resetCsrf } from './http'
 import { csrf, error, mockApi, on } from '../test/mockApi'
+import { login } from './admin'
+
+describe('session boundary', () => {
+  it.each([403, 401, 200])('discards a delayed POST response [%s] after a new login', async (status) => {
+    let release!: (response: Response) => void
+    let started!: () => void
+    const sent = new Promise<void>((resolve) => { started = resolve })
+    const late = new Promise<Response>((resolve) => { release = resolve })
+    const posts: string[] = []
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      if (url === '/api/v1/auth/csrf') {
+        return Promise.resolve(Response.json({ headerName: 'X-XSRF-TOKEN', token: 'fixture' }))
+      }
+      if (url === '/api/v1/auth/login') return Promise.resolve(Response.json({ id: '1' }))
+      posts.push(init?.method ?? 'GET')
+      if (posts.length === 1) { started(); return late }
+      return Promise.resolve(Response.json({}))
+    }))
+    resetCsrf()
+    const old = request('POST', '/api/protected').catch((failure: Error) => failure)
+    await sent
+    await login({ login: 'admin', password: 'fixture' })
+    release(Response.json({}, { status }))
+    expect(await old).toHaveProperty('name', 'SessionChangedError')
+    expect(posts).toEqual(['POST'])
+  })
+
+  it('never publishes a delayed CSRF token or sends the old POST', async () => {
+    let release!: (response: Response) => void
+    const late = new Promise<Response>((resolve) => { release = resolve })
+    const tokens: (string | undefined)[] = []
+    let csrfReads = 0
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      if (url === '/api/v1/auth/csrf') {
+        if (++csrfReads === 1) return late
+        return Promise.resolve(Response.json({ headerName: 'X-XSRF-TOKEN', token: 'new' }))
+      }
+      tokens.push((init?.headers as Record<string, string>)['X-XSRF-TOKEN'])
+      return Promise.resolve(Response.json({}))
+    }))
+    advanceSession()
+    const old = request('POST', '/api/protected').catch((failure: Error) => failure)
+    expect(csrfReads).toBe(1)
+    advanceSession()
+    await request('POST', '/api/protected')
+    release(Response.json({ headerName: 'X-XSRF-TOKEN', token: 'old' }))
+    expect(await old).toHaveProperty('name', 'SessionChangedError')
+    await request('POST', '/api/protected')
+    expect(tokens).toEqual(['new', 'new'])
+    expect(csrfReads).toBe(2)
+  })
+})
 
 describe('request', () => {
   it('does not send CSRF on GET and adds the token on mutating requests', async () => {

@@ -1,5 +1,5 @@
 import type { components } from './generated/schema'
-import { request, resetCsrf, type Query } from './http'
+import { advanceSession, assertSession, currentSession, request, type Query } from './http'
 
 /** 관리자 API (docs/api/openapi.yaml). 타입은 생성 타입(src/api/generated)만 사용한다. */
 export type Schemas = components['schemas']
@@ -23,16 +23,21 @@ export interface PageQuery {
 
 // ---------------------------------------------------------------- 인증
 export async function login(body: Schemas['LoginRequest']): Promise<Schemas['CurrentUser']> {
+  const generation = currentSession()
   const user = await request<Schemas['CurrentUser']>('POST', `${V1}/auth/login`, { body })
-  resetCsrf() // 로그인 후 세션·CSRF 토큰이 교체된다
+  assertSession(generation)
+  advanceSession()
   return user
 }
 
 export async function logout(): Promise<void> {
+  advanceSession()
+  const generation = currentSession()
   try {
     await request<void>('POST', `${V1}/auth/logout`)
   } finally {
-    resetCsrf()
+    assertSession(generation)
+    advanceSession()
   }
 }
 

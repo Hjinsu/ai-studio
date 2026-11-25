@@ -1,6 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import { request } from './api/http'
 import { csrf, error, health, me, mockApi, on, page, renderApp } from './test/mockApi'
 
 const dashboardBody = {
@@ -204,6 +205,76 @@ describe('App authentication', () => {
     // 만료 전환은 한 번만(로그인 상태 재조회가 반복되지 않음)
     const meCallsBeforeLogin = calls.findIndex((c) => c.url === '/api/v1/auth/login')
     expect(calls.slice(0, meCallsBeforeLogin).filter((c) => c.url === '/api/v1/auth/me').length).toBeLessThanOrEqual(3)
+  })
+
+  it.each([403, 401, 200])('isolates a held mutation and parallel 401s across re-login [%s]', async (lateStatus) => {
+    const control = {
+      spendingEnabled: false, spendingChangedAt: null, spendingChangedBy: null, spendingChangeReason: null,
+      consistency: { status: 'UNKNOWN', checkedAt: null, issueCount: 0 }, version: 1, updatedAt: '2026-11-25T00:00:00Z',
+    }
+    const admin = { id: '1', login: 'admin', role: 'ADMIN', lastLoginAt: null }
+    let signedIn = true
+    let issued = 0
+    const calls = mockApi(health, (call) => {
+      if (call.url === '/api/v1/auth/me') return signedIn
+        ? { status: 200, body: admin }
+        : { status: 401, body: error('UNAUTHORIZED', 'expired') }
+      if (call.url === '/api/v1/auth/login') {
+        signedIn = true
+        return { status: 200, body: admin }
+      }
+      if (call.url === '/api/v1/auth/csrf') return { status: 200, body: { headerName: 'X-XSRF-TOKEN', token: `tok-${++issued}` } }
+    }, on('GET', '/api/v1/budget/control', 200, control), on('GET', '/api/v1/budget-policies', 200, page([])))
+    const mockFetch = globalThis.fetch
+    let release!: (response: Response) => void
+    let markSent!: () => void
+    const sent = new Promise<void>((resolve) => { markSent = resolve })
+    const pending = new Promise<Response>((resolve) => { release = resolve })
+    let posts = 0
+    const freshTokens: string[] = []
+    vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) => {
+      if (input === '/api/v1/budget/consistency-checks') {
+        posts += 1
+        markSent()
+        return pending
+      }
+      if (input === '/api/expire') return Promise.resolve(Response.json(error('UNAUTHORIZED', 'expired'), { status: 401 }))
+      if (input === '/api/probe') {
+        freshTokens.push(new Headers(init?.headers).get('X-XSRF-TOKEN') ?? '')
+        return Promise.resolve(Response.json({}))
+      }
+      return mockFetch(input, init)
+    })
+    const { client } = renderApp('/budget/control')
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: '지금 검사' }))
+    await sent
+    const oldMutation = client.getMutationCache().getAll()[0]
+    const countMe = () => calls.filter((c) => c.url === '/api/v1/auth/me').length
+    const beforeExpiry = countMe()
+    signedIn = false
+    await Promise.allSettled(['one', 'two'].map((key) =>
+      client.fetchQuery({ queryKey: [key], queryFn: () => request('GET', '/api/expire') })))
+    expect(await screen.findByText(/세션이 만료되었거나/)).toBeInTheDocument()
+    expect(countMe()).toBe(beforeExpiry + 1)
+    await user.type(screen.getByLabelText('아이디'), 'admin')
+    await user.type(screen.getByLabelText('비밀번호'), 'fixture-password')
+    await user.click(screen.getByRole('button', { name: '로그인' }))
+    await screen.findByRole('button', { name: '지금 검사' })
+    await request('POST', '/api/probe')
+    const generationReads = issued
+    const authenticatedReads = countMe()
+    const controlReads = calls.filter((c) => c.url === '/api/v1/budget/control').length
+    release(Response.json({ consistent: true, issues: [] }, { status: lateStatus }))
+    await waitFor(() => expect(oldMutation.state.status).toBe('error'))
+    await request('POST', '/api/probe')
+    expect(posts).toBe(1)
+    expect(countMe()).toBe(authenticatedReads)
+    expect(calls.filter((c) => c.url === '/api/v1/budget/control')).toHaveLength(controlReads)
+    expect(client.getQueryData(['budget-control'])).toEqual(control)
+    expect(issued).toBe(generationReads)
+    expect(freshTokens).toEqual([`tok-${generationReads}`, `tok-${generationReads}`])
+    expect(screen.queryByText('정합성 검사: 정상')).not.toBeInTheDocument()
   })
 
   it('shows new spending as blocked when consistency is ERROR even if the admin allowed it (UI-RV-01)', async () => {

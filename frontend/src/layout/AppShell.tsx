@@ -14,6 +14,7 @@ import {
   X,
 } from 'lucide-react'
 import { currentUser, logout } from '../api/admin'
+import { SessionChangedError } from '../api/http'
 import { fetchHealth } from '../api/health'
 import { AUTH_FLOW_META, ME_KEY } from '../queryClient'
 import { cn } from '../lib/cn'
@@ -114,9 +115,10 @@ function Sidebar({
     mutationFn: logout,
     meta: AUTH_FLOW_META,
     onSettled: async (_data, error) => {
+      if (error instanceof SessionChangedError) return
       if (error) toast.error('로그아웃 요청이 실패했습니다. 세션을 정리하고 로그인 화면으로 이동합니다.')
       queryClient.removeQueries({ predicate: (query) => query.queryKey[0] !== ME_KEY[0] })
-      await queryClient.invalidateQueries({ queryKey: ME_KEY })
+      await queryClient.resetQueries({ queryKey: ME_KEY })
     },
   })
   const nextTheme = theme === 'dark' ? 'light' : 'dark'

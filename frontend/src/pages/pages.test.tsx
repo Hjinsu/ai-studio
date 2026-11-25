@@ -426,7 +426,7 @@ describe('Ledger order and lost settlement responses', () => {
     await user.click(screen.getByRole('button', { name: '기록 전 확인' }))
     const dialog = await screen.findByRole('alertdialog')
     await user.click(within(dialog).getByRole('button', { name: '원장에 기록' }))
-    expect(await within(dialog).findByText(/원장에는 아직 이 요청이 없습니다/)).toBeInTheDocument()
+    expect(await within(dialog).findByText(/현재 원장에서 이 요청의 기록이 확인되지 않았습니다/)).toBeInTheDocument()
     // 자동 재전송 없음
     expect(calls.filter((c) => c.method === 'POST')).toHaveLength(1)
     await user.click(within(dialog).getByRole('button', { name: '원장에 기록' }))
@@ -434,6 +434,66 @@ describe('Ledger order and lost settlement responses', () => {
     const posts = calls.filter((c) => c.method === 'POST')
     expect(posts).toHaveLength(2)
     expect(posts[1].headers['Idempotency-Key']).toBe(posts[0].headers['Idempotency-Key'])
+  })
+
+  it.each(['ADJUSTMENT', 'REFUND'])('keeps the %s confirmation and original request when ledger verification fails (RVX-03)', async (entryType) => {
+    let failed = false
+    let recovered = false
+    let attempts = 0
+    const calls = mockApi(me, csrf, health, allChannels, (call) => {
+      if (call.url.endsWith('/adjustments')) {
+        if (++attempts === 2) return { status: 200, body: { ...reservation, status: 'SETTLED' } }
+        failed = true
+        return { status: 502, body: error('INTERNAL_SERVER_ERROR', 'lost') }
+      }
+      if (call.url.endsWith('/budget-reservations/11')) {
+        return failed && !recovered
+          ? { status: 503, body: error('SERVICE_UNAVAILABLE', 'verification unavailable') }
+          : { status: 200, body: { ...reservation, status: 'SETTLED' } }
+      }
+    })
+    renderApp('/budget/reservations/11')
+    const user = userEvent.setup()
+    await user.selectOptions(await screen.findByLabelText('유형'), entryType)
+    await user.type(await screen.findByLabelText('금액(USD)'), '0.1')
+    await user.type(screen.getByLabelText('메모(필수, 감사 기록)'), 'fixture')
+    await user.click(screen.getByRole('button', { name: '기록 전 확인' }))
+    const dialog = await screen.findByRole('alertdialog')
+    await user.click(within(dialog).getByRole('button', { name: '원장에 기록' }))
+    expect(await within(dialog).findByText(/기록 여부도 확인하지 못했습니다/)).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: '취소' })).toBeDisabled()
+    await user.keyboard('{Escape}')
+    expect(dialog).toBeInTheDocument()
+    await user.click(within(dialog).getByRole('button', { name: '원장 다시 확인' }))
+    await waitFor(() => expect(within(dialog).getByRole('button', { name: '원장 다시 확인' })).toBeEnabled())
+    expect(calls.filter((c) => c.method === 'POST')).toHaveLength(1)
+    recovered = true
+    await user.click(within(dialog).getByRole('button', { name: '원장 다시 확인' }))
+    expect(await within(dialog).findByText(/실패했다고 단정할 수 없습니다/)).toBeInTheDocument()
+    expect(attempts).toBe(1)
+    await user.click(within(dialog).getByRole('button', { name: '원장에 기록' }))
+    await waitFor(() => expect(dialog).not.toBeInTheDocument())
+    const posts = calls.filter((c) => c.method === 'POST')
+    expect(posts).toHaveLength(2)
+    expect(posts[1].headers['Idempotency-Key']).toBe(posts[0].headers['Idempotency-Key'])
+    expect(posts[1].body).toEqual(posts[0].body)
+    expect(posts[1].body).toMatchObject({ entryType, amount: '0.1', note: 'fixture' })
+  })
+
+  it('releases a reservation with the confirmed NOT_CHARGED request', async () => {
+    const calls = mockApi(me, csrf, health, allChannels,
+      on('GET', '/api/v1/budget-reservations/11', 200, reservation),
+      on('POST', '/api/v1/budget-reservations/11/resolve', 200, { ...reservation, status: 'RELEASED' }),
+    )
+    renderApp('/budget/reservations/11')
+    const user = userEvent.setup()
+    await user.selectOptions(await screen.findByLabelText('결과'), 'NOT_CHARGED')
+    await user.type(screen.getByLabelText('판단 근거(필수, 감사 기록)'), 'no invoice')
+    await user.click(screen.getByRole('button', { name: '기록 전 확인' }))
+    const dialog = await screen.findByRole('alertdialog')
+    await user.click(within(dialog).getByRole('button', { name: '원장에 기록' }))
+    await waitFor(() => expect(dialog).not.toBeInTheDocument())
+    expect(calls.filter((c) => c.method === 'POST').map((c) => c.body)).toEqual([{ outcome: 'NOT_CHARGED', note: 'no invoice' }])
   })
 
   it('a reloaded screen uses a new idempotency key, so the guide says to check the ledger first (UI-RV-A01 residual risk)', async () => {
@@ -448,7 +508,7 @@ describe('Ledger order and lost settlement responses', () => {
       await user.type(screen.getByLabelText('메모(필수, 감사 기록)'), 'fix')
       await user.click(screen.getByRole('button', { name: '기록 전 확인' }))
       await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: '원장에 기록' }))
-      await screen.findByText(/원장에는 아직 이 요청이 없습니다/)
+      await screen.findByText(/현재 원장에서 이 요청의 기록이 확인되지 않았습니다/)
     }
     const first = renderApp('/budget/reservations/11')
     await submitOnce()

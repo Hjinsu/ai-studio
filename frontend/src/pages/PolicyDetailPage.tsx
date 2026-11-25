@@ -1,5 +1,6 @@
 import { useState, type FormEvent, type ReactNode } from 'react'
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useSessionMutation } from '../api/useSessionMutation'
 import { useParams, useSearchParams } from 'react-router'
 import { getPolicy, listBuckets, listPolicyRevisions, revisePolicy, setPolicyEnabled, type BudgetBucket, type BudgetPolicy } from '../api/admin'
 import { formatKrw, matchesAmount, sign, trimDecimal } from '../lib/decimal'
@@ -56,9 +57,7 @@ export function PolicyDetailPage() {
 function useRefreshPolicy(policyId: string) {
   const queryClient = useQueryClient()
   return async () => {
-    for (const key of [['policy', policyId], ['policy-revisions', policyId], ['policy-buckets', policyId], ['policies'], ['dashboard'], ['usage']]) {
-      await queryClient.invalidateQueries({ queryKey: key })
-    }
+    await Promise.all([['policy', policyId], ['policy-revisions', policyId], ['policy-buckets', policyId], ['policies'], ['dashboard'], ['usage']].map((queryKey) => queryClient.invalidateQueries({ queryKey })))
   }
 }
 
@@ -67,7 +66,7 @@ function StatusToggle({ policy }: { policy: BudgetPolicy }) {
   const toast = useToast()
   const [open, setOpen] = useState(false)
   const enable = policy.status !== 'ACTIVE'
-  const toggle = useMutation({
+  const toggle = useSessionMutation({
     mutationFn: () => setPolicyEnabled(policy.id, enable, policy.version),
     onSuccess: async () => {
       setOpen(false)
@@ -109,7 +108,7 @@ function ReviseForm({ policy }: { policy: BudgetPolicy }) {
   const [timezone, setTimezone] = useState(policy.currentRevision.timezone)
   const [changeNote, setChangeNote] = useState('')
   const [localError, setLocalError] = useState<string | undefined>()
-  const revise = useMutation({
+  const revise = useSessionMutation({
     mutationFn: () =>
       revisePolicy(policy.id, {
         baseRevisionNo: policy.currentRevision.revisionNo,

@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useSessionMutation } from '../api/useSessionMutation'
 import { Check, ShieldAlert, ShieldCheck, ShieldOff, X } from 'lucide-react'
 import { budgetControl, listPolicies, runConsistencyCheck, setSpending, type Schemas } from '../api/admin'
 import { spendingView } from '../lib/budget'
@@ -31,10 +32,12 @@ export function SpendingControlPage() {
   const [reason, setReason] = useState('')
   const [report, setReport] = useState<Schemas['ConsistencyReport'] | null>(null)
   const refresh = async () => {
-    await queryClient.invalidateQueries({ queryKey: ['budget-control'] })
-    await queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['budget-control'] }),
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
+    ])
   }
-  const change = useMutation({
+  const change = useSessionMutation({
     mutationFn: (body: Schemas['SpendingChangeRequest']) => setSpending(body),
     onSuccess: async (result) => {
       setOpen(false)
@@ -43,7 +46,7 @@ export function SpendingControlPage() {
       await refresh()
     },
   })
-  const check = useMutation({
+  const check = useSessionMutation({
     mutationFn: runConsistencyCheck,
     onSuccess: async (result) => {
       setReport(result)

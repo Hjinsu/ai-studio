@@ -8,6 +8,7 @@ export interface ApiErrorBody {
 }
 
 export class ApiError extends Error {
+  generation?: AbortSignal
   readonly status: number
   readonly body: ApiErrorBody | undefined
   /** 429 응답의 Retry-After(초). 계약(OpenAPI TooManyRequests)상 정수 초. 없으면 undefined. */
