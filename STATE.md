@@ -1,11 +1,11 @@
 # 작업 상태
 기준선: v0.1 설계 패키지 + ADR-006~066 승인(2026-11-25). 실제 계정 및 API 미연동.
-현재 상태: T02 DONE (2026-11-25 최종 승인). T03 미착수, 별도 설계 승인 대기. [T02 통합 보고서](docs/reports/T02_REPORT.md), [최종 독립 검토](docs/reviews/T02_FINAL_PATCH_REVIEW.md).
+현재 상태: T02 DONE (2026-11-25 최종 승인). T03-A6 최종 명세 승인(ChatGPT APPROVE). FD-01~16 유지, T03-B만 FV-01~06을 조건으로 착수 승인. [T02 통합 보고서](docs/reports/T02_REPORT.md), [최종 독립 검토](docs/reviews/T02_FINAL_PATCH_REVIEW.md).
 | ID | 상태 | 작업 |
 |---|---|---|
 | T01 | DONE (2026-11-25 승인, 커밋 55e33ec, CI run 45440907314) | 프로젝트 bootstrap, 버전 고정, DB/Flyway, CI, health check |
 | T02 | DONE (2026-11-25 최종 승인, 제품 `55ea852`, [PR #1](https://github.com/Hjinsu/ai-studio/pull/1), 사용자 검증 14/14·최종 재확인 6/6) | 인증, 채널, 설정, 비용 원장 |
-| T03 | TODO (선행 조건·필수 설계 제약만 기록: docs/plans/T03_PLAN.md, 착수 금지) | 콘텐츠 revision, DB 큐, lease, 재시도 |
+| T03 | B TODO (조건부 착수 승인), C~F BLOCKED | 콘텐츠 revision, DB 큐, lease, 재시도 |
 | T04 | TODO | fake provider, 조사/대본/스토리보드 |
 | T05 | TODO | 이미지/TTS/자막/FFmpeg 로컬 렌더링 |
 | T06 | TODO | 검수/승인/관리자 UI |
@@ -15,6 +15,13 @@
 | T10 | TODO | 트렌드 및 멀티채널 확장 |
 ## 인수인계 기록
 작업 ID / 상태 / 변경 파일 / 테스트 명령 및 실제 결과 / 미해결 문제 / 다음 작업 / 필요 환경변수. 커밋 해시는 생성된 경우만 기록.
+
+### T03-A6 — 최종 구현 명세 작성 (2026-11-25)
+
+- 기준 main 47ef697. FD-01~16 승인 사항을 ADR-067~076과 [최종 명세](docs/plans/t03-final/README.md)에 반영했다. SQL·OpenAPI는 검토 초안이다.
+- 변경 범위는 최종 패키지, DECISIONS.md, TASKS.md, STATE.md 및 문서 인덱스다. 실제 migration과 OpenAPI 계약, 사용자 DB 적용은 수행하지 않았다.
+- Git 상태·diff, 문서·JSON 구문/참조 정적 확인. 구현·DDL 적용·통합/성능 테스트·CI는 미실행.
+- 최종 승인 기록(2026-11-25). ChatGPT APPROVE 및 사용자 명세 승인. T03-B만 조건부 착수 가능, C~F는 BLOCKED. Claude Code의 다음 작업은 별도 worktree의 t03/b-domain에서 V6과 도메인 계층을 구현·검증하는 것이다. [배정 및 FV-01~06](docs/plans/t03-final/T03_IMPLEMENTATION_HANDOFF.md).
 
 ### T02-FINAL-CLOSE — 종료 승인 및 main 반영 (2026-11-25, DONE)
 - RVX-02-CB 독립 검토 PASS, 종료 권고 APPROVE, 새 종료 차단 결함 없음. 최종 검토 원문과 사용자 검증 14/14·최종 재확인 6/6을 보존했다.

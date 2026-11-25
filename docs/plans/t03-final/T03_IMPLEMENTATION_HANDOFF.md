@@ -1,0 +1,40 @@
+# T03 구현 인수인계
+
+A6 명세 승인 완료. B만 조건부 착수 승인, C~F BLOCKED. 기준 47ef697. Codex가 공통 migration 번호, OpenAPI 및 인터페이스 통합을 담당한다. 작업별 브랜치·worktree 및 고정 커밋을 착수 승인 후 지정한다.
+
+| 작업 | 담당 | 선행 및 허용 경로 | 완료 조건 |
+|---|---|---|---|
+| B | Claude Code | 착수 승인, backend 도메인·해당 테스트. 공통 migration은 Codex 조율 | ownership 3열, topic·revision·run/활성 포인터, 신규/V5 DB 검증 |
+| C | Claude Code | B의 참조 키와 D의 고정 operation 인터페이스. backend 큐 및 해당 테스트 | claim/sweep/heartbeat, 동시 Lease, P12와 R10·DAG 회귀 |
+| D | Codex | B/C 참조 키 및 V5의 비용·DB·OpenAPI 계약. backend budget/operation 및 해당 테스트와 공통 파일 조율 | 전체 비용 안전성, 영속 정산, 구 API, 장애·권한·성능 검증 |
+| E | Claude Code | OpenAPI 동결 및 타입 생성. frontend 및 해당 테스트 | 관리자 UI, 세션 세대, 금액/권한·fake·정산 recovery E2E |
+| F | Codex | 승인된 B~E 검증 가능 HEAD | 독립 리뷰, CI 및 통합 테스트, 실제 결과 보고. Codex 작성분 리뷰는 별도 Codex 세션 |
+
+B/C의 content(id,channel_id,content_type), automation_job(id), job_attempt(job_id,id) 대체 키를 D가 참조한다. D는 큐에 operation 분류, append-only dispatch/evidence, TX6 receipt와 P12 입력을 제공한다. 쓰기 트랜잭션을 모듈 경계로 중첩하지 않는다. C/D 병렬 작업은 고정 인터페이스 및 worktree 분리 후 가능하다. FK migration은 B/C 이후, UI mock 작업은 API 확정 이후에 가능하다. 동일 파일·공통 lockfile 변경은 통합 담당자에게 요청한다.
+
+허용 경로 밖 변경, V1~V5 수정, 개발 DB 테스트, 실제 API/지출 허용·업로드는 금지한다. 제품 구현 후에도 DONE·main 병합은 CI/독립 리뷰/ChatGPT 최종 검토와 사용자 승인 이후다. Claude에게 별도 설계·독립 리뷰를 배정하지 않는다.
+
+## T03-B 조건부 착수 배정 (2026-11-25)
+
+ChatGPT 최종 검토 APPROVE. 사용자가 T03-A6 최종 명세와 아래 검증 조건을 포함한 T03-B 착수를 승인했다. FD-01~16과 ADR-067~076을 유지한다. C~F는 선행 조건 해소와 별도 착수 승인 전까지 BLOCKED다. Codex는 공통 Migration 번호·OpenAPI·인터페이스 통합 소유자로 유지한다.
+
+- **담당 및 기준** — Claude Code는 `t03/b-domain`에서 구현한다. 시작 기준은 `t03/integration`에 기록한 `docs: freeze T03 design baseline and prepare T03-B` 설계 기준선 커밋이다. 제품 비교 기준은 `main@47ef69731a599c570846c1482dcabf8ead8fe2e4`. 별도 worktree를 사용하고 integration에서 구현하지 않는다.
+- **V6 배정** — `backend/src/main/resources/db/migration/V6__create_content_domain.sql` 한 파일. V4 channel_config의 `UNIQUE(channel_id,id)` 추가 → topic → content → content_revision → content_run → current_revision_id/active_run_id/base_run_id 역참조 FK → B 범위 불변 트리거. Topic/Content/Revision 작성 멱등성에 필요한 공용 `queue_command_log`는 B의 V6에서 생성한다. V5에 대한 수정 및 비용/큐 실행 테이블 선행 구현은 금지한다.
+- **후속 번호 예약** — C는 V7, D는 V8부터 사용 예정. 이 번호는 미래 배정을 위한 예약이다. C/D가 추가 Migration을 필요로 하면 작성 전에 Codex와 번호를 조율한다. C의 queue_control·queue_worker_instance는 automation_job·job_attempt 생성보다 먼저 준비한다. 특히 `job_attempt.worker_instance_id` FK 대상인 queue_worker_instance를 job_attempt보다 먼저 만든다(FV-01). D는 B/C의 참조 키가 존재한 뒤 FK를 추가한다.
+- **수정 허용** — `backend/src/main/java/com/aistudio/{topic,content}/**`와 해당 테스트. 채널 보관·상태 전이의 FD-16 및 budget_control X 계약에 직접 필요한 `channel/ChannelService.java`, `channel/ChannelMapper.java`와 해당 테스트. V6, `MigrationConventionTest`, `DatabaseBootstrapIT`, `DatabaseUpgradeIT`, `ProductionGrantsIT`의 V6 검증 범위와 `infra/mariadb/prod-app-grants.sql`의 B 테이블 권한. 공통 파일은 Codex와 조율한다. `docs/reports/T03_B_REPORT.md`에 실제 결과를 기록한다.
+- **기존 계약과 참조 키** — 사용자/채널 ID signed BIGINT, 기존 ADMIN 세션·CSRF, 문자열 ID, UTC, 19개 공통 오류 및 Idempotency-Key 규격을 유지한다. 채널 상태 전이는 budget_control X→channel X, 활성 Run 보관 거절은 409 INVALID_STATE_TRANSITION. B가 제공할 키는 `content(id,channel_id)`, `content(id,content_type)`, `content(id,channel_id,content_type)`, `content_revision(content_id,id)`, `content_run(content_id,id)`, `channel_config(channel_id,id)`. C가 제공할 `automation_job(id)`, `job_attempt(job_id,id)`는 D 의존성이다. 실행 가능한 Run 생성/Dispatch와 작업 큐 API 연결은 C 승인 이후, 비용·정산은 D 승인 이후다.
+- **수정 금지** — V1~V5, V7 이후, 공통 OpenAPI·생성 타입, 예산·원장 코드, frontend, 워크플로와 사용자 개발 DB. B API 계약 변경이나 추가 공유 인터페이스가 필요하면 Codex에 근거와 영향을 전달한다. 실제 공급자, 지출 전환, 업로드는 이번 범위에서 실행하지 않는다.
+
+### 필수 구현 검증 조건
+
+| 조건 | B에서 확인할 범위 | 후속 게이트 |
+|---|---|---|
+| FV-01 | V6 범위와 C 선행 순서를 구분 | C에서 queue_worker_instance→job_attempt 신규 및 업그레이드 적용 확인 |
+| FV-02 | B 불변 트리거, 운영 앱 최소 권한, 허용 경로/거부 경로 테스트 | 후속 테이블 동일 원칙, 배포 전 binlog ON 검증 |
+| FV-03 | B 복합 FK·UNIQUE 및 channel/content 락 경합을 두 DB 커넥션 barrier로 검증 | C/D 공통 암묵/명시 락 매트릭스 확장 |
+| FV-04 | Run 수명주기 소유권·포인터 제약 준비 | C/D에서 receipt당 P12 한 번, 비용 미확정 terminal Run 0 |
+| FV-05 | B Controller의 공통 계약 회귀 및 OpenAPI 반영 요청 기록 | Codex가 통합 OpenAPI/생성 타입과 CI diff 검증 |
+| FV-06 | Testcontainers 또는 별도 임시 MariaDB 전용, ai_studio 작업 DB/원장 접근 금지 | C/D 격리 FAKE 비용 테스트에서 실제 호출 0 및 원장 보호 |
+
+Windows 저장소 루트에서 `gradlew.bat :backend:test`, `gradlew.bat :backend:integrationTest`, `gradlew.bat :backend:bootJar`를 실행한다. Linux는 `./gradlew`를 사용한다. [로컬 테스트 가이드](../../guides/LOCAL_TEST_GUIDE.md)의 Testcontainers 또는 별도 임시 서버만 사용한다. DB의 신규/V5 업그레이드, MigrationConventionTest V1~V5 해시 보존 및 V6 등록, 동일 채널 topic 중복과 교차 소유권 FK, NULL 우회 거절, Revision UPDATE/DELETE 거절, 활성 Run 포인터 원자성·동시성, 채널 보관 차단, 멱등 키 같은 내용 재생/다른 내용 409, 기존 권한/인증 회귀가 합격 조건이다. 필요한 V6 코드·테스트·권한을 완료하고 실제 결과와 미실행 항목을 보고한 뒤 IMPLEMENTED로 제출한다. Codex 독립 리뷰 후 통합 승인 절차를 진행한다.
+

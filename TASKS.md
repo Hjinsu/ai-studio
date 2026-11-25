@@ -6,7 +6,7 @@
 
 `TODO` 대기 · `IN_PROGRESS` 작업 중 · `BLOCKED` 중단/승인 대기 · `IMPLEMENTED` 구현 완료/검증 대기 · `REVIEW` 검토 중 · `DONE` 최종 승인 완료.
 
-## T02 배정 초안
+## T02 배정 이력
 
 | ID | 작업 | 담당 제안 | 상태 | 수정 범위 | 선행 조건 |
 |---|---|---|---|---|---|
@@ -22,7 +22,23 @@
 | T02-FINAL-PATCH | RVX-02-CB mutation 콜백 세대 보강 | Codex | DONE — `55ea852`, 별도 검토 PASS 및 최종 승인 | 직접 관련 프론트엔드 및 보고·결정 문서 | MEDIUM 잔여 위험 보강 승인 |
 | T02-VERIFY | 통합·회귀·CI 및 사용자 검증 | 사용자 | 사용자 보고 화면 14/14 및 최종 변경 화면 재확인 6/6 완료 | 테스트 및 보고서 | UI 및 결함 수정 완료 |
 | T02-FINAL-CLOSE | 최종 승인 기록 및 PR #1 병합 | 사용자 승인 · Codex 실행 | DONE — 2026-11-25 최종 종료 승인. [PR #1](https://github.com/Hjinsu/ai-studio/pull/1)에서 병합과 검사 추적 | 상태·결정·보고서, PR 및 Git 정리 | 최종 독립 검토 및 문서 HEAD CI 성공 후 병합 |
-| T03 | 콘텐츠 revision·DB 작업 큐·lease·재시도 | 미배정 | BLOCKED | 설계 후 배정 | T02 DONE 및 T03 설계 승인 |
+## T03 현재 배정
+
+| ID | 작업 | 담당 | 상태 | 산출물·선행 조건 |
+|---|---|---|---|---|
+| T03-A1 | 도메인·작업 엔진 설계 검토 | Claude Code | 검토 완료 | [리뷰](docs/reviews/T03_CLAUDE_DESIGN_REVIEW.md) |
+| T03-A2 | 비용 안전성·데이터 정합성 설계 검토 | Codex | 검토 완료 | [리뷰](docs/reviews/T03_CODEX_DESIGN_REVIEW.md) |
+| T03-A3 | 도메인·작업 엔진 설계 수정안 | Claude Code | 수정안 작성 완료 | [수정안](docs/plans/t03-revision/T03_DOMAIN_ENGINE_REVISION.md), Claude Code의 마지막 설계 작업 |
+| T03-A4 | 비용 안전성·영속 복구 설계 수정안 | Codex | 수정안 작성 완료 | [수정안](docs/plans/t03-revision/T03_COST_RECOVERY_REVISION.md) |
+| T03-A5 | 통합 설계 검토 | ChatGPT · Codex | 저장소 검증 완료, FD-01~16 승인 | [통합 리뷰](docs/reviews/T03_INTEGRATED_DESIGN_REVIEW.md) |
+| T03-A6 | 최종 구현 명세 및 착수 준비 | Codex | DONE (ChatGPT APPROVE, 사용자 최종 명세 승인) | [최종 명세](docs/plans/t03-final/README.md) |
+| T03-B | 콘텐츠·도메인 DB | Claude Code | TODO (FV-01~06 조건부 착수 승인) | t03/b-domain, V6 배정. [작업 범위와 검증](docs/plans/t03-final/T03_IMPLEMENTATION_HANDOFF.md) |
+| T03-C | 작업 실행 엔진 | Claude Code | BLOCKED | B 참조 키·D 인터페이스, 착수 승인 |
+| T03-D | 비용 안전성·영속 복구 | Codex | BLOCKED | B/C 참조 키와 인터페이스, 착수 승인 |
+| T03-E | 관리자 UI | Claude Code | BLOCKED | OpenAPI 및 타입 계약, 착수 승인 |
+| T03-F | 독립 리뷰·통합 검증 | Codex | BLOCKED | B~E 검증 가능한 HEAD, Codex 구현분은 별도 리뷰 세션 |
+
+A3·A4 완료 표시는 수정안 작성 상태에 한정된다. 설계와 제품 구현 착수에는 각각 사용자 승인이 필요하다.
 
 ## 작업 상세 템플릿
 
@@ -41,4 +57,4 @@
 
 ## 운영 규칙
 
-한 작업의 구현 담당은 한 명으로 지정한다. 병렬 작업은 별도 worktree와 겹치지 않는 수정 범위를 사용한다. 공통 파일 수정은 통합 담당자가 관리한다. 작업을 시작하기 전에 배정 및 기준 커밋을 기록하고, 작업 종료 시 결과와 인수인계를 갱신한다. 사용자 승인 없이 TODO를 DONE으로 바꾸지 않는다.
+한 작업의 구현 담당은 Claude Code 또는 Codex 한 명으로 지정한다. Codex가 Claude Code 구현을 독립 리뷰한다. Codex 구현은 구현 세션과 분리된 Codex 세션에서 리뷰한다. 병렬 작업은 별도 worktree와 겹치지 않는 수정 범위를 사용한다. 공통 파일 수정은 통합 담당자가 관리한다. 작업을 시작하기 전에 배정 및 기준 커밋을 기록하고, 작업 종료 시 결과와 인수인계를 갱신한다. 사용자 승인 없이 TODO를 DONE으로 바꾸지 않는다.

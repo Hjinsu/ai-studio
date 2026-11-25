@@ -1,0 +1,5573 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "AI Studio T03 review contract overlay",
+    "version": "0.4.0-draft",
+    "description": "Merge review only. Existing product contract remains authoritative until approval. JSON serialization is valid YAML."
+  },
+  "paths": {
+    "/api/v1/topics": {
+      "get": {
+        "operationId": "listTopics",
+        "summary": "listTopics",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success or replay",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TopicPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          },
+          {
+            "name": "channelId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "../../api/openapi.yaml#/components/schemas/Id"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "createTopic",
+        "summary": "createTopic",
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfHeader": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success or replay",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Topic"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Topic"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9:._-]{8,128}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TopicCreate"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/topics/{topicId}": {
+      "get": {
+        "operationId": "getTopic",
+        "summary": "getTopic",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success or replay",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Topic"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "topicId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "../../api/openapi.yaml#/components/schemas/Id"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/contents": {
+      "get": {
+        "operationId": "listContents",
+        "summary": "listContents",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success or replay",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContentPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          },
+          {
+            "name": "channelId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "../../api/openapi.yaml#/components/schemas/Id"
+            }
+          },
+          {
+            "name": "topicId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "../../api/openapi.yaml#/components/schemas/Id"
+            }
+          },
+          {
+            "name": "contentType",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "SHORTS",
+                "LONGFORM"
+              ]
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "DRAFT",
+                "PRODUCING",
+                "ARCHIVED"
+              ]
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "createContent",
+        "summary": "createContent",
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfHeader": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success or replay",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Content"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Content"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9:._-]{8,128}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContentCreate"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/contents/{contentId}": {
+      "get": {
+        "operationId": "getContent",
+        "summary": "getContent",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success or replay",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Content"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "contentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "../../api/openapi.yaml#/components/schemas/Id"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/contents/{contentId}/archive": {
+      "post": {
+        "operationId": "archiveContent",
+        "summary": "archiveContent",
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfHeader": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success or replay",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Content"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "contentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "../../api/openapi.yaml#/components/schemas/Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VersionRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/contents/{contentId}/revisions": {
+      "get": {
+        "operationId": "listContentRevisions",
+        "summary": "listContentRevisions",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success or replay",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevisionPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "contentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "../../api/openapi.yaml#/components/schemas/Id"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "createContentRevision",
+        "summary": "createContentRevision",
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfHeader": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success or replay",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Revision"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Revision"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "contentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "../../api/openapi.yaml#/components/schemas/Id"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9:._-]{8,128}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevisionInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/contents/{contentId}/revisions/{revisionNo}": {
+      "get": {
+        "operationId": "getContentRevision",
+        "summary": "getContentRevision",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success or replay",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Revision"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "contentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "../../api/openapi.yaml#/components/schemas/Id"
+            }
+          },
+          {
+            "name": "revisionNo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/contents/{contentId}/runs": {
+      "get": {
+        "operationId": "listContentRuns",
+        "summary": "listContentRuns",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success or replay",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "contentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "../../api/openapi.yaml#/components/schemas/Id"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "createRun",
+        "summary": "createRun",
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfHeader": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success or replay",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Run"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Run"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "contentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "../../api/openapi.yaml#/components/schemas/Id"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9:._-]{8,128}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunCreate"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/runs/{runId}": {
+      "get": {
+        "operationId": "getRun",
+        "summary": "getRun",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success or replay",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Run"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "../../api/openapi.yaml#/components/schemas/Id"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/runs/{runId}/cancel": {
+      "post": {
+        "operationId": "cancelRun",
+        "summary": "cancelRun",
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfHeader": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success or replay",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Run"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Run"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "../../api/openapi.yaml#/components/schemas/Id"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9:._-]{8,128}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Reason"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/runs/{runId}/jobs": {
+      "get": {
+        "operationId": "listRunJobs",
+        "summary": "listRunJobs",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success or replay",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "../../api/openapi.yaml#/components/schemas/Id"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "WAITING",
+                "READY",
+                "RUNNING",
+                "RETRY_WAIT",
+                "ACTION_REQUIRED",
+                "RECOVERY_REQUIRED",
+                "SUCCEEDED",
+                "FAILED",
+                "CANCELLED",
+                "SKIPPED"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/runs/{runId}/events": {
+      "get": {
+        "operationId": "listRunEvents",
+        "summary": "listRunEvents",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success or replay",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "../../api/openapi.yaml#/components/schemas/Id"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/jobs": {
+      "get": {
+        "operationId": "listJobs",
+        "summary": "listJobs",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success or replay",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "WAITING",
+                "READY",
+                "RUNNING",
+                "RETRY_WAIT",
+                "ACTION_REQUIRED",
+                "RECOVERY_REQUIRED",
+                "SUCCEEDED",
+                "FAILED",
+                "CANCELLED",
+                "SKIPPED"
+              ]
+            }
+          },
+          {
+            "name": "channelId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "../../api/openapi.yaml#/components/schemas/Id"
+            }
+          },
+          {
+            "name": "jobType",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 48
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/jobs/{jobId}": {
+      "get": {
+        "operationId": "getJob",
+        "summary": "getJob",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success or replay",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "jobId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "../../api/openapi.yaml#/components/schemas/Id"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/jobs/{jobId}/attempts": {
+      "get": {
+        "operationId": "listAttempts",
+        "summary": "listAttempts",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success or replay",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttemptPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "jobId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "../../api/openapi.yaml#/components/schemas/Id"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/jobs/{jobId}/events": {
+      "get": {
+        "operationId": "listJobEvents",
+        "summary": "listJobEvents",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success or replay",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "jobId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "../../api/openapi.yaml#/components/schemas/Id"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/jobs/{jobId}/retry": {
+      "post": {
+        "operationId": "resumeJob",
+        "summary": "resumeJob",
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfHeader": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success or replay",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "jobId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "../../api/openapi.yaml#/components/schemas/Id"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9:._-]{8,128}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Reason"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/queue/status": {
+      "get": {
+        "operationId": "getQueueStatus",
+        "summary": "getQueueStatus",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success or replay",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Queue"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/queue/control/dispatch": {
+      "post": {
+        "operationId": "updateQueueDispatch",
+        "summary": "updateQueueDispatch",
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfHeader": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success or replay",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Queue"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SpendingChange"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/operations/{operationId}": {
+      "get": {
+        "operationId": "getOperation",
+        "summary": "getOperation",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success or replay",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "operationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/operations/{operationId}/attestations": {
+      "post": {
+        "operationId": "attestOperation",
+        "summary": "attestOperation",
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfHeader": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success or replay",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operation"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "operationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9:._-]{8,128}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Attestation"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/budget-reservations/{reservationId}/settlement-operations": {
+      "get": {
+        "operationId": "listSettlementOperations",
+        "summary": "listSettlementOperations",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success or replay",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettlementPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "reservationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "../../api/openapi.yaml#/components/schemas/Id"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "createSettlementOperation",
+        "summary": "createSettlementOperation",
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfHeader": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success or replay",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Settlement"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Settlement"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "reservationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "../../api/openapi.yaml#/components/schemas/Id"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9:._-]{8,128}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettlementCreate"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/settlement-operations/{operationId}": {
+      "get": {
+        "operationId": "getSettlementOperation",
+        "summary": "getSettlementOperation",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success or replay",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Settlement"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "operationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/settlement-operations/{operationId}/execute": {
+      "post": {
+        "operationId": "executeSettlementOperation",
+        "summary": "executeSettlementOperation",
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfHeader": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success or replay",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Settlement"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "operationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/settlement-operations/{operationId}/cancel": {
+      "post": {
+        "operationId": "cancelSettlementOperation",
+        "summary": "cancelSettlementOperation",
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfHeader": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success or replay",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Settlement"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "operationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/budget-reservations/{reservationId}/resolve": {
+      "post": {
+        "operationId": "transitionLegacyResolve",
+        "summary": "transitionLegacyResolve",
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfHeader": []
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "PREREQUISITE_NOT_MET. Use settlement-operations. No ledger write.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "reservationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "../../api/openapi.yaml#/components/schemas/Id"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/budget-reservations/{reservationId}/adjustments": {
+      "post": {
+        "operationId": "transitionLegacyAdjustment",
+        "summary": "transitionLegacyAdjustment",
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfHeader": []
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Common API error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "PREREQUISITE_NOT_MET. Use settlement-operations. No ledger write.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "../../api/openapi.yaml#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "reservationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "../../api/openapi.yaml#/components/schemas/Id"
+            }
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "sessionCookie": {
+        "$ref": "../../api/openapi.yaml#/components/securitySchemes/sessionCookie"
+      },
+      "csrfHeader": {
+        "$ref": "../../api/openapi.yaml#/components/securitySchemes/csrfHeader"
+      }
+    },
+    "schemas": {
+      "Uuid": {
+        "type": "string",
+        "format": "uuid",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "Topic": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "$ref": "../../api/openapi.yaml#/components/schemas/Id"
+          },
+          "channelId": {
+            "$ref": "../../api/openapi.yaml#/components/schemas/Id"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "channelId",
+          "title",
+          "note",
+          "createdAt"
+        ]
+      },
+      "TopicCreate": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "channelId": {
+            "$ref": "../../api/openapi.yaml#/components/schemas/Id"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "note": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "channelId",
+          "title"
+        ]
+      },
+      "BudgetLine": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "policyId": {
+            "$ref": "../../api/openapi.yaml#/components/schemas/Id"
+          },
+          "periodType": {
+            "type": "string",
+            "enum": [
+              "DAY",
+              "MONTH",
+              "LIFETIME"
+            ]
+          },
+          "limitKrw": {
+            "$ref": "../../api/openapi.yaml#/components/schemas/NonNegativeKrwAmount"
+          },
+          "spentKrw": {
+            "$ref": "../../api/openapi.yaml#/components/schemas/NonNegativeKrwAmount"
+          },
+          "reservedKrw": {
+            "$ref": "../../api/openapi.yaml#/components/schemas/NonNegativeKrwAmount"
+          },
+          "remainingKrw": {
+            "$ref": "../../api/openapi.yaml#/components/schemas/KrwAmount"
+          }
+        },
+        "required": [
+          "policyId",
+          "periodType",
+          "limitKrw",
+          "spentKrw",
+          "reservedKrw",
+          "remainingKrw"
+        ]
+      },
+      "ContentBudgetSummary": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "applicable": {
+            "type": "boolean"
+          },
+          "policies": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BudgetLine"
+            }
+          }
+        },
+        "required": [
+          "applicable",
+          "policies"
+        ]
+      },
+      "RevisionInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "baseRevisionNo": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "workingTitle": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "brief": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000
+          },
+          "language": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 16
+          },
+          "targetDurationSeconds": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 14400
+          },
+          "settings": {
+            "type": "object"
+          },
+          "baseRunId": {
+            "anyOf": [
+              {
+                "$ref": "../../api/openapi.yaml#/components/schemas/Id"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "changeReason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "baseRevisionNo",
+          "workingTitle",
+          "brief",
+          "language",
+          "targetDurationSeconds"
+        ]
+      },
+      "Revision": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "$ref": "../../api/openapi.yaml#/components/schemas/Id"
+          },
+          "contentId": {
+            "$ref": "../../api/openapi.yaml#/components/schemas/Id"
+          },
+          "revisionNo": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "workingTitle": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "brief": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000
+          },
+          "language": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 16
+          },
+          "targetDurationSeconds": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 14400
+          },
+          "settings": {
+            "type": "object"
+          },
+          "baseRunId": {
+            "anyOf": [
+              {
+                "$ref": "../../api/openapi.yaml#/components/schemas/Id"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "revisionHash": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "contentId",
+          "revisionNo",
+          "workingTitle",
+          "brief",
+          "language",
+          "targetDurationSeconds",
+          "settings",
+          "baseRunId",
+          "revisionHash",
+          "createdAt"
+        ]
+      },
+      "ContentCreate": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "channelId": {
+            "$ref": "../../api/openapi.yaml#/components/schemas/Id"
+          },
+          "topicId": {
+            "$ref": "../../api/openapi.yaml#/components/schemas/Id"
+          },
+          "contentType": {
+            "type": "string",
+            "enum": [
+              "SHORTS",
+              "LONGFORM"
+            ]
+          },
+          "workingTitle": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "brief": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000
+          },
+          "language": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 16
+          },
+          "targetDurationSeconds": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 14400
+          },
+          "settings": {
+            "type": "object"
+          },
+          "channelConfigRevisionNo": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "changeReason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "channelId",
+          "topicId",
+          "contentType",
+          "workingTitle",
+          "brief",
+          "targetDurationSeconds"
+        ]
+      },
+      "Content": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "$ref": "../../api/openapi.yaml#/components/schemas/Id"
+          },
+          "channelId": {
+            "$ref": "../../api/openapi.yaml#/components/schemas/Id"
+          },
+          "topicId": {
+            "$ref": "../../api/openapi.yaml#/components/schemas/Id"
+          },
+          "contentType": {
+            "type": "string",
+            "enum": [
+              "SHORTS",
+              "LONGFORM"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "DRAFT",
+              "PRODUCING",
+              "ARCHIVED"
+            ]
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "currentRevision": {
+            "$ref": "#/components/schemas/Revision"
+          },
+          "activeRunId": {
+            "anyOf": [
+              {
+                "$ref": "../../api/openapi.yaml#/components/schemas/Id"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "budgetSummary": {
+            "$ref": "#/components/schemas/ContentBudgetSummary"
+          }
+        },
+        "required": [
+          "id",
+          "channelId",
+          "topicId",
+          "contentType",
+          "title",
+          "status",
+          "version",
+          "currentRevision",
+          "activeRunId",
+          "budgetSummary"
+        ]
+      },
+      "VersionRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "version": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "version"
+        ]
+      },
+      "Reason": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "reason"
+        ]
+      },
+      "RunCreate": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "revisionNo": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "fakeScenario": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 48
+              },
+              "targetJobKey": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              }
+            },
+            "required": [
+              "code"
+            ]
+          }
+        },
+        "required": [
+          "revisionNo"
+        ]
+      },
+      "Run": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "$ref": "../../api/openapi.yaml#/components/schemas/Id"
+          },
+          "contentId": {
+            "$ref": "../../api/openapi.yaml#/components/schemas/Id"
+          },
+          "revisionId": {
+            "$ref": "../../api/openapi.yaml#/components/schemas/Id"
+          },
+          "runNo": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "QUEUED",
+              "RUNNING",
+              "SUCCEEDED",
+              "FAILED",
+              "CANCELLED"
+            ]
+          },
+          "executionMode": {
+            "type": "string",
+            "enum": [
+              "FAKE"
+            ]
+          },
+          "unresolvedOperations": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "cancelRequestedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "finishedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "contentId",
+          "revisionId",
+          "runNo",
+          "status",
+          "executionMode",
+          "unresolvedOperations",
+          "cancelRequestedAt",
+          "finishedAt"
+        ]
+      },
+      "Operation": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+          },
+          "jobId": {
+            "$ref": "../../api/openapi.yaml#/components/schemas/Id"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "PREPARED",
+              "RESERVED",
+              "DISPATCHING",
+              "RECOVERY_REQUIRED",
+              "SETTLEMENT_PENDING",
+              "TERMINAL"
+            ]
+          },
+          "billingOutcome": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "CHARGED",
+                  "NOT_CHARGED",
+                  "UNKNOWN"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "artifactOutcome": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "VERIFIED",
+                  "FAILED",
+                  "UNKNOWN"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operationId",
+          "jobId",
+          "state",
+          "billingOutcome",
+          "artifactOutcome",
+          "version"
+        ]
+      },
+      "Job": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "$ref": "../../api/openapi.yaml#/components/schemas/Id"
+          },
+          "runId": {
+            "$ref": "../../api/openapi.yaml#/components/schemas/Id"
+          },
+          "contentId": {
+            "$ref": "../../api/openapi.yaml#/components/schemas/Id"
+          },
+          "channelId": {
+            "$ref": "../../api/openapi.yaml#/components/schemas/Id"
+          },
+          "jobKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "jobType": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 48
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "WAITING",
+              "READY",
+              "RUNNING",
+              "RETRY_WAIT",
+              "ACTION_REQUIRED",
+              "RECOVERY_REQUIRED",
+              "SUCCEEDED",
+              "FAILED",
+              "CANCELLED",
+              "SKIPPED"
+            ]
+          },
+          "statusReason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "attemptCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "autoAttemptsUsed": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "manualResumesUsed": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "leaseExpiresAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "operation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Operation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "runId",
+          "contentId",
+          "channelId",
+          "jobKey",
+          "jobType",
+          "status",
+          "statusReason",
+          "attemptCount",
+          "autoAttemptsUsed",
+          "manualResumesUsed",
+          "leaseExpiresAt",
+          "operation"
+        ]
+      },
+      "Attempt": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "$ref": "../../api/openapi.yaml#/components/schemas/Id"
+          },
+          "jobId": {
+            "$ref": "../../api/openapi.yaml#/components/schemas/Id"
+          },
+          "attemptNo": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "finishedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 48
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "jobId",
+          "attemptNo",
+          "startedAt",
+          "finishedAt",
+          "outcome"
+        ]
+      },
+      "Event": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "$ref": "../../api/openapi.yaml#/components/schemas/Id"
+          },
+          "runId": {
+            "$ref": "../../api/openapi.yaml#/components/schemas/Id"
+          },
+          "jobId": {
+            "anyOf": [
+              {
+                "$ref": "../../api/openapi.yaml#/components/schemas/Id"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "attemptId": {
+            "anyOf": [
+              {
+                "$ref": "../../api/openapi.yaml#/components/schemas/Id"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "eventType": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "runId",
+          "jobId",
+          "attemptId",
+          "eventType",
+          "createdAt"
+        ]
+      },
+      "Queue": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "dispatchEnabled": {
+            "type": "boolean"
+          },
+          "maxRunningJobs": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "running": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "ready": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "retryWait": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "actionRequired": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "recoveryRequired": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "oldestReadyAgeSeconds": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "activeWorkerInstances": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "instanceId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                },
+                "hostLabel": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "workerThreads": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "startedAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "lastSeenAt": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              },
+              "required": [
+                "instanceId",
+                "hostLabel",
+                "workerThreads",
+                "startedAt",
+                "lastSeenAt"
+              ]
+            }
+          },
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "dispatchEnabled",
+          "maxRunningJobs",
+          "version",
+          "running",
+          "ready",
+          "retryWait",
+          "actionRequired",
+          "recoveryRequired",
+          "oldestReadyAgeSeconds",
+          "activeWorkerInstances",
+          "generatedAt"
+        ]
+      },
+      "SpendingChange": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "enabled",
+          "reason",
+          "version"
+        ]
+      },
+      "Attestation": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "expectedVersion": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "evidenceRef": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "billingOutcome": {
+            "type": "string",
+            "enum": [
+              "CHARGED",
+              "NOT_CHARGED",
+              "UNKNOWN"
+            ]
+          },
+          "artifactOutcome": {
+            "type": "string",
+            "enum": [
+              "VERIFIED",
+              "FAILED",
+              "UNKNOWN"
+            ]
+          }
+        },
+        "required": [
+          "expectedVersion",
+          "evidenceRef",
+          "reason",
+          "billingOutcome",
+          "artifactOutcome"
+        ]
+      },
+      "SettlementCreate": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "expectedReservationVersion": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "priorOperationId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "confirmed": {
+            "const": true
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "CONFIRM",
+              "RELEASE",
+              "ADJUSTMENT",
+              "REFUND"
+            ]
+          },
+          "amount": {
+            "$ref": "../../api/openapi.yaml#/components/schemas/OriginalAmount"
+          },
+          "basis": {
+            "type": "string",
+            "enum": [
+              "ORIGINAL",
+              "KRW"
+            ]
+          },
+          "reasonCode": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "evidenceRef": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "expectedReservationVersion",
+          "priorOperationId",
+          "confirmed",
+          "action",
+          "reason"
+        ],
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "enum": [
+                    "CONFIRM",
+                    "ADJUSTMENT",
+                    "REFUND"
+                  ]
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "amount"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "enum": [
+                    "ADJUSTMENT",
+                    "REFUND"
+                  ]
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "basis",
+                "reasonCode"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "const": "RELEASE"
+                }
+              }
+            },
+            "then": {
+              "not": {
+                "required": [
+                  "amount"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "Receipt": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "ledgerEventId": {
+            "anyOf": [
+              {
+                "$ref": "../../api/openapi.yaml#/components/schemas/Id"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "eventKey": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "recordedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "previousCostKrw": {
+            "$ref": "../../api/openapi.yaml#/components/schemas/NonNegativeKrwAmount"
+          },
+          "confirmedCostKrw": {
+            "$ref": "../../api/openapi.yaml#/components/schemas/NonNegativeKrwAmount"
+          },
+          "costDeltaKrw": {
+            "$ref": "../../api/openapi.yaml#/components/schemas/KrwAmount"
+          },
+          "reservationStatus": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 48
+          }
+        },
+        "required": [
+          "ledgerEventId",
+          "eventKey",
+          "recordedAt",
+          "previousCostKrw",
+          "confirmedCostKrw",
+          "costDeltaKrw",
+          "reservationStatus"
+        ]
+      },
+      "Settlement": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+          },
+          "reservationId": {
+            "$ref": "../../api/openapi.yaml#/components/schemas/Id"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "COMMITTED",
+              "REJECTED",
+              "CANCELLED"
+            ]
+          },
+          "request": {
+            "$ref": "#/components/schemas/SettlementCreate"
+          },
+          "receipt": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Receipt"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "operationId",
+          "reservationId",
+          "state",
+          "request",
+          "receipt",
+          "version"
+        ]
+      },
+      "ProductionSummary": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "producingContents": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "runningJobs": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "actionRequiredJobs": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "recoveryRequiredJobs": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "producingContents",
+          "runningJobs",
+          "actionRequiredJobs",
+          "recoveryRequiredJobs"
+        ]
+      },
+      "TopicPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Topic"
+            }
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "totalElements": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "totalPages": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "size",
+          "totalElements",
+          "totalPages"
+        ]
+      },
+      "ContentPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Content"
+            }
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "totalElements": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "totalPages": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "size",
+          "totalElements",
+          "totalPages"
+        ]
+      },
+      "RevisionPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Revision"
+            }
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "totalElements": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "totalPages": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "size",
+          "totalElements",
+          "totalPages"
+        ]
+      },
+      "RunPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Run"
+            }
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "totalElements": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "totalPages": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "size",
+          "totalElements",
+          "totalPages"
+        ]
+      },
+      "JobPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Job"
+            }
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "totalElements": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "totalPages": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "size",
+          "totalElements",
+          "totalPages"
+        ]
+      },
+      "AttemptPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Attempt"
+            }
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "totalElements": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "totalPages": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "size",
+          "totalElements",
+          "totalPages"
+        ]
+      },
+      "EventPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Event"
+            }
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "totalElements": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "totalPages": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "size",
+          "totalElements",
+          "totalPages"
+        ]
+      },
+      "SettlementPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Settlement"
+            }
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "totalElements": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "totalPages": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "size",
+          "totalElements",
+          "totalPages"
+        ]
+      },
+      "Timestamp": {
+        "$ref": "../../api/openapi.yaml#/components/schemas/Timestamp"
+      },
+      "DashboardSummary": {
+        "type": "object",
+        "required": [
+          "channelCounts",
+          "systemUsage",
+          "reservationsRequiringReconciliation",
+          "spendingEnabled",
+          "consistency",
+          "generatedAt",
+          "production"
+        ],
+        "properties": {
+          "channelCounts": {
+            "type": "object",
+            "required": [
+              "active",
+              "paused",
+              "archived"
+            ],
+            "properties": {
+              "active": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "paused": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "archived": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "systemUsage": {
+            "type": "array",
+            "items": {
+              "$ref": "../../api/openapi.yaml#/components/schemas/BudgetBucket"
+            }
+          },
+          "reservationsRequiringReconciliation": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "spendingEnabled": {
+            "type": "boolean"
+          },
+          "consistency": {
+            "$ref": "../../api/openapi.yaml#/components/schemas/ConsistencyState"
+          },
+          "generatedAt": {
+            "$ref": "../../api/openapi.yaml#/components/schemas/Timestamp"
+          },
+          "production": {
+            "$ref": "#/components/schemas/ProductionSummary"
+          }
+        }
+      }
+    }
+  },
+  "x-baseline-path-changes": {
+    "GET /api/v1/dashboard/summary": "Retain fields and add required production referencing ProductionSummary.",
+    "channel archive": "Existing 409 additionally applies to active runs with INVALID_STATE_TRANSITION.",
+    "legacy settlement paths": "Keep prior input compatibility during transition and replace direct-write responses with common 409; retire paths after transition approval."
+  }
+}

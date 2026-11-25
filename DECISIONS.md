@@ -150,3 +150,20 @@
   | @testing-library/user-event(기존 T02) | 14.6.13 | devDependencies | 사용자 입력 시뮬레이션 |
 - **결과**: 규칙 문서 `docs/design/UI_DESIGN_SYSTEM.md`, AGENTS.md UI 규칙 1줄. 새 UI 라이브러리 추가·임의 색 사용은 ADR 제안이 필요하다.
 
+## T03 최종 설계 결정 반영 (2026-11-25)
+
+사용자가 FD-01~16을 승인했다. 신규 ADR은 승인된 원칙과 명시된 기존 계약 변경을 기록한다. [T03 최종 명세](docs/plans/t03-final/README.md)의 ChatGPT 확인, 최종 명세 승인 및 개발 착수 승인은 별도다.
+
+| ID | 제목 | 승인 결정 |
+|---|---|---|
+| ADR-067 | 콘텐츠 소유권과 산출물 귀속 | FD-01 및 승인 지시 §5. 콘텐츠 3열 대체 키, Revision은 불변 입력, Run은 산출물 소유. T06 승인 키는 revision_id/run_id/manifest_hash(ADR-002 보완), FAKE 제외. |
+| ADR-068 | 큐 상태·취소·종료 | FD-05·16. 취소는 Run 단위 cancel_requested_at. terminal job, 비용·operation 해소와 P12 적용 후 R10. 활성 Run 채널 보관 409(ADR-042 보완). |
+| ADR-069 | DAG·재시도·Lease | FD-09~11. 최초 포함 자동 3, 수동 2, DB 유효 Lease ≤2. 제한된 EXPANDER/CHILDREN/BARRIER 계약, 동적 장면 확장은 T04~T05. |
+| ADR-070 | 비용과 큐의 전역 잠금 | FD-02·03. budget_control에서 비용·큐로 진행, FK/UNIQUE 부모 포함. 채널 상태 변경 control X. 최상위 비용 TX 유지(ADR-055 확장). |
+| ADR-071 | 단일 Dispatch와 영속 복구 | FD-04·05. T03 operation당 최대 1, 확정 커밋만 실행 허가, 조회 재발급 금지, 증거·정산 영수증과 P12 추적. |
+| ADR-072 | 콘텐츠 LIFETIME과 한도 하향 | FD-07·12. 활성 전역·채널별 정책을 적용해 첫 예약에서 동결. 누적액 유지, 미허가 초과 집행 제한(ADR-029 보완). |
+| ADR-073 | 정합성 Fail Closed | FD-14. 검사 미확정·RUNNING·FAILED·ERROR는 신규 예약/허가 차단, 기존 정산 허용. CR-02 승인 복구 및 실측 유지(ADR-054 보완). |
+| ADR-074 | 영속 관리자 정산과 API 전환 | FD-06·15. 영속 의도·guard·receipt, 구 쓰기 409 전환. 기존 오류·ID·금액·시간 형식 유지, OpenAPI 초안 별도 검토(P-T02-05). |
+| ADR-075 | Quartz 도입 시점 및 T03 스케줄러 | FD-08. ADR-022의 JDBC JobStore T03 도입 시점만 T08로 변경, T09 재사용. Flyway 관리와 자동 초기화 금지 유지. |
+| ADR-076 | FAKE 실행과 실제 공급자 게이트 | FD-13. T03 FAKE 전용. T07 별도 승인과 외부 멱등·복구·비용 안전 검증 전 실제 공급자 활성화 금지. |
+
