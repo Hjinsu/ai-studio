@@ -1,5 +1,5 @@
 # T02 구현 보고서 (설계 검토용)
-작성 2026-11-25 · 작성 Claude Code · 브랜치 `wip/t02-implementation-checkpoint-2026-11-25` · 상태: **IMPLEMENTED — CI 통합 결과 및 최종 설계 승인 대기(DONE 아님)** · T03 미착수
+작성 2026-11-25 · 작성 Claude Code · 브랜치 `wip/t02-implementation-checkpoint-2026-11-25` · 상태: **IMPLEMENTED — CI 전 job 통과(run 45526843601), 최종 설계 승인 대기(DONE 아님)** · T03 미착수
 
 ## 1. 범위와 결과 요약
 | 영역 | 상태 | 근거 |
@@ -62,10 +62,10 @@
 | `npm run lint:openapi` / `check` (tools/openapi-typescript, `npm ci`) | Redocly 유효(경고 2: 의도된 CSRF 4xx 없음, 기준 스키마 PageMeta 미참조) / 생성 타입 일치 |
 | 백엔드+Vite 프록시 스모크(임시 인스턴스의 `ai_studio` DB) | V1~V5 적용 후 기동, 로그인 실패/성공, 로그인 후 이전 CSRF 403, 채널·설정·정책·환율·지출 허용·정합성·대시보드·원장·로그아웃 후 401 — 전부 기대대로 |
 
-미실행·미검증: GitHub Actions(결과 §7), Docker/Testcontainers 경로(로컬 Docker 없음), gitleaks(로컬 미설치, CI job에서 실행), 실제 브라우저 화면 조작(브라우저 자동화 도구 없음 — 컴포넌트 테스트와 API 스모크로 대체), 운영 DB(prod profile·binlog ON 트리거, ADR-050).
+미실행·미검증(로컬): Docker/Testcontainers 경로와 gitleaks는 로컬에서 실행하지 못했고 CI에서 통과(§7), 실제 브라우저 화면 조작(브라우저 자동화 도구 없음 — 컴포넌트 테스트와 API 스모크로 대체), 운영 DB(prod profile·binlog ON 트리거, ADR-050).
 
 ## 6. 미완료·한계
-- T02 DONE 조건: CI 전 job 통과 + 최종 설계 승인.
+- T02 DONE 조건: CI 전 job 통과(충족) + 최종 설계 승인(대기).
 - 로컬 `ai_studio`(3306)에는 migration을 적용하지 않았다(작업 DB 변경 금지 지시). 처음 `bootRun` 시 V1~V5가 적용된다.
 - 관리자 UI의 대량 데이터 성능·브라우저 호환은 미검증.
 
@@ -75,5 +75,14 @@
 | 77b4680 | OpenAPI 평탄화(ADR-062), 계약 검증기 테스트, 예산 Fail Closed·원장 IT |
 | b64fa3e | 예산 동시성·시간·롤백 IT, 운영 권한 IT |
 | 6677f38 | 관리자 UI, 생성 타입 도구, CI openapi-contract job |
-| (이 문서) | 보고서·가이드·STATE·DECISIONS |
-CI: 워크플로가 `main` push와 pull_request에서만 실행되어 작업 브랜치 push만으로는 실행되지 않음 — STATE.md 참조.
+| beb7e8f | 보고서·가이드·STATE |
+| e0ae07e, 93bbde3 | gitleaks 오탐 fingerprint 예외(`.gitleaksignore`) |
+
+CI는 Draft PR [#1](https://github.com/Hjinsu/ai-studio/pull/1)(main 대상, **병합 금지**)의 pull_request 트리거로 실행했다. 워크플로 트리거는 변경하지 않았다.
+| run | 커밋 | 결과 |
+|---|---|---|
+| 45525957400 | beb7e8f | gitleaks 실패(오탐 1건: 커밋 4b29e7b의 BudgetMapper 정합성 SQL에서 두 bucket의 subject 컬럼 비교가 generic-api-key로 탐지). 그 외 5개 job 통과 |
+| 45526405063 | e0ae07e | gitleaks 실패: 예외 파일 주석이 같은 SQL을 인용해 다시 탐지(작성 실수). 그 외 통과 |
+| **45526843601** | **93bbde3** | **전 job 통과** — Backend Linux(unit + Testcontainers integration + bootJar + compose config + Docker image), Backend Windows(unit + bootJar), Frontend ubuntu/windows(lint·typecheck·test 4파일·build), OpenAPI contract(Redocly 유효, 생성 타입 일치), gitleaks(no leaks found) |
+
+한계: Gradle 로그는 테스트별 개수를 출력하지 않아 CI의 통합 테스트 개수(로컬 69)는 직접 확인하지 못했다. 오탐 예외 방식은 DECISIONS P-T02-02(승인 대기)로 기록.

@@ -88,3 +88,10 @@
 - 중복 정의 보호: `OpenApiContractTest.schemasAreFlatAndConsistentWithTheirBases` — allOf/anyOf 금지, *Page ⊇ PageMeta, ChannelConfig ⊇ ChannelConfigSettings, ReservationDetail ⊇ Reservation(속성 정의 동일 + required 포함). `PageMeta`는 기준 스키마로 유지(Redocly no-unused-components 경고 1건 추가, 의도).
 - 검증기 동작 테스트: 정상 허용, 최상위·설정·페이지 항목 내부 미정의 필드 거부, 필수 누락(메타·설정·페이지) 거부, 자료형 오류 거부. 변이 확인(ChannelConfig에 additionalProperties: true + required 제거 → 실패 검출).
 - 부수: Gradle 테스트 태스크에 `docs/api/openapi.yaml` 입력 선언(명세만 바뀌면 up-to-date로 계약 테스트가 건너뛰어지던 문제).
+
+### P-T02-02 — gitleaks 오탐 처리 방식 (2026-11-25, 제안, **승인 대기**)
+- 배경: CI gitleaks가 커밋 4b29e7b(이미 원격에 푸시된 WIP 커밋)의 정합성 검사 SQL(두 bucket의 subject 컬럼 비교)을 generic-api-key로 탐지. 비밀값 아님. 푸시된 히스토리 재작성은 파괴적이라 배제.
+- 적용(PR #1 CI 통과를 위해 작업 브랜치에 반영, 되돌릴 수 있음): 저장소 루트 `.gitleaksignore`에 **fingerprint(커밋:파일:규칙:줄) 단위**로만 예외 등록, 규칙·워크플로 변경 없음. 항목마다 근거 주석, 주석에 탐지 문자열 인용 금지.
+- 대안: `.gitleaks.toml` 경로·정규식 allowlist(범위가 넓어 비권장), 코드 줄에 `gitleaks:allow` 주석(히스토리 탐지는 해결 못 함).
+- 승인 여부: 대기(설계 담당 검토)
+

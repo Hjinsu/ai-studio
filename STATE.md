@@ -1,10 +1,10 @@
 # 작업 상태
 기준선: v0.1 설계 패키지 + ADR-006~062 승인(2026-11-25). 실제 계정 및 API 미연동.
-현재 작업: T02 (IMPLEMENTED — CI 통합 결과·최종 설계 승인 대기, DONE 아님). 보고서 [docs/reports/T02_REPORT.md](docs/reports/T02_REPORT.md). T01 DONE(2026-11-25 승인). 기준: [docs/plans/T02_PLAN.md](docs/plans/T02_PLAN.md).
+현재 작업: T02 (IMPLEMENTED — CI 전 job 통과, 최종 설계 승인 대기, DONE 아님). 보고서 [docs/reports/T02_REPORT.md](docs/reports/T02_REPORT.md). T01 DONE(2026-11-25 승인). 기준: [docs/plans/T02_PLAN.md](docs/plans/T02_PLAN.md).
 | ID | 상태 | 작업 |
 |---|---|---|
 | T01 | DONE (2026-11-25 승인, 커밋 55e33ec, CI run 45440907314) | 프로젝트 bootstrap, 버전 고정, DB/Flyway, CI, health check |
-| T02 | IMPLEMENTED (로컬 검증 완료, CI·최종 승인 대기) | 인증, 채널, 설정, 비용 원장 |
+| T02 | IMPLEMENTED (CI run 45526843601 전 job 통과, 최종 설계 승인 대기) | 인증, 채널, 설정, 비용 원장 |
 | T03 | TODO | 콘텐츠 revision, DB 큐, lease, 재시도 |
 | T04 | TODO | fake provider, 조사/대본/스토리보드 |
 | T05 | TODO | 이미지/TTS/자막/FFmpeg 로컬 렌더링 |
@@ -19,7 +19,7 @@
 ### T02 — 2차 재개 세션: 설계 승인 반영·검증 완료 (2026-11-25, IMPLEMENTED, DONE 아님)
 요구사항: P-T02-01 승인(→ADR-062), T02 미완료 항목(T02_PLAN §2 단계 7~10), 예산 필수 검증 14항목, ADR-035 관리자 UI. T03 미착수. 브랜치 `wip/t02-implementation-checkpoint-2026-11-25`(커밋·푸시 승인, main 병합 금지).
 
-**커밋**: `77b4680`(OpenAPI 평탄화·계약 검증기 테스트·예산 IT), `b64fa3e`(예산 동시성·시간·롤백 IT, 운영 권한 IT), `6677f38`(관리자 UI·생성 타입 도구·CI job), 문서 커밋(이 기록 포함, `git log`로 확인).
+**커밋**: `77b4680`(OpenAPI 평탄화·계약 검증기 테스트·예산 IT), `b64fa3e`(예산 동시성·시간·롤백 IT, 운영 권한 IT), `6677f38`(관리자 UI·생성 타입 도구·CI job), `beb7e8f`(보고서·가이드), `e0ae07e`·`93bbde3`(gitleaks 오탐 예외), CI 결과 기록 커밋(`git log`로 확인).
 
 **구현·변경**
 - OpenAPI: allOf 10곳 평탄화(ADR-062, JSON 구조 불변). `unevaluatedProperties` 방식은 검증기의 중첩 스키마 미정의 필드 누락을 실측해 기각. 이전 테스트 헬퍼의 명세 변형(`strictAllOf`) 제거.
@@ -40,13 +40,13 @@
 
 **미검증**: GitHub Actions(아래), Docker/Testcontainers 경로, 실제 브라우저 조작, 운영 DB(prod profile, binlog ON 트리거).
 
-**CI**: 워크플로 트리거가 `push: main`과 `pull_request`뿐이라 작업 브랜치 push로는 실행되지 않는다. PR 생성(병합 없음) 또는 트리거 변경은 사용자 결정 대기.
+**CI**: Draft PR [#1](https://github.com/Hjinsu/ai-studio/pull/1)(main 대상, 사용자 승인, **병합 금지**, 워크플로 트리거 미변경)로 실행. run 45525957400·45526405063은 gitleaks 오탐으로 실패(상세 T02_REPORT §7) → `.gitleaksignore` fingerprint 예외(커밋 e0ae07e, 93bbde3, DECISIONS P-T02-02 승인 대기) → **run 45526843601(93bbde3) 전 job 통과**(Backend Linux unit+Testcontainers integration+image, Windows, Frontend ×2, OpenAPI contract, gitleaks). CI 통합 테스트 개수는 로그에 출력되지 않아 미확인.
 
 **DB 상태**: 3306 작업 DB `ai_studio`는 변경하지 않음(여전히 migration 미적용). 임시 인스턴스(3307, 세션 scratchpad)는 테스트 종료 후 정상 종료. 절차: [docs/guides/LOCAL_TEST_GUIDE.md](docs/guides/LOCAL_TEST_GUIDE.md).
 
 **주의(이 PC)**: vitest는 대문자 드라이브 경로(`C:\...`)에서 실행해야 한다(소문자 `c:\` 작업 경로에서는 모듈 이중 로드로 전 파일 실패). IDE의 Java 오류 표시는 `backend/bin` 오래된 classpath 기준이라 무시(Gradle 빌드 기준).
 
-**다음 작업**: (1) CI 실행 방법 결정 → 전 job 통과 확인·실패 시 수정 (2) 설계 담당 최종 검토 → T02 DONE (3) T03은 승인 전 시작 금지.
+**다음 작업**: (1) 설계 담당 최종 검토(T02_REPORT, ADR-062, P-T02-02) → 승인 시 T02 DONE·PR 병합 여부 결정 (2) T03은 승인 전 시작 금지.
 
 ### T02 — 1차 재개 세션 (2026-11-25, 다른 PC, 당시 IN_PROGRESS)
 요구사항: T02_PLAN §2 단계 6 검증·§4 테스트, ADR-026~061, T02_BUDGET_LEDGER §2~§6. T03 미착수. 커밋 없음(사용자 지시 대기). 브랜치 `wip/t02-implementation-checkpoint-2026-11-25`(origin에서 checkout, 4b29e7b 기준).
