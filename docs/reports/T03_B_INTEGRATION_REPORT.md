@@ -33,10 +33,12 @@
 
 ## Git 및 CI
 
-이 커밋을 푸시한 후 [PR #3 검사](https://github.com/Hjinsu/ai-studio/pull/3/checks)에서 동일 SHA의 실행을 확인한다. 이전 CI `45634311996`은 수정본 근거이며 이번 통합 검증에 사용하지 않는다.
+- `8cfe8a00a8838254b89725abed7930d4b9b20292`를 `origin/t03/b-domain`에 푸시했다. Draft PR #3의 HEAD와 실행의 SHA가 일치한다. [CI 45637703367](https://github.com/Hjinsu/ai-studio/actions/runs/45637703367) **7/7 성공**.
+- Linux 백엔드 단위·Testcontainers MariaDB 통합, `bootJar`, Compose 구성 및 Docker 이미지 빌드 성공. Windows 백엔드 단위·`bootJar`, Linux/Windows 프론트엔드, Windows Edge E2E, OpenAPI 및 생성 타입, gitleaks가 각각 성공했다.
+- ChatGPT 최종 APPROVE 및 사용자 종료·병합 승인. 이 절에는 로컬에 있던 CI 결과를 포함했다. 종료 문서 커밋과 새 CI는 [PR #3 최신 검사](https://github.com/Hjinsu/ai-studio/pull/3/checks)에서, 병합 SHA는 [PR #3](https://github.com/Hjinsu/ai-studio/pull/3)에서 확인한다.
 
 ## 후속 게이트
 
 - [인수 조건 C-G01~10](../plans/t03-final/T03_IMPLEMENTATION_HANDOFF.md#t03-c-필수-인수-조건)에 Q0/R10 잠금·원자성·영향 행 수·실제 서비스 장애 주입 및 고아 Run fail-closed를 기록했다. V7은 C, V8부터 D다.
 - 운영 binlog ON 환경의 migration 계정 및 DBA 트리거 배포 절차와 실제 운영 최소 권한은 배포 검증이 필요하다. 운영 DB·개발 DB, 실제 C 서비스 장애 주입, 유료 Provider 호출 및 외부 업로드는 이번 검증 범위 밖이다.
-- T03-B는 IMPLEMENTED 상태다. 최신 PR HEAD의 7개 CI 검사가 완료되면 사용자 종료 및 병합 승인을 요청한다. C~F는 BLOCKED다.
+- 종료 권고 **APPROVE**. 최종 HEAD 전체 CI 성공과 PR #3 병합이 모두 성립하면 t03/integration에서 T03-B는 DONE이다. 검증 또는 병합 실패 시 IMPLEMENTED를 적용한다. T03-C~F는 별도 착수 승인 전 BLOCKED다.

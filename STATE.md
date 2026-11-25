@@ -5,7 +5,7 @@
 |---|---|---|
 | T01 | DONE (2026-11-25 승인, 커밋 55e33ec, CI run 45440907314) | 프로젝트 bootstrap, 버전 고정, DB/Flyway, CI, health check |
 | T02 | DONE (2026-11-25 최종 승인, 제품 `55ea852`, [PR #1](https://github.com/Hjinsu/ai-studio/pull/1), 사용자 검증 14/14·최종 재확인 6/6) | 인증, 채널, 설정, 비용 원장 |
-| T03 | B IMPLEMENTED (최종 종료 승인 대기), C~F BLOCKED | 콘텐츠 revision, DB 큐, lease, 재시도 |
+| T03 | B DONE (PR #3의 최종 HEAD 전체 CI 성공 및 t03/integration 병합 시 효력; 병합 전 IMPLEMENTED), C~F BLOCKED | 콘텐츠 revision, DB 큐, lease, 재시도 |
 | T04 | TODO | fake provider, 조사/대본/스토리보드 |
 | T05 | TODO | 이미지/TTS/자막/FFmpeg 로컬 렌더링 |
 | T06 | TODO | 검수/승인/관리자 UI |
@@ -15,6 +15,13 @@
 | T10 | TODO | 트렌드 및 멀티채널 확장 |
 ## 인수인계 기록
 작업 ID / 상태 / 변경 파일 / 테스트 명령 및 실제 결과 / 미해결 문제 / 다음 작업 / 필요 환경변수. 커밋 해시는 생성된 경우만 기록.
+
+### T03-B-CLOSE — 종료 및 통합 승인
+
+- ChatGPT 최종 APPROVE 및 사용자 종료·병합 승인. 제품 수정 `b5ffc73`의 RV-B-01~06과 계약 통합 `8cfe8a0`의 OpenAPI A1~A8을 수용했다. 로컬 단위 151건, 격리 MariaDB 통합 153건, 프론트엔드 73건 및 계약 통합 CI 7/7 성공을 확인했다. [검증 CI 45637703367](https://github.com/Hjinsu/ai-studio/actions/runs/45637703367)
+- 종료 문서 HEAD는 [Draft PR #3 검사](https://github.com/Hjinsu/ai-studio/pull/3/checks)에서 독립 검증한다. 해당 HEAD의 CI 전체 성공과 병합이 모두 성립하면 통합 브랜치의 T03-B 상태는 DONE이다. 검증 또는 병합 실패 시 IMPLEMENTED가 유효하다. [PR #3 병합 및 SHA 기록](https://github.com/Hjinsu/ai-studio/pull/3)
+- V6 일회성 예외와 LF SHA-256, 운영 binlog 트리거 배포 게이트, D 완료 후 budgetSummary required 전환 및 C/D 장애·비용 복구 검증을 종료 후에도 추적한다. [통합 보고서](docs/reports/T03_B_INTEGRATION_REPORT.md)
+- C~F는 BLOCKED. T03-C의 착수 기준은 PR #3 병합으로 생성된 t03/integration SHA이며, 별도 사용자의 착수 승인 후 배정한다. [작업 범위 및 C-G01~10](docs/plans/t03-final/T03_IMPLEMENTATION_HANDOFF.md#t03-c-착수-배정-준비)
 
 ### T03-B-INT — 제품 계약 통합
 
