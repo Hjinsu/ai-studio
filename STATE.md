@@ -1,10 +1,10 @@
 # 작업 상태
 기준선: v0.1 설계 패키지 + ADR-006~066 승인(2026-11-25). 실제 계정 및 API 미연동.
-현재 작업: T02 (IMPLEMENTED — 통합 완료, Codex UI 리뷰 결함 수정 **T02-UI-FIX 완료**, Codex 표적 교차 리뷰·사용자 재확인·최종 승인 대기, DONE 아님). 보고서 [docs/reports/T02_UI_FIX_REPORT.md](docs/reports/T02_UI_FIX_REPORT.md), [docs/reports/T02_REPORT.md](docs/reports/T02_REPORT.md) §11~12, 사용자 검증 [docs/guides/T02_USER_VERIFICATION.md](docs/guides/T02_USER_VERIFICATION.md).
+현재 작업: T02 (IMPLEMENTED — T02-UI-FIX-EXT RVX-01~03 자체 검증, 독립 교차 검토·사용자 재확인·최종 승인 대기). [후속 수정 보고서](docs/reports/T02_UI_EXT_FIX_REPORT.md), [T02 통합 보고서](docs/reports/T02_REPORT.md), [사용자 검증](docs/guides/T02_USER_VERIFICATION.md).
 | ID | 상태 | 작업 |
 |---|---|---|
 | T01 | DONE (2026-11-25 승인, 커밋 55e33ec, CI run 45440907314) | 프로젝트 bootstrap, 버전 고정, DB/Flyway, CI, health check |
-| T02 | IMPLEMENTED (PR #1에 PR #2 통합, Codex UI 리뷰 결함 수정 T02-UI-FIX 완료, Codex 표적 교차 리뷰·사용자 재확인·최종 승인 대기) | 인증, 채널, 설정, 비용 원장 |
+| T02 | IMPLEMENTED (Draft PR #1, RVX-01~03 구현·자체 검증, 독립 검토·사용자 재확인·최종 승인 대기) | 인증, 채널, 설정, 비용 원장 |
 | T03 | TODO (선행 조건·필수 설계 제약만 기록: docs/plans/T03_PLAN.md, 착수 금지) | 콘텐츠 revision, DB 큐, lease, 재시도 |
 | T04 | TODO | fake provider, 조사/대본/스토리보드 |
 | T05 | TODO | 이미지/TTS/자막/FFmpeg 로컬 렌더링 |
@@ -15,6 +15,12 @@
 | T10 | TODO | 트렌드 및 멀티채널 확장 |
 ## 인수인계 기록
 작업 ID / 상태 / 변경 파일 / 테스트 명령 및 실제 결과 / 미해결 문제 / 다음 작업 / 필요 환경변수. 커밋 해시는 생성된 경우만 기록.
+
+### T02-UI-FIX-EXT — 세션 경계 및 정산 안전성 — Codex (2026-11-25, IMPLEMENTED)
+- Draft PR #1의 통합 브랜치에서 `7256fe1`을 기준으로 제품 커밋 `53b305b`에 RVX-01~03을 반영했다. [표적 교차 리뷰](docs/reviews/T02_CODEX_UI_FIX_REVIEW.md)와 기존 검토 참조를 보존했다.
+- 프론트엔드 인증 세대·정산 확인 흐름 및 해당 회귀 테스트를 변경했다. Vitest 70건과 Edge Mock API E2E 10건, lint·typecheck·build, OpenAPI lint 및 생성 타입 비교, gitleaks 결과는 [후속 수정 보고서](docs/reports/T02_UI_EXT_FIX_REPORT.md)에 기록했다.
+- DB 및 마이그레이션 적용 상태 변경 없음. 개발 DB 3306, 실제 백엔드 브라우저 E2E, 유료 API 미사용.
+- 다음 단계는 최신 Draft PR HEAD 기준 독립 교차 검토와 사용자 재확인·종료 승인이다. P-T02-05의 근본 해결은 실제 비용 발생 및 유료 API 활성화의 선행 조건이다. main 병합·DONE 전환·T03 착수는 별도 승인 대상이다.
 
 ### T02-UI-FIX — Codex UI 리뷰 결함·사용자 확인 항목 수정 — Claude Code (2026-11-25, IMPLEMENTED, DONE 아님)
 요구사항: 사용자 지시(UI-RV-01~06 전체 수정, UI-F01·F02·F03·F04·F05·F07·F11·F12·F13, 안전 검토 A01·A02·A03). 리뷰 [T02_CODEX_FRONTEND_REVIEW](docs/reviews/T02_CODEX_FRONTEND_REVIEW.md), 결과 [T02_UI_FIX_REPORT](docs/reports/T02_UI_FIX_REPORT.md), ADR-066, 제안 P-T02-05.
