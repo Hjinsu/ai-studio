@@ -1,0 +1,3 @@
+# gitleaks 오탐 예외 (fingerprint 단위, 규칙 비활성화 금지). 항목마다 근거를 남긴다.
+# 2026-11-25: SQL 컬럼 비교 `b1.subject_key = b2.subject_key`(BUCKET_OVERLAP 정합성 검사)가 generic-api-key로 탐지됨. 비밀값 아님.
+4b29e7bb3eb97bff4f19c561fb9e44eb48968f5c:backend/src/main/java/com/aistudio/budget/BudgetMapper.java:generic-api-key:485
