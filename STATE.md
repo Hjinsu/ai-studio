@@ -4,7 +4,7 @@
 | ID | 상태 | 작업 |
 |---|---|---|
 | T01 | DONE (2026-11-25 승인, 커밋 55e33ec, CI run 45440907314) | 프로젝트 bootstrap, 버전 고정, DB/Flyway, CI, health check |
-| T02 | IMPLEMENTED (PR #1에 PR #2 통합, 통합 HEAD CI는 아래 기록, Codex UI 리뷰·사용자 검증·최종 승인 대기) | 인증, 채널, 설정, 비용 원장 |
+| T02 | IMPLEMENTED (PR #1에 PR #2 통합, 통합 HEAD `ab68286` CI 45557933535 7/7, Codex UI 리뷰·사용자 검증·최종 승인 대기) | 인증, 채널, 설정, 비용 원장 |
 | T03 | TODO (선행 조건·필수 설계 제약만 기록: docs/plans/T03_PLAN.md, 착수 금지) | 콘텐츠 revision, DB 큐, lease, 재시도 |
 | T04 | TODO | fake provider, 조사/대본/스토리보드 |
 | T05 | TODO | 이미지/TTS/자막/FFmpeg 로컬 렌더링 |
@@ -20,7 +20,9 @@
 요구사항: 사용자 T02 조건부 통합 승인(ADR-063·064·065, P-T02-02 승인, P-T02-03 보류, P-T02-04 조건부 수용). 상세: [T02_REPORT §11](docs/reports/T02_REPORT.md).
 - 브랜치 `wip/t02-implementation-checkpoint-2026-11-25`(Draft PR #1, base main). 통합 전 HEAD `862a300`, PR #2 승인 HEAD `6a32c64`(이후 새 커밋 없음 확인).
 - 커밋: 협업 문서 `67d50b9` → 병합 `07f8963`(`--no-ff`, 충돌 없음) → UI 통합 보완 `8319672` → 문서(이 기록).
-- 검증(통합 HEAD): 백엔드 단위 133/133, 통합 97/97(격리 MariaDB 3307), bootJar, 생성 타입 재생성 diff 없음·check 일치, 프론트 lint·typecheck·vitest 39/39·build, Playwright E2E 8/8(**Mock API**, 실제 백엔드 연동 아님). gitleaks·GitHub Actions 7 job은 푸시 후 CI(아래 줄에 갱신).
+- 검증(통합 HEAD): 백엔드 단위 133/133, 통합 97/97(격리 MariaDB 3307), bootJar, 생성 타입 재생성 diff 없음·check 일치, 프론트 lint·typecheck·vitest 39/39·build, Playwright E2E 8/8(**Mock API**, 실제 백엔드 연동 아님).
+- **CI**: 통합 HEAD `ab68286` → run **45557933535 전 7개 job 성공**(Backend Linux unit+Testcontainers integration+bootJar+image, Backend Windows, Frontend ubuntu/windows, Frontend E2E Edge, OpenAPI contract, gitleaks). 이후 커밋은 이 기록만 갱신하는 문서 커밋.
+- PR #2: PR #1 브랜치를 대상으로 하므로 통합 푸시 후 GitHub가 **MERGED로 자동 표시**(2026-11-25T06:04:28Z). main 병합 아님, 브랜치·worktree 삭제 없음.
 - 미완료: Codex UI 독립 리뷰(TASKS `T02-UI-RV`, 기준 `8319672`), 사용자 실제 화면 검증([T02_USER_VERIFICATION](docs/guides/T02_USER_VERIFICATION.md)), 최종 승인. T03 선행 제약은 [T03_PLAN](docs/plans/T03_PLAN.md)(착수 금지).
 - DB: 사용자 개발 DB(3306) 미사용·미변경. 새 migration 없음(V1~V5 그대로). 임시 인스턴스만 사용 후 종료.
 - 다음 작업: Codex UI 리뷰 결과 반영 여부 결정 → 사용자 실제 화면 검증 → 최종 승인 → (별도 지시) main 병합·PR #2·worktree 정리.

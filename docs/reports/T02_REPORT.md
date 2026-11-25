@@ -149,7 +149,7 @@ CI는 Draft PR [#1](https://github.com/Hjinsu/ai-studio/pull/1)(main 대상, **�
 | UI 통합 보완 | `8319672` | 정합성 코드 `RESERVATION_BUCKET_LINK_MISMATCH` 레이블("예산 예약 연결 불일치")·설명, 로그인 429 중립 안내 + `Retry-After` 대기 시간, 회귀 테스트 3건 |
 | 문서 | 이 보고서 커밋 | DECISIONS, T03_PLAN, 사용자 검증 가이드, 00_INDEX, STATE, TASKS |
 
-- PR #2의 모든 커밋이 PR #1 브랜치에 포함됨(`git merge-base --is-ancestor 6a32c64 HEAD`). PR #2는 PR #1 브랜치를 대상으로 하므로 푸시 후 GitHub에서 **병합됨으로 자동 표시**될 수 있다(main 병합 아님, PR 삭제 없음).
+- PR #2의 모든 커밋이 PR #1 브랜치에 포함됨(`git merge-base --is-ancestor 6a32c64 HEAD`). PR #2는 PR #1 브랜치를 대상으로 하므로 푸시 후 GitHub에서 **MERGED로 자동 표시**되었다(2026-11-25T06:04:28Z, main 병합 아님, PR·브랜치 삭제 없음).
 - Codex worktree(`../ai-studio-t02-fix`, `fix/t02-backend`)는 수정·삭제하지 않았다.
 
 ### 11.2 협업 문서와 스킬 충돌 검토
@@ -175,7 +175,7 @@ CI는 Draft PR [#1](https://github.com/Hjinsu/ai-studio/pull/1)(main 대상, **�
 | 프론트 lint·typecheck(앱+E2E)·단위·build | `frontend` | 통과, **vitest 39/39**, 초기 번들 354KB(gzip 113KB) |
 | 브라우저 E2E | Playwright, 설치된 Edge, **Mock API**(브라우저 네트워크 계층 대역) | **8/8** — 실제 백엔드 연동 검증이 아님 |
 | gitleaks | 로컬 미설치(다운로드는 권한 정책상 미실행) | CI job으로 검증 |
-| GitHub Actions 7개 job | 통합 HEAD | STATE.md의 이 단계 기록 참조(푸시 후 기록) |
+| GitHub Actions 7개 job | 통합 HEAD `ab68286` | **run 45557933535 전 7개 job 성공**(gitleaks 포함) |
 
 ### 11.5 Codex UI 독립 리뷰
 - 요청: TASKS.md `T02-UI-RV`(Codex). 기준 = 제품 코드 최종 커밋 `8319672`(이후 커밋은 문서만), 범위 `fa32535..8319672`의 `frontend/`와 `docs/design/UI_DESIGN_SYSTEM.md`. 보고서 `docs/reviews/T02_CODEX_UI_REVIEW.md` 권장.
