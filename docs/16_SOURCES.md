@@ -46,3 +46,12 @@
 | springdoc-openapi | 3.2.1 | Boot 4.2.0 기준(미채택) |
 - https://repo1.maven.org/maven2/com/atlassian/oai/openapi-request-validator/3.0.0/
 - https://www.npmjs.com/package/openapi-typescript
+
+## T02 구현 시 고정한 의존성 (2026-11-25, npm registry 확인)
+| 항목 | 버전 | 확인 내용 |
+|---|---|---|
+| react-router | 8.5.3 (latest) | peer react/react-dom ≥19.2.7, @types ≥19.2.0, node ≥22.22.0. 사용 API(createBrowserRouter, createMemoryRouter, RouterProvider, Link, NavLink, Outlet, useNavigate, useParams, useSearchParams, DataRouter 타입)를 설치본 타입 선언에서 확인 |
+| @testing-library/user-event | 14.6.13 | peer @testing-library/dom ≥7.21.4 (테스트 전용) |
+| openapi-typescript / typescript / @redocly/cli | 7.13.0 / 5.9.3 / 2.83.0 | `frontend/tools/openapi-typescript` 격리 설치, 자체 lockfile(ADR-040) |
+- https://www.npmjs.com/package/react-router
+- https://www.npmjs.com/package/@testing-library/user-event

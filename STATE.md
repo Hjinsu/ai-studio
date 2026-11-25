@@ -1,10 +1,10 @@
 # 작업 상태
-기준선: v0.1 설계 패키지 + ADR-006~038 승인(2026-11-25). 실제 계정 및 API 미연동.
-현재 작업: T02 (IN_PROGRESS, 구현 승인 2026-11-25). T01 DONE(2026-11-25 승인). 기준: [docs/plans/T02_PLAN.md](docs/plans/T02_PLAN.md).
+기준선: v0.1 설계 패키지 + ADR-006~062 승인(2026-11-25). 실제 계정 및 API 미연동.
+현재 작업: T02 (IMPLEMENTED — CI 통합 결과·최종 설계 승인 대기, DONE 아님). 보고서 [docs/reports/T02_REPORT.md](docs/reports/T02_REPORT.md). T01 DONE(2026-11-25 승인). 기준: [docs/plans/T02_PLAN.md](docs/plans/T02_PLAN.md).
 | ID | 상태 | 작업 |
 |---|---|---|
 | T01 | DONE (2026-11-25 승인, 커밋 55e33ec, CI run 45440907314) | 프로젝트 bootstrap, 버전 고정, DB/Flyway, CI, health check |
-| T02 | IN_PROGRESS (설계 기준선 확정, 구현 중) | 인증, 채널, 설정, 비용 원장 |
+| T02 | IMPLEMENTED (로컬 검증 완료, CI·최종 승인 대기) | 인증, 채널, 설정, 비용 원장 |
 | T03 | TODO | 콘텐츠 revision, DB 큐, lease, 재시도 |
 | T04 | TODO | fake provider, 조사/대본/스토리보드 |
 | T05 | TODO | 이미지/TTS/자막/FFmpeg 로컬 렌더링 |
@@ -16,7 +16,39 @@
 ## 인수인계 기록
 작업 ID / 상태 / 변경 파일 / 테스트 명령 및 실제 결과 / 미해결 문제 / 다음 작업 / 필요 환경변수. 커밋 해시는 생성된 경우만 기록.
 
-### T02 — 재개 세션 (2026-11-25, 다른 PC, IN_PROGRESS 유지)
+### T02 — 2차 재개 세션: 설계 승인 반영·검증 완료 (2026-11-25, IMPLEMENTED, DONE 아님)
+요구사항: P-T02-01 승인(→ADR-062), T02 미완료 항목(T02_PLAN §2 단계 7~10), 예산 필수 검증 14항목, ADR-035 관리자 UI. T03 미착수. 브랜치 `wip/t02-implementation-checkpoint-2026-11-25`(커밋·푸시 승인, main 병합 금지).
+
+**커밋**: `77b4680`(OpenAPI 평탄화·계약 검증기 테스트·예산 IT), `b64fa3e`(예산 동시성·시간·롤백 IT, 운영 권한 IT), `6677f38`(관리자 UI·생성 타입 도구·CI job), 문서 커밋(이 기록 포함, `git log`로 확인).
+
+**구현·변경**
+- OpenAPI: allOf 10곳 평탄화(ADR-062, JSON 구조 불변). `unevaluatedProperties` 방식은 검증기의 중첩 스키마 미정의 필드 누락을 실측해 기각. 이전 테스트 헬퍼의 명세 변형(`strictAllOf`) 제거.
+- 테스트(백엔드): `OpenApiContractTest`(단위 4), `budget/BudgetConcurrencyIT`(11), `budget/BudgetTimeIT`(5, MutableClock), `security/ProductionGrantsIT`(2), 이전 세션 추가분 `BudgetFailClosedIT`(1)·`BudgetLedgerIT`(6). Gradle 테스트 입력에 `docs/api/openapi.yaml`, `infra/mariadb/prod-app-grants.sql` 선언.
+- 프론트: `frontend/tools/openapi-typescript`(격리 도구, 자체 lockfile), `src/api/generated/schema.d.ts`(생성물), `src/api/{http,admin}.ts`, `src/ui/*`, `src/pages/*`(T02 화면 전체), `routes.tsx`, `Layout.tsx`, `queryClient.ts`, 테스트 3파일. react-router 8.5.3, @testing-library/user-event 14.6.13 고정.
+- CI: `openapi-contract` job(Redocly lint + 생성 타입 diff).
+- 문서: DECISIONS(ADR-062, P-T02-01 승인), docs/reports/T02_REPORT.md, docs/guides/LOCAL_TEST_GUIDE.md(임시 DB 실행·종료 절차), docs/16_SOURCES.md, docs/00_INDEX.md, .gitignore(`backend/bin/`).
+
+**실제 테스트 결과**
+| 명령 | 결과 |
+|---|---|
+| `./gradlew.bat :backend:test :backend:integrationTest --rerun-tasks` (임시 MariaDB 11.8.2 :3307) | 단위 125/125, 통합 69/69, 실패·skip 0 |
+| frontend `npm run lint`·`typecheck`·`test`·`build` | 성공, vitest 26/26 |
+| tools/openapi-typescript `npm ci`·`lint:openapi`·`check` | Redocly 유효(경고 2, 의도), 생성 타입 일치 |
+| 백엔드(임시 인스턴스의 `ai_studio`)+Vite 프록시 API 스모크 | 전 단계 기대대로(T02_REPORT §5) |
+| 변이 검사 4종 | 모두 검출, 원복 확인 |
+| 비밀정보 | gitleaks 로컬 미설치(다운로드는 권한 정책으로 미실행) → 수동 패턴 검사(누수 없음), CI gitleaks job에 위임. 커밋 대상에 `.env`·node_modules·dist·빌드 산출물 없음 |
+
+**미검증**: GitHub Actions(아래), Docker/Testcontainers 경로, 실제 브라우저 조작, 운영 DB(prod profile, binlog ON 트리거).
+
+**CI**: 워크플로 트리거가 `push: main`과 `pull_request`뿐이라 작업 브랜치 push로는 실행되지 않는다. PR 생성(병합 없음) 또는 트리거 변경은 사용자 결정 대기.
+
+**DB 상태**: 3306 작업 DB `ai_studio`는 변경하지 않음(여전히 migration 미적용). 임시 인스턴스(3307, 세션 scratchpad)는 테스트 종료 후 정상 종료. 절차: [docs/guides/LOCAL_TEST_GUIDE.md](docs/guides/LOCAL_TEST_GUIDE.md).
+
+**주의(이 PC)**: vitest는 대문자 드라이브 경로(`C:\...`)에서 실행해야 한다(소문자 `c:\` 작업 경로에서는 모듈 이중 로드로 전 파일 실패). IDE의 Java 오류 표시는 `backend/bin` 오래된 classpath 기준이라 무시(Gradle 빌드 기준).
+
+**다음 작업**: (1) CI 실행 방법 결정 → 전 job 통과 확인·실패 시 수정 (2) 설계 담당 최종 검토 → T02 DONE (3) T03은 승인 전 시작 금지.
+
+### T02 — 1차 재개 세션 (2026-11-25, 다른 PC, 당시 IN_PROGRESS)
 요구사항: T02_PLAN §2 단계 6 검증·§4 테스트, ADR-026~061, T02_BUDGET_LEDGER §2~§6. T03 미착수. 커밋 없음(사용자 지시 대기). 브랜치 `wip/t02-implementation-checkpoint-2026-11-25`(origin에서 checkout, 4b29e7b 기준).
 
 **환경 (이 PC)**: Windows 11, Gradle JDK 17.0.8 + toolchain JDK 21.0.13, Node 24.21.0, MariaDB 11.8.2 서비스(3306), Docker 없음. 루트 `.env` 존재(필수 변수 3개 설정). 로컬 `ai_studio` DB: 비어 있음(`flyway_schema_history` 없음, collation `utf8mb4_unicode_ci`, 계정 `ai_studio`@localhost ALL on ai_studio). **V1~V5 미적용 — 의도적**: P-T02-01 결정 전 migration을 로컬 DB에 적용하지 않음(적용 후 수정 금지 규칙). 적용은 `./gradlew.bat :backend:bootRun`(local profile) 시 자동.
