@@ -4,7 +4,7 @@
 | ID | 상태 | 작업 |
 |---|---|---|
 | T01 | DONE (2026-11-25 승인, 커밋 55e33ec, CI run 45440907314) | 프로젝트 bootstrap, 버전 고정, DB/Flyway, CI, health check |
-| T02 | IMPLEMENTED (CI run 45526843601 전 job 통과, 최종 설계 승인 대기) | 인증, 채널, 설정, 비용 원장 |
+| T02 | IMPLEMENTED (CLI 결함 수정, CI run 45530093712 전 job 통과, 사용자 터미널 재확인·최종 설계 승인 대기) | 인증, 채널, 설정, 비용 원장 |
 | T03 | TODO | 콘텐츠 revision, DB 큐, lease, 재시도 |
 | T04 | TODO | fake provider, 조사/대본/스토리보드 |
 | T05 | TODO | 이미지/TTS/자막/FFmpeg 로컬 렌더링 |
@@ -22,7 +22,7 @@
 - **변경 파일**: `backend/src/main/java/com/aistudio/security/AdminCommandRunner.java`(`@Autowired` 생성자 + `ObjectProvider<PasswordPrompt>`, 엄격 인자 해석 `parse`), `backend/src/main/java/com/aistudio/AiStudioApplication.java`(`adminCli()` 비웹 빌더 분리), `backend/build.gradle.kts`(integrationTest → bootJar 의존, jar 경로 전달), 테스트 `security/AdminCliIT.java`·`security/AdminCliJarIT.java`(신규), `AdminCommandRunnerTest.java`(+2).
 - **실제 결과**: 단위 127/127, 통합 71/71(임시 MariaDB 3307). 실제 bootJar + local profile CLI 실행: create/reset-password/`--login=` → 컨텍스트 정상·웹 서버 없음·콘솔 없음 거부(종료 2), 인자 누락 → 사용법(종료 2). 변이 2종(`@Autowired` 제거, 이전 인자 해석) 모두 검출.
 - **미검증**: 대화형 콘솔 숨김 입력 성공 경로의 실제 터미널 실행(이 환경에 TTY 없음) → 사용자 터미널에서 `java -jar backend/build/libs/backend-0.1.0-SNAPSHOT.jar admin create --login <id>` 재확인 필요. 3306 작업 DB 미사용·미변경.
-- **CI**: 이 수정 커밋의 결과는 아래 줄에 갱신(`git log`, PR #1).
+- **CI**: 수정 커밋 `6d5cccd` → run 45530093712 전 job 통과(Backend Linux에서 bootJar → integrationTest 순서 확인, AdminCliJarIT 포함). Draft PR #1 유지, 병합 없음.
 - **다음 작업**: 사용자 터미널 재확인 → 설계 담당 최종 검토 → T02 DONE 여부. T03 착수 금지.
 
 ### T02 — 2차 재개 세션: 설계 승인 반영·검증 완료 (2026-11-25, IMPLEMENTED, DONE 아님)

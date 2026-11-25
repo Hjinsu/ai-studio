@@ -115,3 +115,5 @@ CI는 Draft PR [#1](https://github.com/Hjinsu/ai-studio/pull/1)(main 대상, **�
 | 같은 조건 `admin create` | "사용법" 거부, 종료 코드 2 |
 | `./gradlew.bat :backend:test :backend:integrationTest --rerun-tasks` | 단위 127/127, 통합 71/71 (AuthIT 9, AdminBootstrapIT 2, ProductionGrantsIT 2, AdminCliIT 1, AdminCliJarIT 1 포함) |
 미검증: 실제 대화형 콘솔에서의 숨김 입력 성공 경로(자동화 도구에 TTY가 없음 — 성공 경로는 AdminCliIT의 실제 Bean 경로로 검증). 사용자 터미널(cmd/PowerShell)에서 `admin create --login <id>` 재확인 필요. 3306 작업 DB는 이번 검증에서 사용하지 않았다.
+
+**CI**: 수정 커밋 `6d5cccd` → run [45530093712](https://github.com/Hjinsu/ai-studio/actions/runs/45530093712) 전 job 통과(Backend Linux: bootJar → integrationTest, Testcontainers). Draft PR #1 유지.
