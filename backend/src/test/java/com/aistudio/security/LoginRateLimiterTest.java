@@ -54,7 +54,9 @@ class LoginRateLimiterTest {
     @Test
     void blockExpiresAfterFifteenMinutesAndWindowResets() {
         fail("admin", "10.0.0.1", 5);
-        clock.advance(Duration.ofMinutes(15).plusSeconds(1));
+        clock.advance(Duration.ofMinutes(15).minusSeconds(1));
+        assertThat(limiter.blockedFor("admin", "10.0.0.1")).contains(Duration.ofSeconds(1));
+        clock.advance(Duration.ofSeconds(1));
         assertThat(limiter.blockedFor("admin", "10.0.0.1")).isEmpty();
         fail("admin", "10.0.0.1", 4);
         assertThat(limiter.blockedFor("admin", "10.0.0.1")).isEmpty();

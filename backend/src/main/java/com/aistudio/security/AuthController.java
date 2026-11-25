@@ -1,6 +1,5 @@
 package com.aistudio.security;
 
-import java.time.Clock;
 import java.time.Instant;
 import java.util.Map;
 import java.util.Optional;
@@ -65,19 +64,19 @@ public class AuthController {
     private final LoginRateLimiter rateLimiter;
     private final AdminUserMapper users;
     private final AuditService audit;
-    private final Clock clock;
+    private final AdminAccountService accounts;
 
     AuthController(AuthenticationManager authenticationManager,
             SessionAuthenticationStrategy sessionAuthenticationStrategy,
             SecurityContextRepository securityContextRepository, LoginRateLimiter rateLimiter, AdminUserMapper users,
-            AuditService audit, Clock clock) {
+            AuditService audit, AdminAccountService accounts) {
         this.authenticationManager = authenticationManager;
         this.sessionAuthenticationStrategy = sessionAuthenticationStrategy;
         this.securityContextRepository = securityContextRepository;
         this.rateLimiter = rateLimiter;
         this.users = users;
         this.audit = audit;
-        this.clock = clock;
+        this.accounts = accounts;
     }
 
     @GetMapping("/csrf")
@@ -109,18 +108,27 @@ public class AuthController {
             throw new ApiException(ErrorCode.UNAUTHORIZED, INVALID_CREDENTIALS);
         }
         AdminPrincipal principal = (AdminPrincipal) authentication.getPrincipal();
-        sessionAuthenticationStrategy.onAuthentication(authentication, request, response);
-        SecurityContext context = SecurityContextHolder.createEmptyContext();
-        context.setAuthentication(authentication);
-        SecurityContextHolder.setContext(context);
-        securityContextRepository.saveContext(context, request, response);
-
-        Instant now = clock.instant();
-        users.updateLastLogin(principal.id(), now);
-        rateLimiter.recordSuccess(login, ip);
-        audit.record(Actor.admin(principal.id()), "AUTH_LOGIN", Outcome.SUCCESS, "ADMIN_USER", principal.id(), ip,
-                null);
-        return new CurrentUserResponse(String.valueOf(principal.id()), principal.login(), "ADMIN", now);
+        try {
+            Instant now = accounts.recordSuccessfulLogin(principal.id(), ip);
+            rateLimiter.recordSuccess(login, ip);
+            sessionAuthenticationStrategy.onAuthentication(authentication, request, response);
+            SecurityContext context = SecurityContextHolder.createEmptyContext();
+            context.setAuthentication(authentication);
+            securityContextRepository.saveContext(context, request, response);
+            SecurityContextHolder.setContext(context);
+            return new CurrentUserResponse(String.valueOf(principal.id()), principal.login(), "ADMIN", now);
+        } catch (RuntimeException failure) {
+            SecurityContextHolder.clearContext();
+            try {
+                HttpSession session = request.getSession(false);
+                if (session != null) {
+                    session.invalidate();
+                }
+            } catch (RuntimeException cleanupFailure) {
+                failure.addSuppressed(cleanupFailure);
+            }
+            throw failure;
+        }
     }
 
     @PostMapping("/logout")

@@ -21,6 +21,7 @@ import com.aistudio.audit.AuditService.Actor;
 import com.aistudio.budget.PeriodCalculator.Period;
 import com.aistudio.budget.PeriodCalculator.PeriodType;
 import com.aistudio.budget.SettlementMath.Deltas;
+import com.aistudio.channel.Channel;
 import com.aistudio.channel.ChannelService;
 import com.aistudio.shared.api.ApiException;
 import com.aistudio.shared.api.ErrorCode;
@@ -40,6 +41,13 @@ public class BudgetReservationService {
     public static final String RECONCILIATION_REQUIRED = "RECONCILIATION_REQUIRED";
     public static final String SETTLED = "SETTLED";
     public static final String RELEASED = "RELEASED";
+
+    private static final int DECISION_ATTEMPTS = 3;
+    private static final String LEGACY_RESERVE_PREFIX = "reserve:";
+    private static final String HASHED_RESERVE_PREFIX = "reserve-v2:";
+
+    private static final class DecisionPeriodChanged extends RuntimeException {
+    }
 
     private static final Pattern KEY = Pattern.compile("^[A-Za-z0-9:._-]{8,128}$");
     private static final Pattern REASON = Pattern.compile("^[A-Z_]{2,32}$");
@@ -99,7 +107,16 @@ public class BudgetReservationService {
             return replay(existing, fingerprint);
         }
         try {
-            return transactions.execute(() -> doReserve(command, currency, estimate, fingerprint));
+            for (int attempt = 1; ; attempt++) {
+                try {
+                    return transactions.execute(() -> doReserve(command, currency, estimate, fingerprint));
+                } catch (DecisionPeriodChanged e) {
+                    if (attempt == DECISION_ATTEMPTS) {
+                        throw new ApiException(ErrorCode.SERVICE_UNAVAILABLE,
+                                "The budget period changed while acquiring reservation locks.");
+                    }
+                }
+            }
         } catch (DuplicateKeyException e) {
             BudgetMapper.Reservation raced = mapper.reservationByRequestKey(command.requestKey());
             if (raced == null) {
@@ -119,9 +136,14 @@ public class BudgetReservationService {
 
     private ReservationResult doReserve(ReserveCommand command, String currency, BigDecimal estimate,
             String fingerprint) {
-        Instant now = clock.instant();
         // 1) control S: 지출 차단·정합성 상태 (Fail Closed, ADR-054, ADR-061)
         controlLock.shared();
+        Channel channel = command.channelId() == null ? null : channels.lockForReservation(command.channelId());
+        List<BudgetMapper.Policy> policies = mapper.lockActivePolicies(command.channelId());
+        BudgetMapper.Reservation existing = mapper.reservationByRequestKey(command.requestKey());
+        if (existing != null) {
+            return replay(existing, fingerprint);
+        }
         BudgetMapper.Control control = mapper.control();
         if (!control.spendingEnabled()) {
             throw new ApiException(ErrorCode.POLICY_VIOLATION, "Spending is disabled by the administrator.");
@@ -130,11 +152,29 @@ public class BudgetReservationService {
             throw new ApiException(ErrorCode.PREREQUISITE_NOT_MET,
                     "Budget consistency check failed; new reservations are blocked until it passes.");
         }
-        requireSystemPolicies();
+        requireSystemPolicies(policies);
         // 2) channel S: ACTIVE만 (ADR-042)
-        if (command.channelId() != null && !channels.lockSharedAndCheckActive(command.channelId())) {
-            throw new ApiException(ErrorCode.PREREQUISITE_NOT_MET, "The channel is not active.");
+        if (command.channelId() != null) {
+            if (channel == null) {
+                throw new ApiException(ErrorCode.RESOURCE_NOT_FOUND, "Channel not found.");
+            }
+            if (!Channel.ACTIVE.equals(channel.status())) {
+                throw new ApiException(ErrorCode.PREREQUISITE_NOT_MET, "The channel is not active.");
+            }
         }
+        // Locate candidate buckets under the policy locks, then take the decision time after
+        // waiting for existing bucket writers. Crossing a boundary requires a fresh transaction.
+        Instant candidateTime = clock.instant();
+        List<Long> bucketIds = new ArrayList<>();
+        for (BudgetMapper.Policy policy : policies) {
+            bucketIds.add(currentBucket(policy, candidateTime).id());
+        }
+        List<BudgetMapper.Bucket> buckets = mapper.lockBuckets(bucketIds);
+        Instant now = clock.instant();
+        if (buckets.stream().anyMatch(bucket -> now.isBefore(bucket.periodStart()) || !now.isBefore(bucket.periodEnd()))) {
+            throw new DecisionPeriodChanged();
+        }
+
         // 환율(불변 행, 잠금 없음)
         BigDecimal fxRate = BigDecimal.ONE;
         Long rateId = null;
@@ -145,13 +185,6 @@ public class BudgetReservationService {
             rateId = rate.id();
         }
         BigDecimal estimateKrw = Money.reserveKrw(estimate, fxRate);
-        // 3) policy X → 4) bucket X
-        List<BudgetMapper.Policy> policies = mapper.lockActivePolicies(command.channelId());
-        List<Long> bucketIds = new ArrayList<>();
-        for (BudgetMapper.Policy policy : policies) {
-            bucketIds.add(currentBucket(policy, now).id());
-        }
-        List<BudgetMapper.Bucket> buckets = mapper.lockBuckets(bucketIds);
         for (BudgetMapper.Bucket bucket : buckets) {
             BigDecimal after = bucket.spentKrw().add(bucket.reservedKrw()).add(estimateKrw);
             if (after.compareTo(bucket.limitKrw()) > 0) {
@@ -171,10 +204,7 @@ public class BudgetReservationService {
         var eventFields = Fingerprints.fields();
         eventFields.put("reservationId", reservationId);
         eventFields.put("entryType", "RESERVE");
-        String eventKey = "reserve:" + command.requestKey();
-        if (eventKey.length() > 128) {
-            eventKey = "reserve:" + fingerprint;
-        }
+        String eventKey = HASHED_RESERVE_PREFIX + Fingerprints.of(Map.of("requestKey", command.requestKey()));
         mapper.insertCostLog(new BudgetMapper.CostLog(null, eventKey, Fingerprints.of(eventFields), reservationId,
                 command.requestKey(), "RESERVE", null, currency, estimate, Money.rate(fxRate), rateId, estimateKrw,
                 estimateKrw, BigDecimal.ZERO, BigDecimal.ZERO, null, null, "SYSTEM", null, MDC.get("traceId"), now,
@@ -182,11 +212,11 @@ public class BudgetReservationService {
         return new ReservationResult(mapper.reservation(reservationId), false);
     }
 
-    private void requireSystemPolicies() {
+    private void requireSystemPolicies(List<BudgetMapper.Policy> policies) {
         boolean day = false;
         boolean month = false;
-        for (BudgetMapper.Policy policy : mapper.systemPolicies()) {
-            if ("ACTIVE".equals(policy.status())) {
+        for (BudgetMapper.Policy policy : policies) {
+            if (BudgetPolicyService.SYSTEM.equals(policy.scope())) {
                 day |= "DAY".equals(policy.periodType());
                 month |= "MONTH".equals(policy.periodType());
             }
@@ -335,6 +365,12 @@ public class BudgetReservationService {
         fields.put("externalRef", c.externalRef());
         String fingerprint = Fingerprints.of(fields);
         BudgetMapper.CostLog existing = mapper.costLogByEventKey(c.eventKey());
+        boolean reserveNamespace = c.eventKey().startsWith(LEGACY_RESERVE_PREFIX)
+                || c.eventKey().startsWith(HASHED_RESERVE_PREFIX);
+        // Continue to replay any historical non-RESERVE events that already used these prefixes.
+        if (reserveNamespace && (existing == null || "RESERVE".equals(existing.entryType()))) {
+            throw ApiException.validation("eventKey", "uses a namespace reserved for reservation entries");
+        }
         if (existing != null) {
             return replayEvent(existing, fingerprint);
         }
@@ -367,6 +403,10 @@ public class BudgetReservationService {
         BudgetMapper.Reservation r = mapper.lockReservation(c.reservationId());
         if (r == null) {
             throw new ApiException(ErrorCode.RESOURCE_NOT_FOUND);
+        }
+        BudgetMapper.CostLog existing = mapper.costLogByEventKey(c.eventKey());
+        if (existing != null) {
+            return replayEvent(existing, fingerprint);
         }
         SettlementMath.State state = new SettlementMath.State(r.estimateKrw(), r.reservedRemainingKrw(),
                 r.recognizedCostKrw(), r.recognizedCostOriginal(), r.fxRate());

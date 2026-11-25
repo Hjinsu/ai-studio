@@ -114,7 +114,7 @@ stateDiagram-v2
 - 조회: `effective_from ≤ now`인 **가장 최근** 1건. 그 건의 `valid_until ≤ now`면 유효 환율 없음(이전 환율로 fallback 금지) → PREREQUISITE_NOT_MET. 기존 예약 정산은 예약 시 고정 환율 사용.
 
 ## 9. 정합성 검사 (ADR-026, ADR-054)
-`GET /api/v1/budget/consistency-check`가 아래를 검사하고 결과(OK/ERROR, 건수, 시각)를 budget_control에 기록한다. ERROR면 신규 예약 차단, 다음 OK 검사 후 해제. 자동 수정 없음.
+`POST /api/v1/budget/consistency-checks`가 아래를 검사하고 결과(OK/ERROR, 건수, 시각)를 budget_control에 기록한다. ERROR면 신규 예약 차단, 다음 OK 검사 후 해제. 자동 수정 없음.
 | 코드 | 검사 |
 |---|---|
 | RESERVATION_RESERVED_MISMATCH | RR = Σ ΔR |

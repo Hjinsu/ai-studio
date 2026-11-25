@@ -99,6 +99,42 @@ class AuthIT {
     }
 
     @Test
+    void lastLoginWriteFailureDoesNotAuthenticateSession() throws Exception {
+        assertLoginWriteFailure("BEFORE UPDATE ON admin_user");
+    }
+
+    @Test
+    void auditWriteFailureDoesNotAuthenticateSessionOrCommitLastLogin() throws Exception {
+        var before = jdbc.queryForObject("SELECT last_login_at FROM admin_user WHERE login = 'admin'",
+                java.sql.Timestamp.class);
+        assertLoginWriteFailure("BEFORE INSERT ON audit_event");
+        assertThat(jdbc.queryForObject("SELECT last_login_at FROM admin_user WHERE login = 'admin'",
+                java.sql.Timestamp.class)).isEqualTo(before);
+    }
+
+    private void assertLoginWriteFailure(String triggerTarget) throws Exception {
+        MockHttpSession session = new MockHttpSession();
+        String token = csrf(session);
+        jdbc.execute("CREATE TRIGGER fail_login_write " + triggerTarget
+                + " FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'test login write failure'");
+        try {
+            mockMvc.perform(login(session, token, "admin", ApiTestSupport.PASSWORD, "10.1.1.1"))
+                    .andExpect(status().isInternalServerError())
+                    .andExpect(jsonPath("$.code").value("INTERNAL_SERVER_ERROR"));
+            assertThat(org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication())
+                    .isNull();
+            if (session.isInvalid()) {
+                mockMvc.perform(get("/api/v1/auth/me")).andExpect(status().isUnauthorized());
+            } else {
+                assertThat(session.getAttribute("SPRING_SECURITY_CONTEXT")).isNull();
+                mockMvc.perform(get("/api/v1/auth/me").session(session)).andExpect(status().isUnauthorized());
+            }
+        } finally {
+            jdbc.execute("DROP TRIGGER fail_login_write");
+        }
+    }
+
+    @Test
     void loginWithoutCsrfIsRejectedWithCommonFormat() throws Exception {
         mockMvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"login\":\"admin\",\"password\":\"x\"}"))

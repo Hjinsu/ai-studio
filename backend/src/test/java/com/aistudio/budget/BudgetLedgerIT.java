@@ -86,6 +86,12 @@ class BudgetLedgerIT {
     @Autowired
     private JdbcTemplate jdbc;
 
+    @Autowired
+    private BudgetMapper mapper;
+
+    @Autowired
+    private org.springframework.transaction.PlatformTransactionManager transactionManager;
+
     private AdminPrincipal principal;
     private Actor admin;
 
@@ -221,6 +227,170 @@ class BudgetLedgerIT {
                 .isEqualTo(BudgetReservationService.RECONCILIATION_REQUIRED);
         assertThat(reservations.get(uncertain).status()).isEqualTo(BudgetReservationService.RECONCILIATION_REQUIRED);
         assertThat(reservations.confirm(event(uncertain, "10")).status()).isEqualTo(BudgetReservationService.SETTLED);
+        assertConsistent();
+    }
+
+    @Test
+    void krwAdjustmentHttpContractPreservesOnlyForeignOriginalCost() throws Exception {
+        for (String currency : List.of("KRW", "USD")) {
+            long id = reservations.reserve(new ReserveCommand(ApiTestSupport.uniqueKey("adjust"), null,
+                    "contract", currency, BigDecimal.ONE)).reservation().id();
+            reservations.confirm(event(id, "1"));
+            String adjusted = currency.equals("KRW") ? "1.500000000000" : "1.000000000000";
+            mockMvc.perform(adjustment(id, "ADJUSTMENT", "KRW", "0.5"))
+                    .andExpect(status().isOk()).andExpect(ApiTestSupport.matchesContract())
+                    .andExpect(jsonPath("$.recognizedCostOriginal").value(adjusted));
+            mockMvc.perform(adjustment(id, "REFUND", "KRW", "0.5"))
+                    .andExpect(status().isOk()).andExpect(ApiTestSupport.matchesContract())
+                    .andExpect(jsonPath("$.recognizedCostOriginal").value("1.000000000000"));
+            mockMvc.perform(adjustment(id, "ADJUSTMENT", "ORIGINAL", "0.25"))
+                    .andExpect(status().isOk()).andExpect(ApiTestSupport.matchesContract())
+                    .andExpect(jsonPath("$.recognizedCostOriginal").value("1.250000000000"));
+            mockMvc.perform(adjustment(id, "ADJUSTMENT", "KRW", "0.0000001"))
+                    .andExpect(status().isBadRequest());
+            mockMvc.perform(adjustment(id, "ADJUSTMENT", "KRW", "1000000000000"))
+                    .andExpect(status().isBadRequest());
+        }
+        assertConsistent();
+    }
+
+    @Test
+    void acceptsLargestKrwAdjustmentRepresentableInEveryLedgerColumn() throws Exception {
+        long id = reservations.reserve(new ReserveCommand(ApiTestSupport.uniqueKey("adj-max"), null,
+                "contract", "USD", BigDecimal.ONE)).reservation().id();
+        reservations.confirm(event(id, "0"));
+        String maximum = "999999999999.999999";
+        mockMvc.perform(adjustment(id, "ADJUSTMENT", "KRW", maximum))
+                .andExpect(status().isOk()).andExpect(ApiTestSupport.matchesContract())
+                .andExpect(jsonPath("$.recognizedCostKrw").value(maximum));
+        mockMvc.perform(adjustment(id, "REFUND", "KRW", maximum))
+                .andExpect(status().isOk()).andExpect(ApiTestSupport.matchesContract())
+                .andExpect(jsonPath("$.recognizedCostKrw").value("0.000000"));
+        assertConsistent();
+    }
+
+    private org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder adjustment(
+            long id, String entryType, String basis, String amount) {
+        return post("/api/v1/budget-reservations/{id}/adjustments", id).with(ApiTestSupport.as(principal))
+                .header("Idempotency-Key", ApiTestSupport.uniqueKey("adjust-http"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"entryType":"%s","basis":"%s","amount":"%s","reasonCode":"MANUAL","note":"test"}
+                        """.formatted(entryType, basis, amount));
+    }
+
+    @Test
+    void signedBigintIdBoundaryUsesClientErrorsForPathAndQuery() throws Exception {
+        String maximum = Long.toString(Long.MAX_VALUE);
+        for (String invalid : List.of("0", "-1", "abc", "9223372036854775808")) {
+            mockMvc.perform(get("/api/v1/budget-reservations/{id}", invalid).with(ApiTestSupport.as(principal)))
+                    .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+            mockMvc.perform(get("/api/v1/cost-ledger").param("reservationId", invalid)
+                    .with(ApiTestSupport.as(principal)))
+                    .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+        }
+        for (String valid : List.of("1", maximum)) {
+            mockMvc.perform(get("/api/v1/cost-ledger").param("reservationId", valid)
+                    .with(ApiTestSupport.as(principal))).andExpect(status().isOk());
+        }
+        mockMvc.perform(get("/api/v1/budget-reservations/{id}", maximum).with(ApiTestSupport.as(principal)))
+                .andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"));
+        mockMvc.perform(get("/api/v1/channels/{id}", "9223372036854775808").with(ApiTestSupport.as(principal)))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+    }
+
+    @Test
+    void reserveKeysRemainDistinctAtEveryLengthBoundary() {
+        Set<String> eventKeys = new java.util.HashSet<>();
+        for (int length = 120; length <= 128; length++) {
+            for (String prefix : List.of("a", "b")) {
+                String key = prefix + "x".repeat(length - 1);
+                ReserveCommand command = new ReserveCommand(key, null, "key-boundary", "KRW", BigDecimal.ONE);
+                var first = reservations.reserve(command);
+                var replay = reservations.reserve(command);
+                assertThat(replay.replayed()).isTrue();
+                assertThat(replay.reservation().id()).isEqualTo(first.reservation().id());
+                var events = reservations.events(first.reservation().id());
+                assertThat(events).hasSize(1);
+                assertThat(eventKeys.add(events.getFirst().eventKey())).isTrue();
+                assertThat(events.getFirst().requestKey()).isEqualTo(key);
+                assertThat(events.getFirst().eventKey()).startsWith("reserve-v2:");
+            }
+        }
+        assertConsistent();
+    }
+
+    @Test
+    void legacyReserveKeySupportsReplayAndSettlement() {
+        var template = new org.springframework.transaction.support.TransactionTemplate(transactionManager);
+        var current = new ReserveCommand(ApiTestSupport.uniqueKey("new-key"), null, "legacy-replay", "KRW",
+                BigDecimal.ONE);
+        var source = reservations.reserve(current).reservation();
+        var legacy = new ReserveCommand(ApiTestSupport.uniqueKey("legacy-key"), null, current.purpose(),
+                current.currency(), current.estimateOriginal());
+        long id = template.execute(status -> {
+            long reservationId = insertLegacyReserve(source, legacy.requestKey());
+            for (long bucketId : reservations.bucketIds(source.id())) {
+                mapper.insertReservationBucket(reservationId, bucketId);
+                mapper.applyBucketDeltas(bucketId, source.estimateKrw(), BigDecimal.ZERO, source.createdAt());
+            }
+            return reservationId;
+        });
+        assertThat(reservations.reserve(legacy).replayed()).isTrue();
+        assertThat(reservations.reserve(legacy).reservation().id()).isEqualTo(id);
+        reservations.confirm(event(id, "1"));
+        assertThat(reservations.events(id)).extracting(BudgetMapper.CostLog::entryType)
+                .containsExactly("RESERVE", "CONFIRM");
+        assertThat(reservations.events(id).getFirst().eventKey()).isEqualTo("reserve:" + legacy.requestKey());
+        assertConsistent();
+    }
+
+    @Test
+    void consistencyProbeDocumentsMissingSystemBucketLinkDetectionGap() {
+        var template = new org.springframework.transaction.support.TransactionTemplate(transactionManager);
+        var command = new ReserveCommand(ApiTestSupport.uniqueKey("link-source"), null, "link-probe", "KRW",
+                BigDecimal.ONE);
+        var source = reservations.reserve(command).reservation();
+        template.executeWithoutResult(status -> {
+            long id = insertLegacyReserve(source, ApiTestSupport.uniqueKey("missing-links"));
+            assertThat(reservations.bucketIds(id)).isEmpty();
+            assertThat(reservations.events(id)).hasSize(1);
+            assertThat(control.runConsistencyCheck(admin).issues()).isEmpty();
+            status.setRollbackOnly();
+        });
+        assertConsistent();
+    }
+
+    private long insertLegacyReserve(BudgetMapper.Reservation source, String requestKey) {
+        var generated = new BudgetMapper.Generated();
+        mapper.insertReservation(new BudgetMapper.Reservation(null, requestKey, source.requestFingerprint(), null,
+                null, source.purpose(), source.originalCurrency(), source.estimateOriginal(), null, source.fxRate(),
+                source.estimateKrw(), "ACTIVE", source.estimateKrw(), BigDecimal.ZERO, BigDecimal.ZERO,
+                null, 0, source.createdAt(), source.createdAt(), null), generated);
+        long id = generated.id;
+        mapper.insertCostLog(new BudgetMapper.CostLog(null, "reserve:" + requestKey,
+                Fingerprints.of(java.util.Map.of("reservationId", id, "entryType", "RESERVE")), id, requestKey,
+                "RESERVE", null, source.originalCurrency(), source.estimateOriginal(), source.fxRate(), null,
+                source.estimateKrw(), source.estimateKrw(), BigDecimal.ZERO, BigDecimal.ZERO, null, null,
+                "SYSTEM", null, null, source.createdAt(), source.createdAt()));
+        return id;
+    }
+
+    @Test
+    void settlementCannotClaimInternalReserveNamespace() throws Exception {
+        long id = reservations.reserve(new ReserveCommand(ApiTestSupport.uniqueKey("namespace"), null,
+                "contract", "KRW", BigDecimal.ONE)).reservation().id();
+        String internalKey = reservations.events(id).getFirst().eventKey();
+        mockMvc.perform(post("/api/v1/budget-reservations/{id}/resolve", id).with(ApiTestSupport.as(principal))
+                .header("Idempotency-Key", internalKey).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"outcome\":\"NOT_CHARGED\",\"note\":\"test\"}"))
+                .andExpect(status().isBadRequest());
+        var internal = new EventCommand(id, "reserve-v2:unused-key", null, null, null, null, null, null, Actor.system());
+        assertThatThrownBy(() -> reservations.release(internal))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.errorCode()).isEqualTo(ErrorCode.VALIDATION_FAILED));
+        assertThat(reservations.events(id)).hasSize(1);
+        reservations.release(event(id, null));
         assertConsistent();
     }
 

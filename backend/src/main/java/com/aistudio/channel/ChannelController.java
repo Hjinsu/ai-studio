@@ -23,6 +23,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.aistudio.security.CurrentActor;
+import com.aistudio.shared.api.ApiId;
 import com.aistudio.shared.api.PageResponse;
 import com.aistudio.shared.api.PageResponse.PageQuery;
 
@@ -95,66 +96,66 @@ class ChannelController {
     }
 
     @GetMapping("/{channelId}")
-    ChannelResponse get(@PathVariable @Pattern(regexp = "^[1-9][0-9]{0,18}$") String channelId) {
-        return ChannelResponse.from(service.get(Long.parseLong(channelId)));
+    ChannelResponse get(@PathVariable @Pattern(regexp = ApiId.PATTERN) String channelId) {
+        return ChannelResponse.from(service.get(ApiId.parse("channelId", channelId)));
     }
 
     @PatchMapping("/{channelId}")
-    ChannelResponse update(@PathVariable @Pattern(regexp = "^[1-9][0-9]{0,18}$") String channelId,
+    ChannelResponse update(@PathVariable @Pattern(regexp = ApiId.PATTERN) String channelId,
             @Valid @RequestBody ChannelUpdateRequest body) {
         if (body.name() == null && body.language() == null && body.timezone() == null) {
             throw com.aistudio.shared.api.ApiException.validation(null, "at least one field must be provided");
         }
-        return ChannelResponse.from(service.update(Long.parseLong(channelId), body.version(), body.name(),
+        return ChannelResponse.from(service.update(ApiId.parse("channelId", channelId), body.version(), body.name(),
                 body.language(), body.timezone(), CurrentActor.actor()));
     }
 
     @PostMapping("/{channelId}/pause")
-    ChannelResponse pause(@PathVariable @Pattern(regexp = "^[1-9][0-9]{0,18}$") String channelId,
+    ChannelResponse pause(@PathVariable @Pattern(regexp = ApiId.PATTERN) String channelId,
             @Valid @RequestBody VersionRequest body) {
-        return ChannelResponse.from(service.pause(Long.parseLong(channelId), body.version(), CurrentActor.actor()));
+        return ChannelResponse.from(service.pause(ApiId.parse("channelId", channelId), body.version(), CurrentActor.actor()));
     }
 
     @PostMapping("/{channelId}/resume")
-    ChannelResponse resume(@PathVariable @Pattern(regexp = "^[1-9][0-9]{0,18}$") String channelId,
+    ChannelResponse resume(@PathVariable @Pattern(regexp = ApiId.PATTERN) String channelId,
             @Valid @RequestBody VersionRequest body) {
-        return ChannelResponse.from(service.resume(Long.parseLong(channelId), body.version(), CurrentActor.actor()));
+        return ChannelResponse.from(service.resume(ApiId.parse("channelId", channelId), body.version(), CurrentActor.actor()));
     }
 
     @PostMapping("/{channelId}/archive")
-    ChannelResponse archive(@PathVariable @Pattern(regexp = "^[1-9][0-9]{0,18}$") String channelId,
+    ChannelResponse archive(@PathVariable @Pattern(regexp = ApiId.PATTERN) String channelId,
             @Valid @RequestBody VersionRequest body) {
-        return ChannelResponse.from(service.archive(Long.parseLong(channelId), body.version(), CurrentActor.actor()));
+        return ChannelResponse.from(service.archive(ApiId.parse("channelId", channelId), body.version(), CurrentActor.actor()));
     }
 
     @GetMapping("/{channelId}/config")
-    ChannelConfigResponse currentConfig(@PathVariable @Pattern(regexp = "^[1-9][0-9]{0,18}$") String channelId) {
-        return toResponse(service.currentConfig(Long.parseLong(channelId)));
+    ChannelConfigResponse currentConfig(@PathVariable @Pattern(regexp = ApiId.PATTERN) String channelId) {
+        return toResponse(service.currentConfig(ApiId.parse("channelId", channelId)));
     }
 
     @GetMapping("/{channelId}/config/revisions")
     PageResponse<ChannelConfigResponse> configs(
-            @PathVariable @Pattern(regexp = "^[1-9][0-9]{0,18}$") String channelId,
+            @PathVariable @Pattern(regexp = ApiId.PATTERN) String channelId,
             @RequestParam(defaultValue = "0") @Min(0) int page,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
-        long id = Long.parseLong(channelId);
+        long id = ApiId.parse("channelId", channelId);
         PageQuery query = new PageQuery(page, size);
         return PageResponse.of(service.configs(id, query), query, service.countConfigs(id), this::toResponse);
     }
 
     @PostMapping("/{channelId}/config/revisions")
     ResponseEntity<ChannelConfigResponse> createConfig(
-            @PathVariable @Pattern(regexp = "^[1-9][0-9]{0,18}$") String channelId,
+            @PathVariable @Pattern(regexp = ApiId.PATTERN) String channelId,
             @Valid @RequestBody ChannelConfigCreateRequest body) {
-        ChannelConfig config = service.createConfigRevision(Long.parseLong(channelId), body.baseRevisionNo(),
+        ChannelConfig config = service.createConfigRevision(ApiId.parse("channelId", channelId), body.baseRevisionNo(),
                 body.settings(), body.changeNote(), CurrentActor.actor());
         return ResponseEntity.status(201).body(toResponse(config));
     }
 
     @GetMapping("/{channelId}/config/revisions/{revisionNo}")
-    ChannelConfigResponse config(@PathVariable @Pattern(regexp = "^[1-9][0-9]{0,18}$") String channelId,
+    ChannelConfigResponse config(@PathVariable @Pattern(regexp = ApiId.PATTERN) String channelId,
             @PathVariable @Min(1) int revisionNo) {
-        return toResponse(service.config(Long.parseLong(channelId), revisionNo));
+        return toResponse(service.config(ApiId.parse("channelId", channelId), revisionNo));
     }
 
     private ChannelConfigResponse toResponse(ChannelConfig c) {

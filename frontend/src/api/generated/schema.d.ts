@@ -603,7 +603,7 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /** @description BIGINT 식별자(문자열) */
+        /** @description 양의 signed BIGINT 식별자 문자열 (1~9223372036854775807) */
         Id: string;
         /** @description KRW 금액, 소수 최대 6자리(부호 허용은 원장 delta에 한함) */
         KrwAmount: string;
@@ -920,7 +920,8 @@ export interface components {
         };
         /**
          * @description basis=ORIGINAL이면 예약 통화 금액(최대 소수 12자리)이며 recognized_cost_original도 변한다.
-         *     basis=KRW이면 KRW 금액(최대 소수 6자리)이며 recognized_cost_original은 변하지 않는다(예: FX_DIFFERENCE, ADR-057).
+         *     basis=KRW이면 최대 소수 6자리다. 외화 예약의 recognizedCostOriginal은 유지되고 KRW 예약의 원본 인식 비용은 KRW 비용과 함께 변한다(ADR-057).
+         *     두 기준 모두 원장 original_amount의 DECIMAL(24,12) 범위에 따라 정수부는 최대 12자리다.
          *     ADJUSTMENT는 부호 있는 증감, REFUND는 양수(환불액). 인식 비용이 음수가 되면 POLICY_VIOLATION.
          */
         ReservationAdjustRequest: {

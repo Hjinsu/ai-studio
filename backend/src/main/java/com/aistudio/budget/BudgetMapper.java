@@ -140,9 +140,6 @@ interface BudgetMapper {
     @Select("SELECT " + POLICY + " FROM budget_policy WHERE id = #{id} FOR UPDATE")
     Policy lockPolicy(long id);
 
-    @Select("SELECT " + POLICY + " FROM budget_policy WHERE scope = 'SYSTEM'")
-    List<Policy> systemPolicies();
-
     /** 예약에 적용할 활성 정책(SYSTEM + 해당 채널)을 id 순으로 잠근다. */
     @Select("""
             <script>
