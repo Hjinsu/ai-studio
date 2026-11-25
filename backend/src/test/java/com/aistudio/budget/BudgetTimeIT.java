@@ -255,6 +255,25 @@ class BudgetTimeIT {
 
     // ------------------------------------------------------------------ 한도 revision ↔ bucket
     @Test
+    @Order(6)
+    void historicalSystemLinksRemainValidAfterRevisionTimezoneAndStatusChanges() {
+        CLOCK.set(at("2028-01-01T01:00:00Z"));
+        var original = reserve(null, "KRW", "1");
+        var oldLinks = reservations.bucketIds(original.id());
+        long dayId = jdbc.queryForObject(
+                "SELECT id FROM budget_policy WHERE scope = 'SYSTEM' AND period_type = 'DAY'", Long.class);
+        var current = policies.get(dayId);
+        var revised = policies.revise(dayId, current.currentRevision().revisionNo(), new BigDecimal("10000"),
+                "America/New_York", "new timezone", admin);
+        CLOCK.set(revised.currentRevision().timezoneEffectiveFrom().plusSeconds(1));
+        var after = reserve(null, "KRW", "1");
+        assertThat(reservations.bucketIds(after.id())).isNotEqualTo(oldLinks);
+        policies.setStatus(dayId, false, revised.policy().version(), admin);
+        assertThat(control.runConsistencyCheck(admin).issues()).isEmpty();
+        assertThat(reservations.bucketIds(original.id())).isEqualTo(oldLinks);
+    }
+
+    @Test
     @Order(5)
     void limitRevisionUpdatesOnlyOpenBuckets() {
         CLOCK.set(at("2027-12-01T10:00:00Z"));

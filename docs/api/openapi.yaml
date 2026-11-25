@@ -923,7 +923,7 @@ components:
   schemas:
     Id:
       type: string
-      description: BIGINT 식별자(문자열)
+      description: 양의 signed BIGINT 식별자 문자열 (1~9223372036854775807)
       pattern: '^[1-9][0-9]{0,18}$'
     KrwAmount:
       type: string
@@ -1375,7 +1375,8 @@ components:
       type: object
       description: |
         basis=ORIGINAL이면 예약 통화 금액(최대 소수 12자리)이며 recognized_cost_original도 변한다.
-        basis=KRW이면 KRW 금액(최대 소수 6자리)이며 recognized_cost_original은 변하지 않는다(예: FX_DIFFERENCE, ADR-057).
+        basis=KRW이면 최대 소수 6자리다. 외화 예약의 recognizedCostOriginal은 유지되고 KRW 예약의 원본 인식 비용은 KRW 비용과 함께 변한다(ADR-057).
+        두 기준 모두 원장 original_amount의 DECIMAL(24,12) 범위에 따라 정수부는 최대 12자리다.
         ADJUSTMENT는 부호 있는 증감, REFUND는 양수(환불액). 인식 비용이 음수가 되면 POLICY_VIOLATION.
       required: [entryType, basis, amount, reasonCode, note]
       additionalProperties: false
@@ -1386,6 +1387,14 @@ components:
         reasonCode: { type: string, pattern: '^[A-Z_]{2,32}$', examples: [FX_DIFFERENCE, PROVIDER_INVOICE, MANUAL_CORRECTION] }
         externalRef: { type: string, maxLength: 128 }
         note: { type: string, minLength: 1, maxLength: 500 }
+      if:
+        properties:
+          basis: { const: KRW }
+      then:
+        properties:
+          amount:
+            type: string
+            pattern: '^-?(0|[1-9][0-9]{0,11})(\.[0-9]{1,6})?$'
 
     LedgerEntryType:
       type: string
@@ -1443,7 +1452,7 @@ components:
                 type: string
                 enum: [RESERVATION_RESERVED_MISMATCH, RESERVATION_COST_MISMATCH, RESERVATION_ORIGINAL_COST_MISMATCH,
                        BUCKET_RESERVED_MISMATCH, BUCKET_SPENT_MISMATCH, BUCKET_OVERLAP, BUCKET_REVISION_MISMATCH,
-                       CLOSED_RESERVATION_HAS_RESERVE, MISSING_RESERVE_EVENT]
+                       CLOSED_RESERVATION_HAS_RESERVE, MISSING_RESERVE_EVENT, RESERVATION_BUCKET_LINK_MISMATCH]
               entityType: { type: string, enum: [RESERVATION, BUCKET, POLICY] }
               entityId: { $ref: '#/components/schemas/Id' }
               expected: { type: string }

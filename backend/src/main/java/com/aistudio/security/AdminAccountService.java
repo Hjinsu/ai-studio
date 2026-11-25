@@ -77,6 +77,14 @@ public class AdminAccountService {
         audit.record(Actor.cli(), "AUTH_PASSWORD_RESET", "ADMIN_USER", user.id(), Map.of("login", login));
     }
 
+    @Transactional
+    public Instant recordSuccessfulLogin(long adminId, String ip) {
+        Instant now = clock.instant();
+        mapper.updateLastLogin(adminId, now);
+        audit.record(Actor.admin(adminId), "AUTH_LOGIN", AuditService.Outcome.SUCCESS, "ADMIN_USER", adminId, ip, null);
+        return now;
+    }
+
     private static String validLogin(String rawLogin) {
         String login = PasswordPolicy.normalizeLogin(rawLogin);
         if (!PasswordPolicy.isValidLogin(login)) {

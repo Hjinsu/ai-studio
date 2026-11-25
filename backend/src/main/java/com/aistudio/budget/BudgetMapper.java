@@ -140,9 +140,6 @@ interface BudgetMapper {
     @Select("SELECT " + POLICY + " FROM budget_policy WHERE id = #{id} FOR UPDATE")
     Policy lockPolicy(long id);
 
-    @Select("SELECT " + POLICY + " FROM budget_policy WHERE scope = 'SYSTEM'")
-    List<Policy> systemPolicies();
-
     /** 예약에 적용할 활성 정책(SYSTEM + 해당 채널)을 id 순으로 잠근다. */
     @Select("""
             <script>
@@ -505,6 +502,44 @@ interface BudgetMapper {
             HAVING COUNT(l.id) <> 1
             """)
     List<ConsistencyIssue> consistencyIssues(@Param("now") Instant now);
+
+    @Select("""
+            WITH linked_buckets AS (
+                SELECT rb.reservation_id, p.scope, p.period_type,
+                       CASE WHEN b.content_id IS NULL AND p.created_at <= r.created_at
+                                  AND b.period_start <= r.created_at AND r.created_at < b.period_end
+                                  AND p.period_type IN ('DAY', 'MONTH')
+                                  AND (p.scope = 'SYSTEM' OR (p.scope = 'CHANNEL' AND p.channel_id = r.channel_id))
+                            THEN 1 ELSE 0 END AS valid_link
+                  FROM budget_reservation_bucket rb
+                  JOIN budget_reservation r ON r.id = rb.reservation_id
+                  JOIN budget_bucket b ON b.id = rb.bucket_id
+                  JOIN budget_policy p ON p.id = b.policy_id
+            ), link_counts AS (
+                SELECT r.id,
+                       COUNT(CASE WHEN l.valid_link = 1 AND l.scope = 'SYSTEM' AND l.period_type = 'DAY'
+                                  THEN 1 END) AS system_day,
+                       COUNT(CASE WHEN l.valid_link = 1 AND l.scope = 'SYSTEM' AND l.period_type = 'MONTH'
+                                  THEN 1 END) AS system_month,
+                       COUNT(CASE WHEN l.valid_link = 1 AND l.scope = 'CHANNEL' AND l.period_type = 'DAY'
+                                  THEN 1 END) AS channel_day,
+                       COUNT(CASE WHEN l.valid_link = 1 AND l.scope = 'CHANNEL' AND l.period_type = 'MONTH'
+                                  THEN 1 END) AS channel_month,
+                       COUNT(CASE WHEN l.valid_link = 0 THEN 1 END) AS invalid_links
+                  FROM budget_reservation r
+                  LEFT JOIN linked_buckets l ON l.reservation_id = r.id
+                 GROUP BY r.id
+            )
+            SELECT 'RESERVATION_BUCKET_LINK_MISMATCH' AS check_code, 'RESERVATION' AS entity_type, id AS entity_id,
+                   'SYSTEM DAY=1, SYSTEM MONTH=1, CHANNEL DAY<=1, CHANNEL MONTH<=1, invalid=0' AS expected,
+                   CONCAT('SYSTEM DAY=', system_day, ', SYSTEM MONTH=', system_month,
+                          ', CHANNEL DAY=', channel_day, ', CHANNEL MONTH=', channel_month,
+                          ', invalid=', invalid_links) AS actual
+              FROM link_counts
+             WHERE system_day <> 1 OR system_month <> 1 OR channel_day > 1 OR channel_month > 1 OR invalid_links <> 0
+             ORDER BY id
+            """)
+    List<ConsistencyIssue> reservationBucketIssues();
 
     @Select("SELECT COUNT(*) FROM budget_reservation WHERE status = 'RECONCILIATION_REQUIRED'")
     long countReconciliationRequired();

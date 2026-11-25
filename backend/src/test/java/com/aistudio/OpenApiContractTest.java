@@ -108,6 +108,23 @@ class OpenApiContractTest {
      * allOf/anyOf 조합을 쓰지 않고 최종 스키마를 평탄화한다. 평탄화된 스키마의 공통 필드는 기반 스키마와 같아야 한다.
      */
     @Test
+    void adjustmentScaleDependsOnBasis() {
+        assertThat(adjustmentRequest("KRW", "999999999999.999999").hasErrors()).isFalse();
+        assertThat(adjustmentRequest("KRW", "0.0000001").hasErrors()).isTrue();
+        assertThat(adjustmentRequest("KRW", "1000000000000").hasErrors()).isTrue();
+        assertThat(adjustmentRequest("ORIGINAL", "999999999999.999999999999").hasErrors()).isFalse();
+        assertThat(adjustmentRequest("ORIGINAL", "1000000000000").hasErrors()).isTrue();
+    }
+
+    private static ValidationReport adjustmentRequest(String basis, String amount) {
+        return VALIDATOR.validateRequest(SimpleRequest.Builder.post("/api/v1/budget-reservations/2/adjustments")
+                .withHeader("Idempotency-Key", "contract-adjustment").withContentType("application/json")
+                .withBody("""
+                        {"entryType":"ADJUSTMENT","basis":"%s","amount":"%s","reasonCode":"MANUAL","note":"test"}
+                        """.formatted(basis, amount)).build());
+    }
+
+    @Test
     void schemasAreFlatAndConsistentWithTheirBases() throws IOException {
         JsonNode root = new ObjectMapper(new YAMLFactory())
                 .readTree(Files.readString(Path.of("..", "docs", "api", "openapi.yaml")));

@@ -2,7 +2,9 @@ package com.aistudio.budget;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.Comparator;
 import java.util.List;
+import java.util.stream.Stream;
 import java.util.Map;
 
 import org.slf4j.Logger;
@@ -72,7 +74,14 @@ public class BudgetControlService {
     public ConsistencyResult runConsistencyCheck(Actor actor) {
         controlLock.exclusive();
         Instant now = clock.instant();
-        List<BudgetMapper.ConsistencyIssue> issues = mapper.consistencyIssues(now);
+        List<BudgetMapper.ConsistencyIssue> issues = Stream
+                .concat(mapper.consistencyIssues(now).stream(), mapper.reservationBucketIssues().stream())
+                .sorted(Comparator.comparing(BudgetMapper.ConsistencyIssue::checkCode)
+                        .thenComparing(BudgetMapper.ConsistencyIssue::entityType)
+                        .thenComparingLong(BudgetMapper.ConsistencyIssue::entityId)
+                        .thenComparing(BudgetMapper.ConsistencyIssue::expected)
+                        .thenComparing(BudgetMapper.ConsistencyIssue::actual))
+                .toList();
         mapper.updateConsistency(issues.isEmpty() ? "OK" : "ERROR", issues.size(), now);
         if (!issues.isEmpty()) {
             log.error("Budget consistency check found {} issue(s); new reservations are blocked", issues.size());

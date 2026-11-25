@@ -203,12 +203,8 @@ public class ChannelService {
      * 예약 트랜잭션에서 채널 상태를 공유 잠금으로 확인한다(ADR-042, 잠금 순서 control → channel). ACTIVE만 신규 예약 가능.
      */
     @Transactional(propagation = org.springframework.transaction.annotation.Propagation.MANDATORY)
-    public boolean lockSharedAndCheckActive(long channelId) {
-        Channel channel = mapper.lockSharedById(channelId);
-        if (channel == null) {
-            throw new ApiException(ErrorCode.RESOURCE_NOT_FOUND, "Channel not found.");
-        }
-        return Channel.ACTIVE.equals(channel.status());
+    public Channel lockForReservation(long channelId) {
+        return mapper.lockSharedById(channelId);
     }
 
     /** 정책 생성 시 채널 존재·보관 여부 확인(공유 잠금). */

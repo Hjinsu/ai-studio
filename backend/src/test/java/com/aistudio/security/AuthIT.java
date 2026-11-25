@@ -14,6 +14,9 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
@@ -65,6 +68,9 @@ class AuthIT {
     private AdminAccountService accounts;
 
     @Autowired
+    private LoginAdmission admission;
+
+    @Autowired
     private JdbcTemplate jdbc;
 
     @Value("${server.servlet.session.timeout}")
@@ -96,6 +102,78 @@ class AuthIT {
                     request.setRemoteAddr(ip);
                     return request;
                 });
+    }
+
+    @Test
+    void concurrentAdmissionUsesExistingHttp429ContractAndAllowsLoginAfterRelease() throws Exception {
+        var acquired = new CountDownLatch(1);
+        var release = new CountDownLatch(1);
+        String ip = "198.51.100.12";
+        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            var held = executor.submit(() -> admission.execute("admin", ip, () -> {
+                acquired.countDown();
+                try {
+                    assertThat(release.await(10, TimeUnit.SECONDS)).isTrue();
+                    return null;
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException(e);
+                }
+            }));
+            try {
+                assertThat(acquired.await(10, TimeUnit.SECONDS)).isTrue();
+                MockHttpSession session = new MockHttpSession();
+                mockMvc.perform(login(session, csrf(session), "admin", ApiTestSupport.PASSWORD, ip))
+                        .andExpect(status().isTooManyRequests())
+                        .andExpect(header().string("Retry-After", "1"))
+                        .andExpect(jsonPath("$.code").value("RATE_LIMIT_EXCEEDED"))
+                        .andExpect(ApiTestSupport.matchesContract());
+                assertThat(session.getAttribute("SPRING_SECURITY_CONTEXT")).isNull();
+            } finally {
+                release.countDown();
+            }
+            held.get(10, TimeUnit.SECONDS);
+        }
+        MockHttpSession session = new MockHttpSession();
+        mockMvc.perform(login(session, csrf(session), "admin", ApiTestSupport.PASSWORD, ip))
+                .andExpect(status().isOk())
+                .andExpect(ApiTestSupport.matchesContract());
+    }
+
+    @Test
+    void lastLoginWriteFailureDoesNotAuthenticateSession() throws Exception {
+        assertLoginWriteFailure("BEFORE UPDATE ON admin_user");
+    }
+
+    @Test
+    void auditWriteFailureDoesNotAuthenticateSessionOrCommitLastLogin() throws Exception {
+        var before = jdbc.queryForObject("SELECT last_login_at FROM admin_user WHERE login = 'admin'",
+                java.sql.Timestamp.class);
+        assertLoginWriteFailure("BEFORE INSERT ON audit_event");
+        assertThat(jdbc.queryForObject("SELECT last_login_at FROM admin_user WHERE login = 'admin'",
+                java.sql.Timestamp.class)).isEqualTo(before);
+    }
+
+    private void assertLoginWriteFailure(String triggerTarget) throws Exception {
+        MockHttpSession session = new MockHttpSession();
+        String token = csrf(session);
+        jdbc.execute("CREATE TRIGGER fail_login_write " + triggerTarget
+                + " FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'test login write failure'");
+        try {
+            mockMvc.perform(login(session, token, "admin", ApiTestSupport.PASSWORD, "10.1.1.1"))
+                    .andExpect(status().isInternalServerError())
+                    .andExpect(jsonPath("$.code").value("INTERNAL_SERVER_ERROR"));
+            assertThat(org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication())
+                    .isNull();
+            if (session.isInvalid()) {
+                mockMvc.perform(get("/api/v1/auth/me")).andExpect(status().isUnauthorized());
+            } else {
+                assertThat(session.getAttribute("SPRING_SECURITY_CONTEXT")).isNull();
+                mockMvc.perform(get("/api/v1/auth/me").session(session)).andExpect(status().isUnauthorized());
+            }
+        } finally {
+            jdbc.execute("DROP TRIGGER fail_login_write");
+        }
     }
 
     @Test

@@ -36,19 +36,14 @@ import com.aistudio.channel.Channel;
 import com.aistudio.channel.ChannelService;
 import com.aistudio.security.CurrentActor;
 import com.aistudio.shared.api.ApiException;
+import com.aistudio.shared.api.ApiId;
 import com.aistudio.shared.api.PageResponse;
 import com.aistudio.shared.api.PageResponse.PageQuery;
 
 /** 예산·환율·예약·원장·대시보드 API (docs/api/openapi.yaml). */
 final class BudgetControllers {
 
-    static final String ID = "^[1-9][0-9]{0,18}$";
-
     private BudgetControllers() {
-    }
-
-    static Long optionalId(String value) {
-        return value == null ? null : Long.parseLong(value);
     }
 
     // ------------------------------------------------------------------ 환율
@@ -91,8 +86,8 @@ final class BudgetControllers {
         }
 
         @GetMapping("/api/v1/exchange-rates/{rateId}")
-        ExchangeRateResponse get(@PathVariable @Pattern(regexp = ID) String rateId) {
-            return ExchangeRateResponse.from(service.get(Long.parseLong(rateId)));
+        ExchangeRateResponse get(@PathVariable @Pattern(regexp = ApiId.PATTERN) String rateId) {
+            return ExchangeRateResponse.from(service.get(ApiId.parse("rateId", rateId)));
         }
     }
 
@@ -101,7 +96,7 @@ final class BudgetControllers {
     static class BudgetPolicyController {
 
         record PolicyCreateRequest(@NotNull @Pattern(regexp = "SYSTEM|CHANNEL|CONTENT_TYPE") String scope,
-                @Pattern(regexp = ID) String channelId, @Pattern(regexp = "SHORTS|LONGFORM") String contentType,
+                @Pattern(regexp = ApiId.PATTERN) String channelId, @Pattern(regexp = "SHORTS|LONGFORM") String contentType,
                 @NotNull @Pattern(regexp = "DAY|MONTH|LIFETIME") String periodType,
                 @NotNull @Pattern(regexp = "^(0|[1-9][0-9]{0,17})(\\.[0-9]{1,6})?$") String limitKrw,
                 @NotBlank @Size(max = 64) String timezone, @Size(max = 500) String changeNote) {
@@ -124,19 +119,19 @@ final class BudgetControllers {
         @GetMapping("/api/v1/budget-policies")
         PageResponse<PolicyResponse> list(
                 @RequestParam(required = false) @Pattern(regexp = "SYSTEM|CHANNEL|CONTENT_TYPE") String scope,
-                @RequestParam(required = false) @Pattern(regexp = ID) String channelId,
+                @RequestParam(required = false) @Pattern(regexp = ApiId.PATTERN) String channelId,
                 @RequestParam(required = false) @Pattern(regexp = "ACTIVE|DISABLED") String status,
                 @RequestParam(defaultValue = "0") @Min(0) int page,
                 @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
             PageQuery query = new PageQuery(page, size);
-            Long channel = optionalId(channelId);
+            Long channel = ApiId.optional("channelId", channelId);
             return PageResponse.of(service.list(scope, channel, status, query), query,
                     service.count(scope, channel, status), PolicyResponse::from);
         }
 
         @PostMapping("/api/v1/budget-policies")
         ResponseEntity<PolicyResponse> create(@Valid @RequestBody PolicyCreateRequest body) {
-            BudgetPolicyService.PolicyView view = service.create(body.scope(), optionalId(body.channelId()),
+            BudgetPolicyService.PolicyView view = service.create(body.scope(), ApiId.optional("channelId", body.channelId()),
                     body.contentType(), body.periodType(), Money.parse("limitKrw", body.limitKrw(), Money.KRW_SCALE, 18),
                     body.timezone(), body.changeNote(), CurrentActor.actor());
             return ResponseEntity.created(URI.create("/api/v1/budget-policies/" + view.policy().id()))
@@ -144,49 +139,49 @@ final class BudgetControllers {
         }
 
         @GetMapping("/api/v1/budget-policies/{policyId}")
-        PolicyResponse get(@PathVariable @Pattern(regexp = ID) String policyId) {
-            return PolicyResponse.from(service.get(Long.parseLong(policyId)));
+        PolicyResponse get(@PathVariable @Pattern(regexp = ApiId.PATTERN) String policyId) {
+            return PolicyResponse.from(service.get(ApiId.parse("policyId", policyId)));
         }
 
         @GetMapping("/api/v1/budget-policies/{policyId}/revisions")
-        PageResponse<PolicyRevisionResponse> revisions(@PathVariable @Pattern(regexp = ID) String policyId,
+        PageResponse<PolicyRevisionResponse> revisions(@PathVariable @Pattern(regexp = ApiId.PATTERN) String policyId,
                 @RequestParam(defaultValue = "0") @Min(0) int page,
                 @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
-            long id = Long.parseLong(policyId);
+            long id = ApiId.parse("policyId", policyId);
             PageQuery query = new PageQuery(page, size);
             return PageResponse.of(service.revisions(id, query), query, service.countRevisions(id),
                     PolicyRevisionResponse::from);
         }
 
         @PostMapping("/api/v1/budget-policies/{policyId}/revisions")
-        ResponseEntity<PolicyResponse> revise(@PathVariable @Pattern(regexp = ID) String policyId,
+        ResponseEntity<PolicyResponse> revise(@PathVariable @Pattern(regexp = ApiId.PATTERN) String policyId,
                 @Valid @RequestBody RevisionCreateRequest body) {
-            BudgetPolicyService.PolicyView view = service.revise(Long.parseLong(policyId), body.baseRevisionNo(),
+            BudgetPolicyService.PolicyView view = service.revise(ApiId.parse("policyId", policyId), body.baseRevisionNo(),
                     Money.parse("limitKrw", body.limitKrw(), Money.KRW_SCALE, 18), body.timezone(), body.changeNote(),
                     CurrentActor.actor());
             return ResponseEntity.status(201).body(PolicyResponse.from(view));
         }
 
         @PostMapping("/api/v1/budget-policies/{policyId}/enable")
-        PolicyResponse enable(@PathVariable @Pattern(regexp = ID) String policyId,
+        PolicyResponse enable(@PathVariable @Pattern(regexp = ApiId.PATTERN) String policyId,
                 @Valid @RequestBody VersionRequest body) {
-            return PolicyResponse.from(service.setStatus(Long.parseLong(policyId), true, body.version(),
+            return PolicyResponse.from(service.setStatus(ApiId.parse("policyId", policyId), true, body.version(),
                     CurrentActor.actor()));
         }
 
         @PostMapping("/api/v1/budget-policies/{policyId}/disable")
-        PolicyResponse disable(@PathVariable @Pattern(regexp = ID) String policyId,
+        PolicyResponse disable(@PathVariable @Pattern(regexp = ApiId.PATTERN) String policyId,
                 @Valid @RequestBody VersionRequest body) {
-            return PolicyResponse.from(service.setStatus(Long.parseLong(policyId), false, body.version(),
+            return PolicyResponse.from(service.setStatus(ApiId.parse("policyId", policyId), false, body.version(),
                     CurrentActor.actor()));
         }
 
         @GetMapping("/api/v1/budget-policies/{policyId}/buckets")
-        PageResponse<BucketResponse> buckets(@PathVariable @Pattern(regexp = ID) String policyId,
+        PageResponse<BucketResponse> buckets(@PathVariable @Pattern(regexp = ApiId.PATTERN) String policyId,
                 @RequestParam(required = false) Instant from, @RequestParam(required = false) Instant to,
                 @RequestParam(defaultValue = "0") @Min(0) int page,
                 @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
-            long id = Long.parseLong(policyId);
+            long id = ApiId.parse("policyId", policyId);
             BudgetMapper.Policy policy = service.get(id).policy();
             PageQuery query = new PageQuery(page, size);
             return PageResponse.of(service.buckets(id, from, to, query), query, service.countBuckets(id, from, to),
@@ -213,8 +208,8 @@ final class BudgetControllers {
         }
 
         @GetMapping("/api/v1/budget/usage")
-        UsageResponse usage(@RequestParam(required = false) @Pattern(regexp = ID) String channelId) {
-            List<BucketResponse> buckets = usage.currentUsage(optionalId(channelId)).stream()
+        UsageResponse usage(@RequestParam(required = false) @Pattern(regexp = ApiId.PATTERN) String channelId) {
+            List<BucketResponse> buckets = usage.currentUsage(ApiId.optional("channelId", channelId)).stream()
                     .map(BucketResponse::from).toList();
             return new UsageResponse(clock.instant(), channelId, buckets);
         }
@@ -262,25 +257,25 @@ final class BudgetControllers {
         PageResponse<ReservationResponse> list(
                 @RequestParam(required = false)
                 @Pattern(regexp = "ACTIVE|RECONCILIATION_REQUIRED|SETTLED|RELEASED") String status,
-                @RequestParam(required = false) @Pattern(regexp = ID) String channelId,
+                @RequestParam(required = false) @Pattern(regexp = ApiId.PATTERN) String channelId,
                 @RequestParam(defaultValue = "0") @Min(0) int page,
                 @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
             PageQuery query = new PageQuery(page, size);
-            Long channel = optionalId(channelId);
+            Long channel = ApiId.optional("channelId", channelId);
             return PageResponse.of(service.list(status, channel, query), query, service.count(status, channel),
                     ReservationResponse::from);
         }
 
         @GetMapping("/api/v1/budget-reservations/{reservationId}")
-        ReservationDetailResponse get(@PathVariable @Pattern(regexp = ID) String reservationId) {
-            return detail(service.get(Long.parseLong(reservationId)));
+        ReservationDetailResponse get(@PathVariable @Pattern(regexp = ApiId.PATTERN) String reservationId) {
+            return detail(service.get(ApiId.parse("reservationId", reservationId)));
         }
 
         @PostMapping("/api/v1/budget-reservations/{reservationId}/resolve")
-        ReservationDetailResponse resolve(@PathVariable @Pattern(regexp = ID) String reservationId,
+        ReservationDetailResponse resolve(@PathVariable @Pattern(regexp = ApiId.PATTERN) String reservationId,
                 @RequestHeader("Idempotency-Key") @Pattern(regexp = "^[A-Za-z0-9:._-]{8,128}$") String idempotencyKey,
                 @Valid @RequestBody ResolveRequest body) {
-            long id = Long.parseLong(reservationId);
+            long id = ApiId.parse("reservationId", reservationId);
             BudgetMapper.Reservation result;
             if ("CHARGED".equals(body.outcome())) {
                 if (body.finalAmountOriginal() == null) {
@@ -297,13 +292,13 @@ final class BudgetControllers {
         }
 
         @PostMapping("/api/v1/budget-reservations/{reservationId}/adjustments")
-        ReservationDetailResponse adjust(@PathVariable @Pattern(regexp = ID) String reservationId,
+        ReservationDetailResponse adjust(@PathVariable @Pattern(regexp = ApiId.PATTERN) String reservationId,
                 @RequestHeader("Idempotency-Key") @Pattern(regexp = "^[A-Za-z0-9:._-]{8,128}$") String idempotencyKey,
                 @Valid @RequestBody AdjustRequest body) {
             BudgetReservationService.AdjustBasis basis = BudgetReservationService.AdjustBasis.valueOf(body.basis());
             int scale = basis == BudgetReservationService.AdjustBasis.KRW ? Money.KRW_SCALE : Money.ORIGINAL_SCALE;
             BudgetMapper.Reservation result = service.adjust(new BudgetReservationService.EventCommand(
-                    Long.parseLong(reservationId), idempotencyKey, Money.parse("amount", body.amount(), scale, 18),
+                    ApiId.parse("reservationId", reservationId), idempotencyKey, Money.parse("amount", body.amount(), scale, 12),
                     body.externalRef(), null, body.reasonCode(), body.note(), null, CurrentActor.actor()),
                     body.entryType(), basis);
             return detail(result);
@@ -324,8 +319,8 @@ final class BudgetControllers {
         }
 
         @GetMapping("/api/v1/cost-ledger")
-        PageResponse<CostLogResponse> list(@RequestParam(required = false) @Pattern(regexp = ID) String channelId,
-                @RequestParam(required = false) @Pattern(regexp = ID) String reservationId,
+        PageResponse<CostLogResponse> list(@RequestParam(required = false) @Pattern(regexp = ApiId.PATTERN) String channelId,
+                @RequestParam(required = false) @Pattern(regexp = ApiId.PATTERN) String reservationId,
                 @RequestParam(required = false) @Size(max = 128) String requestKey,
                 @RequestParam(required = false)
                 @Pattern(regexp = "RESERVE|RELEASE|PROVISIONAL|CONFIRM|ADJUSTMENT|REFUND") String entryType,
@@ -333,8 +328,8 @@ final class BudgetControllers {
                 @RequestParam(defaultValue = "0") @Min(0) int page,
                 @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
             PageQuery query = new PageQuery(page, size);
-            Long channel = optionalId(channelId);
-            Long reservation = optionalId(reservationId);
+            Long channel = ApiId.optional("channelId", channelId);
+            Long reservation = ApiId.optional("reservationId", reservationId);
             List<BudgetMapper.CostLog> rows = mapper.costLogs(channel, reservation, requestKey, entryType, from, to,
                     query.offset(), query.size());
             long total = mapper.countCostLogs(channel, reservation, requestKey, entryType, from, to);
