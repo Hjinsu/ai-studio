@@ -5,7 +5,7 @@
 |---|---|---|
 | T01 | DONE (2026-11-25 승인, 커밋 55e33ec, CI run 45440907314) | 프로젝트 bootstrap, 버전 고정, DB/Flyway, CI, health check |
 | T02 | DONE (2026-11-25 최종 승인, 제품 `55ea852`, [PR #1](https://github.com/Hjinsu/ai-studio/pull/1), 사용자 검증 14/14·최종 재확인 6/6) | 인증, 채널, 설정, 비용 원장 |
-| T03 | B TODO (조건부 착수 승인), C~F BLOCKED | 콘텐츠 revision, DB 큐, lease, 재시도 |
+| T03 | B IMPLEMENTED (최종 종료 승인 대기), C~F BLOCKED | 콘텐츠 revision, DB 큐, lease, 재시도 |
 | T04 | TODO | fake provider, 조사/대본/스토리보드 |
 | T05 | TODO | 이미지/TTS/자막/FFmpeg 로컬 렌더링 |
 | T06 | TODO | 검수/승인/관리자 UI |
@@ -15,6 +15,12 @@
 | T10 | TODO | 트렌드 및 멀티채널 확장 |
 ## 인수인계 기록
 작업 ID / 상태 / 변경 파일 / 테스트 명령 및 실제 결과 / 미해결 문제 / 다음 작업 / 필요 환경변수. 커밋 해시는 생성된 경우만 기록.
+
+### T03-B-INT — 제품 계약 통합
+
+- 독립 리뷰와 표적 재리뷰를 보존했다. 제품 기준 `b5ffc73`에서 RV-B-01~06 수정 검증을 완료했다(CONDITIONAL_APPROVE).
+- Topic·Content·Revision 제품 OpenAPI 10개 작업 및 타입 생성, 제품 계약 검증과 C-G01~10 인수 조건은 [통합 보고서](docs/reports/T03_B_INTEGRATION_REPORT.md)에 기록한다.
+- B는 IMPLEMENTED 상태로 사용자 종료·병합 승인을 기다린다. C~F는 별도 착수 승인 전 BLOCKED다.
 
 ### T03-A6 — 최종 구현 명세 작성 (2026-11-25)
 

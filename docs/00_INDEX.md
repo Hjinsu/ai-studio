@@ -30,3 +30,4 @@
 공통 계약은 ../AGENTS.md, 결정 변경은 ../DECISIONS.md, 진행 상태는 ../STATE.md, 작업 배정은 ../TASKS.md. 이 문서는 구현 전 기준선이며 기존 대화의 상세 FR 번호 체계는 아래 문서에서 새로 묶었다. 구현 시 변경 이력 관리.
 
 - T03 확정 구현 명세(ChatGPT APPROVE, T03-B만 조건부 착수 승인): [t03-final](plans/t03-final/README.md), [A5 통합 리뷰](reviews/T03_INTEGRATED_DESIGN_REVIEW.md). 기존 초안과 A3/A4는 검토 이력.
+- T03-B: [제품 OpenAPI](api/openapi.yaml), [통합 보고서](reports/T03_B_INTEGRATION_REPORT.md), [독립 리뷰](reviews/T03_B_CODEX_REVIEW.md), [표적 재리뷰](reviews/T03_B_FIX_CODEX_REVIEW.md).

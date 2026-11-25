@@ -44,6 +44,7 @@ import com.aistudio.channel.ChannelSettings;
 import com.aistudio.security.AdminAccountService;
 import com.aistudio.security.AdminPrincipal;
 import com.atlassian.oai.validator.model.Request;
+import com.atlassian.oai.validator.model.SimpleRequest;
 import com.atlassian.oai.validator.model.SimpleResponse;
 import com.atlassian.oai.validator.report.ValidationReport;
 
@@ -103,7 +104,7 @@ class ContentApiIT {
     }
 
     private ResultActions send(MockHttpServletRequestBuilder request) throws Exception {
-        return mockMvc.perform(request.with(ApiTestSupport.as(admin))).andExpect(T03ContractOverlay.matchesContract());
+        return mockMvc.perform(request.with(ApiTestSupport.as(admin))).andExpect(ApiTestSupport.matchesContract());
     }
 
     private ResultActions postJson(String path, String key, String body) throws Exception {
@@ -121,7 +122,7 @@ class ContentApiIT {
         var response = SimpleResponse.Builder.status(mvc.getResponse().getStatus())
                 .withContentType(mvc.getResponse().getContentType())
                 .withBody(mvc.getResponse().getContentAsString()).build();
-        ValidationReport report = T03ContractOverlay.validator().validateResponse(mvc.getRequest().getRequestURI(),
+        ValidationReport report = ApiTestSupport.validator().validateResponse(mvc.getRequest().getRequestURI(),
                 Request.Method.valueOf(mvc.getRequest().getMethod()), response);
         assertThat(report.getMessages()).as(mvc.getRequest().getRequestURI()).isEmpty();
         return result;
@@ -335,8 +336,13 @@ class ContentApiIT {
         postJson("/api/v1/contents", key(), contentBody(channelId, topicId, ",\"settings\":{\"ratio\":1.5}"))
                 .andExpect(status().isBadRequest());
         // 언어 형식
-        postJson("/api/v1/contents", key(), contentBody(channelId, topicId, ",\"language\":\"EN\""))
-                .andExpect(status().isBadRequest());
+        String invalidLanguage = contentBody(channelId, topicId, ",\"language\":\"EN\"");
+        String languageKey = key();
+        assertThat(ApiTestSupport.validator().validateRequest(SimpleRequest.Builder.post("/api/v1/contents")
+                .withHeader("Idempotency-Key", languageKey).withContentType("application/json")
+                .withBody(invalidLanguage).build()).hasErrors()).isTrue();
+        postInvalid("/api/v1/contents", languageKey, invalidLanguage)
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
         // 미정의 유형
         postInvalid("/api/v1/contents", key(), contentBody(channelId, topicId, "").replace("SHORTS", "MOVIE"))
                 .andExpect(status().isBadRequest());

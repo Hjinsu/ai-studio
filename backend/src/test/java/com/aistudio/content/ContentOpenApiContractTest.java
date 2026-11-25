@@ -4,16 +4,18 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.jupiter.api.Test;
 
+import com.aistudio.ApiTestSupport;
+
 import com.atlassian.oai.validator.OpenApiInteractionValidator;
 import com.atlassian.oai.validator.model.Request;
 import com.atlassian.oai.validator.model.SimpleRequest;
 import com.atlassian.oai.validator.model.SimpleResponse;
 import com.atlassian.oai.validator.report.ValidationReport;
 
-/** 통합 테스트가 쓰는 T03 계약 사본 검증기가 실제로 위반을 거부하는지 확인한다(무조건 통과 방지). */
-class T03ContractOverlayTest {
+/** Verifies that the product OpenAPI validator rejects invalid B requests and responses. */
+class ContentOpenApiContractTest {
 
-    private static final OpenApiInteractionValidator VALIDATOR = T03ContractOverlay.validator();
+    private static final OpenApiInteractionValidator VALIDATOR = ApiTestSupport.validator();
     private static final String TOPIC = "{\"id\":\"1\",\"channelId\":\"2\",\"title\":\"t\",\"note\":null,"
             + "\"createdAt\":\"2026-11-25T00:00:00Z\"}";
     private static final String REVISION = "{\"id\":\"3\",\"contentId\":\"4\",\"revisionNo\":1,\"workingTitle\":\"w\","

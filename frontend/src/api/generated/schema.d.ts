@@ -599,6 +599,137 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/topics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 채널의 Topic을 검색하고 페이지 조회한다. */
+        get: operations["listTopics"];
+        put?: never;
+        /**
+         * 채널에 불변 Topic을 등록한다.
+         * @description 명령 유형·대상과 기본값 및 저장 정규화 적용 전 요청값의 canonical 지문을 사용한다. 같은 키와 같은 지문은 HTTP 200으로 재생하며 다른 유형·대상 또는 지문은 409다. 문자열 길이는 해당 본문 필드의 문서화된 Unicode 코드포인트 기준을 따르며 짝 없는 surrogate는 400 VALIDATION_FAILED다.
+         */
+        post: operations["createTopic"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/topics/{topicId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Topic 상세를 조회한다. */
+        get: operations["getTopic"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/contents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 콘텐츠를 조건에 따라 검색하고 페이지 조회한다. */
+        get: operations["listContents"];
+        put?: never;
+        /**
+         * 콘텐츠와 첫 Revision을 같은 트랜잭션에서 등록한다. Topic은 지정된 채널에 속해야 한다.
+         * @description 명령 유형·대상과 기본값 및 저장 정규화 적용 전 요청값의 canonical 지문을 사용한다. 같은 키와 같은 지문은 HTTP 200으로 재생하며 다른 유형·대상 또는 지문은 409다. 문자열 길이는 해당 본문 필드의 문서화된 Unicode 코드포인트 기준을 따르며 짝 없는 surrogate는 400 VALIDATION_FAILED다.
+         */
+        post: operations["createContent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/contents/{contentId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 현재 Revision을 포함한 콘텐츠를 조회한다. */
+        get: operations["getContent"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/contents/{contentId}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** DRAFT이며 활성 포인터와 실제 비종료 Run이 없는 콘텐츠를 보관한다. */
+        post: operations["archiveContent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/contents/{contentId}/revisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 콘텐츠에 속한 불변 Revision을 페이지 조회한다. */
+        get: operations["listContentRevisions"];
+        put?: never;
+        /**
+         * DRAFT이며 활성 포인터와 실제 비종료 Run이 없는 콘텐츠에 Revision을 추가한다. 최신 채널 설정 revision을 적용한다.
+         * @description 명령 유형·대상과 기본값 및 저장 정규화 적용 전 요청값의 canonical 지문을 사용한다. 같은 키와 같은 지문은 HTTP 200으로 재생하며 다른 유형·대상 또는 지문은 409다. 문자열 길이는 해당 본문 필드의 문서화된 Unicode 코드포인트 기준을 따르며 짝 없는 surrogate는 400 VALIDATION_FAILED다.
+         */
+        post: operations["createContentRevision"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/contents/{contentId}/revisions/{revisionNo}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 지정된 콘텐츠에 속한 Revision을 조회한다. */
+        get: operations["getContentRevision"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1039,6 +1170,120 @@ export interface components {
             effectiveFrom?: string;
             note?: string;
         };
+        Topic: {
+            id: components["schemas"]["Id"];
+            channelId: components["schemas"]["Id"];
+            title: string;
+            note: string | null;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        TopicCreateRequest: {
+            channelId: components["schemas"]["Id"];
+            title: string;
+            note?: string | null;
+        };
+        TopicPage: {
+            items: components["schemas"]["Topic"][];
+            page: number;
+            size: number;
+            totalElements: number;
+            totalPages: number;
+        };
+        Content: {
+            id: components["schemas"]["Id"];
+            channelId: components["schemas"]["Id"];
+            topicId: components["schemas"]["Id"];
+            contentType: components["schemas"]["ContentType"];
+            title: string;
+            /** @enum {string} */
+            status: "DRAFT" | "PRODUCING" | "ARCHIVED";
+            version: number;
+            currentRevision: components["schemas"]["ContentRevision"];
+            activeRunId: string | null;
+            /** @description T03-D의 모든 콘텐츠 조회 경로 검증이 완료되면 필수로 전환한다. T03-B 응답에는 생략한다. */
+            budgetSummary?: components["schemas"]["ContentBudgetSummary"];
+        };
+        ContentCreateRequest: {
+            channelId: components["schemas"]["Id"];
+            topicId: components["schemas"]["Id"];
+            contentType: components["schemas"]["ContentType"];
+            /** @description 서버 정규화 후 Unicode 코드포인트 기준 길이를 검사한다. 짝 없는 surrogate는 400 VALIDATION_FAILED다. */
+            workingTitle: string;
+            /** @description 서버 정규화 후 Unicode 코드포인트 기준 길이를 검사한다. 짝 없는 surrogate는 400 VALIDATION_FAILED다. */
+            brief: string;
+            /** @description 생략하거나 null이면 채널 기본 언어를 사용한다. */
+            language?: string | null;
+            /** @description 콘텐츠 유형별 채널 설정의 최소·최대 영상 길이를 적용한다. */
+            targetDurationSeconds: number;
+            /** @description 생략하거나 null이면 빈 설정이다. 객체 내 중첩 배열·객체는 허용한다. 숫자는 정수만 허용하며 canonical JSON의 UTF-8 인코딩이 16 KiB 이하여야 한다. 키 및 값에 짝 없는 surrogate가 있으면 400 VALIDATION_FAILED다. */
+            settings?: {
+                [key: string]: unknown;
+            } | null;
+            /** @description 생략하거나 null이면 최신 채널 설정 revision을 사용한다. */
+            channelConfigRevisionNo?: number | null;
+            changeReason?: string | null;
+        };
+        ContentPage: {
+            items: components["schemas"]["Content"][];
+            page: number;
+            size: number;
+            totalElements: number;
+            totalPages: number;
+        };
+        ContentRevision: {
+            id: components["schemas"]["Id"];
+            contentId: components["schemas"]["Id"];
+            revisionNo: number;
+            workingTitle: string;
+            brief: string;
+            language: string;
+            targetDurationSeconds: number;
+            settings: {
+                [key: string]: unknown;
+            };
+            baseRunId: string | null;
+            revisionHash: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        ContentRevisionCreateRequest: {
+            baseRevisionNo: number;
+            /** @description 서버 정규화 후 Unicode 코드포인트 기준 길이를 검사한다. 짝 없는 surrogate는 400 VALIDATION_FAILED다. */
+            workingTitle: string;
+            /** @description 서버 정규화 후 Unicode 코드포인트 기준 길이를 검사한다. 짝 없는 surrogate는 400 VALIDATION_FAILED다. */
+            brief: string;
+            language: string;
+            /** @description 콘텐츠 유형별 채널 설정의 최소·최대 영상 길이를 적용한다. */
+            targetDurationSeconds: number;
+            /** @description 생략하거나 null이면 빈 설정이다. 객체 내 중첩 배열·객체는 허용한다. 숫자는 정수만 허용하며 canonical JSON의 UTF-8 인코딩이 16 KiB 이하여야 한다. 키 및 값에 짝 없는 surrogate가 있으면 400 VALIDATION_FAILED다. */
+            settings?: {
+                [key: string]: unknown;
+            } | null;
+            /** @description 지정 시 같은 콘텐츠의 SUCCEEDED Run만 허용한다. 조건 불충족 시 400 VALIDATION_FAILED다. */
+            baseRunId?: string | null;
+            changeReason?: string | null;
+        };
+        ContentRevisionPage: {
+            items: components["schemas"]["ContentRevision"][];
+            page: number;
+            size: number;
+            totalElements: number;
+            totalPages: number;
+        };
+        ContentBudgetSummary: {
+            applicable: boolean;
+            policies: components["schemas"]["ContentBudgetLine"][];
+        };
+        ContentBudgetLine: {
+            policyId: components["schemas"]["Id"];
+            /** @enum {string} */
+            periodType: "DAY" | "MONTH" | "LIFETIME";
+            limitKrw: components["schemas"]["NonNegativeKrwAmount"];
+            spentKrw: components["schemas"]["NonNegativeKrwAmount"];
+            reservedKrw: components["schemas"]["NonNegativeKrwAmount"];
+            remainingKrw: components["schemas"]["KrwAmount"];
+        };
     };
     responses: {
         /** @description INVALID_REQUEST, VALIDATION_FAILED, PAYLOAD_TOO_LARGE 등 입력 오류 */
@@ -1141,6 +1386,8 @@ export interface components {
         ReservationId: components["schemas"]["Id"];
         /** @description 원장 event_key로 사용. 같은 키·같은 내용은 같은 결과, 다른 내용은 409 RESOURCE_CONFLICT. */
         IdempotencyKey: components["schemas"]["IdempotencyKey"];
+        /** @description Topic 또는 콘텐츠 생성 명령의 영속 재생 키. */
+        ContentCommandKey: components["schemas"]["IdempotencyKey"];
     };
     requestBodies: never;
     headers: never;
@@ -1433,7 +1680,15 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
+            /** @description 활성 Run 포인터 또는 실제 비종료 Run이 있으면 INVALID_STATE_TRANSITION이다. 기존 상태 및 version 충돌도 409다. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
     getCurrentChannelConfig: {
@@ -2103,6 +2358,415 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    listTopics: {
+        parameters: {
+            query: {
+                page?: number;
+                size?: number;
+                channelId: components["schemas"]["Id"];
+                q?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success or replay */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TopicPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    createTopic: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Topic 또는 콘텐츠 생성 명령의 영속 재생 키. */
+                "Idempotency-Key": components["parameters"]["ContentCommandKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TopicCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Success or replay */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Topic"];
+                };
+            };
+            /** @description Created */
+            201: {
+                headers: {
+                    /** @description 생성된 리소스 경로 */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Topic"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description 정규화된 제목이 동일한 Topic은 DUPLICATE_RESOURCE와 details의 title 및 DUPLICATE_TOPIC:<기존 ID>로 반환한다. 보관 채널은 PREREQUISITE_NOT_MET이며 멱등 키·잠금 재시도 소진은 RESOURCE_CONFLICT다. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "code": "DUPLICATE_RESOURCE",
+                     *       "message": "동일한 주제가 있습니다.",
+                     *       "traceId": "example-trace",
+                     *       "timestamp": "2026-11-25T00:00:00Z",
+                     *       "details": [
+                     *         {
+                     *           "field": "title",
+                     *           "reason": "DUPLICATE_TOPIC:42"
+                     *         }
+                     *       ]
+                     *     }
+                     */
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getTopic: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                topicId: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success or replay */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Topic"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listContents: {
+        parameters: {
+            query?: {
+                page?: number;
+                size?: number;
+                channelId?: components["schemas"]["Id"];
+                topicId?: components["schemas"]["Id"];
+                contentType?: "SHORTS" | "LONGFORM";
+                status?: "DRAFT" | "PRODUCING" | "ARCHIVED";
+                q?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success or replay */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContentPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    createContent: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Topic 또는 콘텐츠 생성 명령의 영속 재생 키. */
+                "Idempotency-Key": components["parameters"]["ContentCommandKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContentCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Success or replay */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Content"];
+                };
+            };
+            /** @description Created */
+            201: {
+                headers: {
+                    /** @description 생성된 리소스 경로 */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Content"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description 채널·Topic이 없거나 Topic이 지정 채널 소유가 아니다. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getContent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                contentId: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success or replay */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Content"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    archiveContent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                contentId: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VersionRequest"];
+            };
+        };
+        responses: {
+            /** @description Success or replay */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Content"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description 상태, 활성 포인터 또는 비종료 Run 제약 위반은 INVALID_STATE_TRANSITION이다. version 충돌은 RESOURCE_CONFLICT다. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listContentRevisions: {
+        parameters: {
+            query?: {
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path: {
+                contentId: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success or replay */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContentRevisionPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    createContentRevision: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Topic 또는 콘텐츠 생성 명령의 영속 재생 키. */
+                "Idempotency-Key": components["parameters"]["ContentCommandKey"];
+            };
+            path: {
+                contentId: components["schemas"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContentRevisionCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Success or replay */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContentRevision"];
+                };
+            };
+            /** @description Created */
+            201: {
+                headers: {
+                    /** @description 생성된 리소스 경로 */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContentRevision"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description 상태·활성 Run 제약 위반은 INVALID_STATE_TRANSITION이다. 보관 채널은 PREREQUISITE_NOT_MET다. baseRevisionNo 충돌, 멱등 키 충돌 또는 변경 없음은 409이며 변경 없음은 DUPLICATE_RESOURCE와 details의 NO_CHANGES로 반환한다. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "code": "DUPLICATE_RESOURCE",
+                     *       "message": "변경된 내용이 없습니다.",
+                     *       "traceId": "example-trace",
+                     *       "timestamp": "2026-11-25T00:00:00Z",
+                     *       "details": [
+                     *         {
+                     *           "field": null,
+                     *           "reason": "NO_CHANGES"
+                     *         }
+                     *       ]
+                     *     }
+                     */
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getContentRevision: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                contentId: components["schemas"]["Id"];
+                revisionNo: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success or replay */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContentRevision"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description 콘텐츠가 없거나 요청한 revisionNo가 해당 콘텐츠에 없다. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            500: components["responses"]["InternalError"];
         };
     };
 }
