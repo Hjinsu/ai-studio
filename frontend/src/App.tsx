@@ -3,25 +3,30 @@ import { RouterProvider, type DataRouter } from 'react-router'
 import { currentUser } from './api/admin'
 import { isUnauthorized } from './api/http'
 import { ME_KEY } from './queryClient'
-import { ErrorAlert, Loading } from './ui/components'
+import { Button } from './ui/Button'
+import { ErrorState, LoadingSkeleton } from './ui/States'
 import { LoginPage } from './pages/LoginPage'
 
 /** 로그인 여부에 따라 로그인 화면 또는 관리자 화면(라우터)을 보여준다(ADR-037). */
 export function App({ router }: { router: DataRouter }) {
   const me = useQuery({ queryKey: ME_KEY, queryFn: currentUser, retry: false })
   if (me.isPending) {
-    return <Loading />
+    return (
+      <main className="grid min-h-screen place-items-center bg-bg px-4">
+        <LoadingSkeleton rows={2} className="w-64" />
+      </main>
+    )
   }
   if (me.isError) {
     if (isUnauthorized(me.error)) {
       return <LoginPage />
     }
     return (
-      <main className="centered">
-        <ErrorAlert error={me.error} />
-        <button type="button" onClick={() => void me.refetch()}>
-          다시 시도
-        </button>
+      <main className="grid min-h-screen place-items-center bg-bg px-4">
+        <div className="grid w-full max-w-md gap-3">
+          <ErrorState error={me.error} />
+          <Button onClick={() => void me.refetch()}>다시 시도</Button>
+        </div>
       </main>
     )
   }

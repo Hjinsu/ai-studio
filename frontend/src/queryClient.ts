@@ -1,5 +1,6 @@
 import { QueryCache, QueryClient } from '@tanstack/react-query'
 import { isUnauthorized } from './api/http'
+import { markSessionExpired } from './lib/session'
 
 export const ME_KEY = ['auth', 'me'] as const
 
@@ -12,6 +13,8 @@ export function createQueryClient(): QueryClient {
     queryCache: new QueryCache({
       onError: (error, query) => {
         if (isUnauthorized(error) && query.queryKey[0] !== ME_KEY[0]) {
+          // 로그인된 상태에서 받은 401 = 세션 만료·무효화 → 로그인 화면에서 안내
+          markSessionExpired()
           void client.invalidateQueries({ queryKey: ME_KEY })
         }
       },

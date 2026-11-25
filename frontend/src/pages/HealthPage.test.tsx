@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { describe, expect, it, vi } from 'vitest'
 import { HealthPage } from './HealthPage'
@@ -19,36 +19,31 @@ function stubFetch(status: number, body: string) {
 }
 
 describe('HealthPage', () => {
-  it('shows UP status from /actuator/health', async () => {
+  it('shows 정상 for UP from /actuator/health only', async () => {
     const fetchMock = stubFetch(200, '{"status":"UP"}')
-
     renderWithClient()
-
-    expect(await screen.findByTestId('health-status')).toHaveTextContent('UP')
+    await waitFor(() => expect(screen.getByTestId('health-status')).toHaveTextContent('정상'))
     expect(fetchMock).toHaveBeenCalledWith('/actuator/health', expect.anything())
+    expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
-  it('shows DOWN status when server reports 503', async () => {
+  it('shows 연결 실패 when the server reports DOWN (503)', async () => {
     stubFetch(503, '{"status":"DOWN"}')
-
     renderWithClient()
-
-    expect(await screen.findByTestId('health-status')).toHaveTextContent('DOWN')
+    await waitFor(() => expect(screen.getByTestId('health-status')).toHaveTextContent('연결 실패'))
+    expect(screen.getByText('서버가 정상 상태가 아니라고 응답했습니다.')).toBeInTheDocument()
   })
 
-  it('shows an alert when the server is unreachable', async () => {
+  it('shows 연결 실패 when the server is unreachable', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => Promise.reject(new TypeError('Failed to fetch'))))
-
     renderWithClient()
-
-    expect(await screen.findByRole('alert')).toHaveTextContent('서버에 연결할 수 없습니다.')
+    await waitFor(() => expect(screen.getByTestId('health-status')).toHaveTextContent('연결 실패'))
+    expect(screen.getByText(/서버에 연결할 수 없습니다/)).toBeInTheDocument()
   })
 
-  it('shows an alert for a non-health error body', async () => {
-    stubFetch(500, '{"code":"INTERNAL_SERVER_ERROR","message":"x","traceId":"t","timestamp":"2026-01-01T00:00:00Z","details":[]}')
-
+  it('shows 확인 중 while pending', () => {
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => {})))
     renderWithClient()
-
-    expect(await screen.findByRole('alert')).toBeInTheDocument()
+    expect(screen.getByTestId('health-status')).toHaveTextContent('확인 중')
   })
 })

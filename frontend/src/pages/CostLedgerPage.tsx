@@ -1,7 +1,14 @@
 import { useState, type FormEvent } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { BookOpenText, Search } from 'lucide-react'
 import { listCostLedger } from '../api/admin'
-import { Field, Pager, QueryView } from '../ui/components'
+import { ENTRY_TYPE } from '../lib/labels'
+import { Button } from '../ui/Button'
+import { ChannelSelect } from '../ui/ChannelSelect'
+import { Pagination } from '../ui/DataTable'
+import { FormField, Input, Select } from '../ui/Form'
+import { PageHeader } from '../ui/PageHeader'
+import { EmptyState, QueryView } from '../ui/States'
 import { LedgerTable } from './LedgerTable'
 
 interface Filters {
@@ -13,6 +20,7 @@ interface Filters {
 
 const EMPTY: Filters = { channelId: '', reservationId: '', requestKey: '', entryType: '' }
 
+/** 비용 원장 조회(추가 전용, 수정·삭제 없음). 정정은 조정·환불 이벤트로만 기록된다. */
 export function CostLedgerPage() {
   const [draft, setDraft] = useState<Filters>(EMPTY)
   const [filters, setFilters] = useState<Filters>(EMPTY)
@@ -33,45 +41,42 @@ export function CostLedgerPage() {
   const submit = (event: FormEvent) => {
     event.preventDefault()
     setPage(0)
-    setFilters(draft)
+    setFilters({ ...draft, reservationId: draft.reservationId.trim(), requestKey: draft.requestKey.trim() })
   }
-  const set = (key: keyof Filters) => (value: string) => setDraft((current) => ({ ...current, [key]: value }))
+  const filtered = Object.values(filters).some(Boolean)
   return (
-    <section aria-labelledby="ledger-heading">
-      <h1 id="ledger-heading">비용 원장</h1>
-      <p className="muted">원장은 추가만 가능하며 수정·삭제할 수 없습니다. 정정은 조정·환불 이벤트로 기록됩니다.</p>
-      <form onSubmit={submit} className="filters">
-        <Field label="채널 ID">
-          <input pattern="[1-9][0-9]{0,18}" value={draft.channelId} onChange={(e) => set('channelId')(e.target.value)} />
-        </Field>
-        <Field label="예약 ID">
-          <input pattern="[1-9][0-9]{0,18}" value={draft.reservationId}
-            onChange={(e) => set('reservationId')(e.target.value)} />
-        </Field>
-        <Field label="요청 키">
-          <input maxLength={128} value={draft.requestKey} onChange={(e) => set('requestKey')(e.target.value)} />
-        </Field>
-        <Field label="유형">
-          <select value={draft.entryType} onChange={(e) => set('entryType')(e.target.value)}>
+    <>
+      <PageHeader title="비용 원장" description="모든 비용 변동의 불변 기록입니다. 잘못된 기록은 수정하지 않고 조정·환불 이벤트로 바로잡습니다." />
+      <form onSubmit={submit} className="mb-4 grid gap-3 rounded-lg border border-line bg-surface p-4 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_8rem_10rem_auto] lg:items-end" aria-label="원장 검색">
+        <FormField label="채널">
+          <ChannelSelect value={draft.channelId} onChange={(channelId) => setDraft({ ...draft, channelId })} allLabel="전체 채널" />
+        </FormField>
+        <FormField label="요청 키">
+          <Input maxLength={128} value={draft.requestKey} onChange={(e) => setDraft({ ...draft, requestKey: e.target.value })} />
+        </FormField>
+        <FormField label="예약 번호">
+          <Input inputMode="numeric" pattern="[1-9][0-9]{0,18}" value={draft.reservationId} onChange={(e) => setDraft({ ...draft, reservationId: e.target.value })} />
+        </FormField>
+        <FormField label="유형">
+          <Select value={draft.entryType} onChange={(e) => setDraft({ ...draft, entryType: e.target.value })}>
             <option value="">전체</option>
-            {['RESERVE', 'PROVISIONAL', 'CONFIRM', 'RELEASE', 'ADJUSTMENT', 'REFUND'].map((type) => (
-              <option key={type} value={type}>
-                {type}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <button type="submit">조회</button>
+            {Object.entries(ENTRY_TYPE).map(([value, entry]) => <option key={value} value={value}>{entry.text}</option>)}
+          </Select>
+        </FormField>
+        <Button type="submit" icon={<Search aria-hidden className="size-4" />} loading={ledger.isFetching && !ledger.isPending}>
+          조회
+        </Button>
       </form>
-      <QueryView query={ledger}>
-        {(data) => (
+      <QueryView query={ledger} rows={6}>
+        {(data) => data.items.length === 0 ? (
+          <EmptyState icon={<BookOpenText className="size-6" />} title={filtered ? '조건에 맞는 기록이 없습니다' : '원장 기록이 없습니다'} description={filtered ? '검색 조건을 바꿔 보세요.' : '비용 예약이 생기면 기록이 쌓입니다.'} />
+        ) : (
           <>
-            <p className="muted">총 {data.totalElements}건</p>
             <LedgerTable entries={data.items} />
-            <Pager page={data.page} totalPages={data.totalPages} onChange={setPage} />
+            <Pagination page={data.page} totalPages={data.totalPages} totalElements={data.totalElements} onChange={setPage} />
           </>
         )}
       </QueryView>
-    </section>
+    </>
   )
 }
