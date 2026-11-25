@@ -33,4 +33,6 @@
 - `DEBUG=false` 환경에서 `.\gradlew.bat :backend:test :backend:integrationTest :backend:bootJar --no-build-cache` 성공. 단위 129건, 통합 90건, 실패·오류·skip 0건. 최초 전체 실행에서 상속된 DEBUG 환경이 CLI 조건 보고서에 비활성 Tomcat 클래스 이름을 노출해 기존 문자열 검사가 실패했다. 재실행에서는 테스트 프로세스의 DEBUG만 false로 설정했다.
 - 체크섬을 확인한 gitleaks 8.30.1의 `git --staged --redact .` 및 `git --redact .` 검사에서 누수 없음. 기존 fingerprint 두 건을 유지했다.
 - `npm.cmd ci` 후 `npm.cmd run generate`, `npm.cmd run lint:openapi`, `npm.cmd run check` 통과. 기존 Redocly 경고 2건(CSRF 4xx 정의, PageMeta 직접 미참조).
+- 백엔드 전용 [Draft PR #2](https://github.com/Hjinsu/ai-studio/pull/2)의 HEAD `52c6f97`에서 [CI 45544416344](https://github.com/Hjinsu/ai-studio/actions/runs/45544416344) 6개 작업이 모두 통과했다. Linux 단위·Testcontainers 통합 테스트, boot JAR 및 이미지 빌드, Windows 백엔드, 양쪽 프론트엔드, OpenAPI, gitleaks를 포함한다. 이 결과를 남기는 후속 커밋은 보고서만 수정한다.
+- **미검증** · 실제 동시 로그인 부하에서의 BCrypt 작업량은 계측하지 않았다. UI를 합친 최신 통합 PR HEAD의 CI와 Claude Code 독립 리뷰는 통합 담당자에게 이관했다.
 - 통합 담당자에게 Claude Code의 독립 백엔드 리뷰와 UI를 포함한 최신 통합 PR HEAD의 CI 검증을 요청한다. main 병합, T02 DONE 전환, T03 착수, 실제 유료 호출·운영 지출 설정·게시 작업은 수행하지 않았다.
