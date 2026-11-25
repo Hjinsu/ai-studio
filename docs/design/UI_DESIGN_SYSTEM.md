@@ -18,7 +18,8 @@
 | Background | `bg-bg` | #F6F7F9 | #0E1116 | 페이지 바탕 |
 | Surface | `bg-surface` | #FFFFFF | #151922 | 패널·표·입력 |
 | Subtle | `bg-subtle` | #F0F2F5 | #1B2030 | 표 머리, 진행 막대 바탕, hover |
-| Border | `border-line` / `border-line-strong` | #E1E4EA / #C9CED8 | #262C3A / #364056 | 구분선 / 입력 테두리 |
+| Border | `border-line` / `border-line-strong` | #E1E4EA / #C9CED8 | #262C3A / #364056 | 구분선 / 강한 구분선 |
+| Input border | `border-input-border` | #7D8696 | #6B7690 | 입력·선택 컨트롤 경계. surface·bg·subtle 대비 3:1 이상(WCAG 1.4.11, ADR-066). 대비는 `lib/budget.test.ts`가 토큰에서 계산해 검사 |
 | Text | `text-text` / `text-muted` | #171B24 / #5B6474 | #E7EAF0 / #98A1B3 | 본문 / 보조 |
 | Primary | `bg-primary` `text-primary` `bg-primary-soft` | #3451D1 | #7B92F5 | 주 작업 1개, 선택 상태, 실제 지출 |
 | Secondary | `bg-secondary` | #E9ECF2 | #222838 | 보조 표면 |
@@ -44,9 +45,9 @@
 | Card · StatCard | `Card.tsx` | 패널(테두리), 요약 지표. 금액은 `Money`로 |
 | DataTable · Pagination | `DataTable.tsx` | 표 영역만 가로 스크롤(페이지는 넘치지 않음). 숫자 열 오른쪽 정렬. 보조 열은 `hideBelow`. `rowTone`으로 주의 행 강조 |
 | StatusBadge · LabelBadge | `StatusBadge.tsx` | 항상 텍스트 포함. 레이블은 `lib/labels.ts` |
-| ProgressBar · BudgetMeter | `Meter.tsx` | 예산 표시는 BudgetMeter(실제/예약/잔여 구분, 0원=전면 차단, 80%↑ 소진 임박, 초과). 비율은 표시용이며 예산 판단은 서버 |
+| ProgressBar · BudgetMeter | `Meter.tsx` | 예산 표시는 BudgetMeter(실제/예약/잔여 구분, 0원=전면 차단, 80%↑ 소진 임박, 정확히 100%=한도 소진, 초과=한도 초과 — 문자열 정밀 비교). 비율은 표시용이며 예산 판단은 서버 |
 | Dialog · ConfirmDialog | `Dialog.tsx` | Radix(포커스 가두기, Esc). 위험 작업은 ConfirmDialog(`tone` danger/risk/primary, 처리 중 닫기·중복 실행 방지, 사유 입력은 children) |
-| Tooltip · Tabs | `Overlay.tsx` | 툴팁은 보조 설명만(필수 정보 금지). 탭은 화면 안 영역 전환, 상태는 URL `?tab=` 권장 |
+| Tooltip · Tabs | `Overlay.tsx` | 툴팁은 보조 설명만(필수 정보 금지). 탭은 화면 안 영역 전환, 상태는 URL `?tab=` 권장. 탭 목록은 가로 스크롤만(세로 스크롤 숨김), 포커스 윤곽선은 안쪽 |
 | EmptyState · LoadingSkeleton · ErrorState · QueryView · InlineNotice | `States.tsx` | 모든 조회는 QueryView(로딩→스켈레톤, 실패→ErrorState+다시 시도). 빈 상태는 무엇이 없는지+다음 행동. **가상 데이터 금지** |
 | Toast | `Toast.tsx`, `toast-context.ts` | 저장 결과 요약만(`useToast().success/error`). 오류 상세는 폼 안에 |
 | Money(CurrencyDisplay) · Rate · Decimal · DateTime(DateTimeDisplay) | `Display.tsx` | 금액 `₩300,000`, 환율 `1 USD = ₩1,500`, 시각 `YYYY-MM-DD HH:mm` + 시간대 |
@@ -59,14 +60,18 @@
 - **금액·환율은 문자열로만 다룬다**(`lib/decimal.ts`). JavaScript Number 변환 금지. 표시: 천 단위 구분 + 후행 0 제거(`300000.000000` → `₩300,000`, `1400.123457` 유지). 비교·합계·비율은 BigInt 고정소수점 함수(`compareDecimal`, `addDecimal`, `minDecimal`, `percentOf`).
 - 입력은 쉼표를 제거한 문자열을 API 패턴(`matchesAmount`)으로 검증해 그대로 보낸다.
 - 시각은 UTC 저장값을 채널·bucket 시간대(없으면 브라우저 시간대)로 표시하고 시간대 이름을 함께 둔다. 원래 UTC 값은 `title`.
+- **목록 순서는 서버 정렬을 보존한다**(원장 이벤트 = id 오름차순, 환율 = 발효 시각·id 내림차순). ISO 시각 문자열 정렬이나 `Number(id)` 비교로 다시 정렬하지 않는다(소수초 표기 차이·BIGINT 정밀도 손실, ADR-066). 시각 비교가 필요하면 `Date.parse`.
+- 표시용 한국어 레이블(`lib/labels.ts`)은 저장값·API 값을 바꾸지 않으며 모르는 값은 원문을 보여준다(예: 스타일 `STYLE`, 언어 `languageLabel` → "영어(en)").
 - ID 대신 이름(채널명 등)을 보여준다. 식별이 필요하면 `#id`를 보조로.
 - 비용 증감: 증가 `+₩`, 감소 `−₩` + 화살표 + 스크린리더 "증가/감소".
 
 ## 5. 상태·오류·안전
-- 모든 데이터 화면: 로딩, 정상, 데이터 없음, 조회 실패, 권한 오류(403), 세션 만료(401 → 로그인 화면 + 만료 안내)를 처리한다(`QueryView`, `ErrorState`, `queryClient.ts`).
+- 모든 데이터 화면: 로딩, 정상, 데이터 없음, 조회 실패, 권한 오류(403), 세션 만료(401 → 로그인 화면 + 만료 안내)를 처리한다(`QueryView`, `ErrorState`, `queryClient.ts`). 세션 만료는 조회·변경 요청 모두 같은 경로로 한 번만 처리하고 CSRF·보호 캐시·변경 요청을 비운다. 실패한 변경 요청은 재로그인 후 자동 재실행하지 않는다. 로그인·로그아웃 요청은 `meta: AUTH_FLOW_META`로 제외한다.
+- **신규 지출 표시**: `spendingView()`로 관리자 설정과 서버 차단(관리자 차단 또는 정합성 ERROR)을 구분한다. 허용은 "관리자 설정: 허용"으로만 표시하고 예약 가능으로 단정하지 않는다(나머지 조건은 서버가 예약 시 검사).
+- **비용 기록 응답 유실**(네트워크·5xx): 자동 재전송 금지. 다시 조회해 이번 멱등 키가 원장에 있는지 확인하고 안내한다. 같은 확인 창 재시도는 같은 키(ReservationDetailPage 패턴).
 - 저장 중 버튼 `loading`(중복 제출 방지). 비용 관련 쓰기는 멱등 키를 한 작업 동안 유지(`newIdempotencyKey`).
 - 비용이 발생할 수 있는 작업(지출 허용 등)은 `risk` 버튼 + ConfirmDialog + 사유 입력. 원장은 수정·삭제 UI를 만들지 않는다.
-- 접근성: 키보드로 모든 작업 가능, `:focus-visible` 윤곽선, 모든 입력에 레이블, 아이콘 버튼에 이름, 본문 건너뛰기 링크, `prefers-reduced-motion` 존중.
+- 접근성: 키보드로 모든 작업 가능, `:focus-visible` 윤곽선, 모든 입력에 레이블, 아이콘 버튼에 이름, 본문 건너뛰기 링크, `prefers-reduced-motion` 존중. 모달·드로어는 직접 만들지 말고 Radix Dialog를 쓰고 여는 버튼은 `Dialog.Trigger`로 연결한다(닫은 뒤 포커스 복귀). 모바일 메뉴가 그 예(`AppShell.tsx`).
 
 ## 6. 새 화면 추가 절차 (T03~T10)
 1. `routes.tsx`에 `lazy` 라우트 추가, `layout/nav.ts`의 그룹에 메뉴 추가(새 영역이면 새 그룹).

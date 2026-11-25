@@ -179,7 +179,7 @@ CI는 Draft PR [#1](https://github.com/Hjinsu/ai-studio/pull/1)(main 대상, **�
 
 ### 11.5 Codex UI 독립 리뷰
 - 요청: TASKS.md `T02-UI-RV`(Codex). 기준 = 제품 코드 최종 커밋 `8319672`(이후 커밋은 문서만), 범위 `fa32535..8319672`의 `frontend/`와 `docs/design/UI_DESIGN_SYSTEM.md`. 보고서 `docs/reviews/T02_CODEX_UI_REVIEW.md` 권장.
-- 상태: **미착수(요청됨)**. 이 리뷰 완료 전에는 T02 종료 처리하지 않는다. 결함이 나오면 심각도·영향 범위 보고 후 수정 범위 승인을 받는다.
+- 상태: **완료** — [T02_CODEX_FRONTEND_REVIEW](../reviews/T02_CODEX_FRONTEND_REVIEW.md)(Git 보고서 참조 `refs/reviews/t02-ui-rv`), 종료 승인 보류 권고, MEDIUM 5·LOW 1(UI-RV-01~06), CRITICAL·HIGH 없음. 사용자가 전부 수정 승인 → §12 T02-UI-FIX.
 
 ### 11.6 사용자 실제 테스트 절차
 [T02_USER_VERIFICATION.md](../guides/T02_USER_VERIFICATION.md): 기존 `ai_studio` 폴더에서 `git pull --ff-only` → `bootRun`(새 migration 없음, V5 `up to date`) → `npm.cmd ci`(새 UI 의존성) → `npm.cmd run dev`. 기존 개발 DB·관리자·IFNOVA·정책·환율 보존, **지출 차단 유지**, 읽기 전용 SELECT 점검(스키마 버전·데이터·지출 상태·링크 오류 미리보기), 화면별 확인표. "지금 검사"는 `budget_control` 정합성 상태와 감사 로그를 갱신함을 안내. 누락 연결 자동 복구·원장 수정 없음.
@@ -196,3 +196,17 @@ CI는 Draft PR [#1](https://github.com/Hjinsu/ai-studio/pull/1)(main 대상, **�
 2. Codex worktree `../ai-studio-t02-fix` 제거는 Codex 작업 종료 확인 + 사용자 승인 후(`git worktree remove`, 강제 삭제 금지).
 3. Claude 검토용 임시 worktree(`../ai-studio-review-6a32c64`)는 이미 제거·prune 완료. 임시 MariaDB(scratch, 3307)는 종료.
 4. PR #1의 main 병합은 T02 최종 승인 이후 별도 지시로만.
+
+## 12. T02-UI-FIX — Codex UI 리뷰 결함·사용자 확인 항목 수정 (2026-11-25, Claude Code)
+상세: [T02_UI_FIX_REPORT.md](T02_UI_FIX_REPORT.md).
+
+### 12.1 이전 CI 재실행 기록
+- `6f4589f`(문서 커밋) CI run **45558365457**: 1차 시도 Backend Linux가 Maven Central HTTP 429(외부 저장소 요청 제한)로 실패 → 실패 job만 재실행(2차 시도) **전 7개 job 성공**. 코드 결함이 아닌 외부 일시 오류.
+
+### 12.2 사용자 실제 화면 검증(사용자 보고)
+통합 UI 주요 화면 확인. 기존 관리자 계정·IFNOVA 채널·예산 정책 6개·테스트 환율·지출 차단 상태 보존, 정합성 검사 실행 결과 정상, 예약·원장 비어 있음(정상), 서버 상태 정상, 라이트·다크·반응형·로그아웃 등 사용자 확인 결과대로 기록. 실제 유료 예약·정산 미실행. 이 검증에서 발견한 표시 개선 사항이 UI-F01~F13이다.
+
+### 12.3 결과 요약
+- UI-RV-01~06 수정, UI-F01·F02·F03·F04·F05·F07·F11·F12·F13 표시 문구 반영(enum·API 불변), A02(정확히 100% = 한도 소진)·A03(HydrateFallback) 해결, A01은 응답 유실 확인 안내로 완화하고 근본 해결을 P-T02-05로 제안(실제 비용 발생 전 해결 또는 수용 필요).
+- 검증: vitest 60/60, E2E 10/10(Mock API, 3회 연속), lint·typecheck·build, OpenAPI·생성 타입, 백엔드 단위 133/133·통합 97/97(격리 MariaDB 3307)·bootJar. CI 결과는 STATE.md에 기록.
+- 보류: UI-F06·F08·F09·F10. API·DB·Flyway 변경 없음.

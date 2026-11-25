@@ -43,7 +43,7 @@ export function RevisionHistory({ entries, label }: { entries: RevisionEntry[]; 
             </div>
             {entry.note && <p className="mt-1 text-sm">{entry.note}</p>}
             {entry.changes === undefined ? null : entry.changes.length === 0 ? (
-              <p className="mt-1.5 text-sm text-muted">이전 revision과 같은 설정입니다.</p>
+              <p className="mt-1.5 text-sm text-muted">이전 버전과 같은 설정입니다.</p>
             ) : (
               <dl className="mt-2 grid gap-1.5 rounded-md border border-line bg-subtle/60 px-3 py-2.5 text-sm">
                 {entry.changes.map((change) => (

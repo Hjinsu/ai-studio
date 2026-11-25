@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, ShieldAlert, ShieldCheck, ShieldOff, X } from 'lucide-react'
 import { budgetControl, listPolicies, runConsistencyCheck, setSpending, type Schemas } from '../api/admin'
+import { spendingView } from '../lib/budget'
 import { CHECK_CODE, CHECK_DETAIL, CONSISTENCY, label } from '../lib/labels'
 import { cn } from '../lib/cn'
 import { Button } from '../ui/Button'
@@ -56,10 +57,11 @@ export function SpendingControlPage() {
       <QueryView query={control} rows={4}>
         {(data) => {
           const enabled = data.spendingEnabled
+          const view = spendingView(enabled, data.consistency.status)
           const consistency = label(CONSISTENCY, data.consistency.status)
           const periods = new Set((systemPolicies.data?.items ?? []).map((p) => p.periodType))
           const checks = [
-            { ok: enabled, text: '지출이 허용되어 있음', detail: enabled ? undefined : '현재 관리자 차단 상태입니다.' },
+            { ok: enabled, text: '관리자 설정이 허용', detail: enabled ? undefined : '현재 관리자 차단 상태입니다.' },
             { ok: data.consistency.status !== 'ERROR', text: '정합성 상태가 오류가 아님', detail: `현재 ${consistency.text}` },
             { ok: periods.has('DAY'), text: '시스템 전체 일간 정책 활성', detail: systemPolicies.isPending ? '확인 중' : undefined },
             { ok: periods.has('MONTH'), text: '시스템 전체 월간 정책 활성', detail: systemPolicies.isPending ? '확인 중' : undefined },
@@ -68,23 +70,30 @@ export function SpendingControlPage() {
             <div className="grid gap-5">
               <section
                 aria-labelledby="spending-state"
-                className={cn('rounded-lg border p-5', enabled ? 'border-line bg-surface' : 'border-warning bg-warning-soft')}
+                className={cn('rounded-lg border p-5', !view.blocked ? 'border-line bg-surface' : view.consistencyError ? 'border-danger bg-danger-soft' : 'border-warning bg-warning-soft')}
               >
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div className="flex items-start gap-3">
-                    {enabled ? (
+                    {!view.blocked ? (
                       <ShieldCheck aria-hidden className="mt-0.5 size-6 text-success" />
                     ) : (
-                      <ShieldOff aria-hidden className="mt-0.5 size-6 text-warning" />
+                      <ShieldOff aria-hidden className={cn('mt-0.5 size-6', view.consistencyError ? 'text-danger' : 'text-warning')} />
                     )}
                     <div>
                       <h2 id="spending-state" className="text-lg font-semibold">
-                        {enabled ? '신규 지출 허용 중' : '신규 지출 차단됨'}
+                        {view.blocked ? '신규 지출 차단됨' : '관리자 설정: 신규 지출 허용'}
                       </h2>
+                      <p className="mt-1 text-sm font-medium">
+                        관리자 설정 {enabled ? '허용' : '차단'} · 정합성 {consistency.text}
+                      </p>
                       <p className="mt-1 max-w-2xl text-sm text-muted">
-                        {enabled
-                          ? '예산 조건을 만족하는 비용 예약이 가능합니다. 문제가 생기면 즉시 차단하세요.'
-                          : '모든 신규 비용 예약이 거부됩니다(기본값). 이미 잡힌 예약의 정산과 조회는 계속됩니다.'}
+                        {!enabled
+                          ? '관리자 차단으로 모든 신규 비용 예약이 거부됩니다(기본값).'
+                          : view.consistencyError
+                            ? '관리자 설정은 허용이지만 정합성 검사 오류로 서버가 모든 신규 비용 예약을 거부합니다. 오류 원인을 확인하고 다시 검사해 정상이 되어야 해제됩니다.'
+                            : '관리자 차단은 해제되어 있습니다. 예산 정책·채널 상태·환율·한도 등 나머지 조건은 예약할 때마다 서버가 다시 검사합니다.'}
+                        {view.blocked && ' 이미 잡힌 예약의 정산과 조회는 계속할 수 있습니다.'}
+                        {!view.blocked && view.consistencyUnknown && ' 정합성 검사를 아직 하지 않았습니다.'}
                       </p>
                       {data.spendingChangedAt && (
                         <p className="mt-2 text-sm">
@@ -194,7 +203,7 @@ export function SpendingControlPage() {
                 ) : (
                   <>
                     <p>
-                      <strong>시스템 전체</strong>에서 예산 조건을 만족하는 비용 예약이 가능해집니다. 실제 provider가 연동되면 유료 호출로 이어질 수
+                      <strong>시스템 전체</strong>에서 예산 조건을 만족하는 비용 예약이 가능해집니다. 실제 AI 서비스 등이 연동되면 유료 호출로 이어질 수
                       있습니다.
                     </p>
                     <p className="text-sm text-muted">예산 정책·정합성·채널 상태·환율 검사는 그대로 적용됩니다.</p>

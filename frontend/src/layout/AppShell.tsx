@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import * as RadixDialog from '@radix-ui/react-dialog'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, NavLink, Outlet, useLocation } from 'react-router'
 import {
@@ -14,7 +15,7 @@ import {
 } from 'lucide-react'
 import { currentUser, logout } from '../api/admin'
 import { fetchHealth } from '../api/health'
-import { ME_KEY } from '../queryClient'
+import { AUTH_FLOW_META, ME_KEY } from '../queryClient'
 import { cn } from '../lib/cn'
 import { useTheme } from '../lib/theme'
 import { Button, IconButton } from '../ui/Button'
@@ -37,6 +38,18 @@ export function AppShell() {
   const [collapsed, setCollapsed] = useState(readCollapsed)
   const [mobileOpen, setMobileOpen] = useState(false)
 
+  // 드로어가 열린 채 데스크톱 폭(md)이 되면 보이지 않는 모달이 포커스를 가두지 않도록 닫는다
+  useEffect(() => {
+    if (!mobileOpen || typeof window.matchMedia !== 'function') return
+    const desktop = window.matchMedia('(min-width: 768px)')
+    const close = () => {
+      if (desktop.matches) setMobileOpen(false)
+    }
+    close()
+    desktop.addEventListener('change', close)
+    return () => desktop.removeEventListener('change', close)
+  }, [mobileOpen])
+
   const toggleCollapsed = () => {
     setCollapsed((current) => {
       try {
@@ -50,38 +63,37 @@ export function AppShell() {
 
   return (
     <TooltipProvider>
-      <div className="flex min-h-screen bg-bg text-text">
-        <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[70] focus:rounded-md focus:bg-surface focus:px-3 focus:py-2">
-          본문으로 건너뛰기
-        </a>
-        {/* 데스크톱 사이드바 */}
-        <div className={cn('hidden shrink-0 border-r border-line bg-sidebar md:block', collapsed ? 'w-16' : 'w-60')}>
-          <aside className="sticky top-0 flex h-screen flex-col">
-            <Sidebar collapsed={collapsed} onToggleCollapsed={toggleCollapsed} />
-          </aside>
-        </div>
-        {/* 모바일 드로어 */}
-        {mobileOpen && (
-          <div className="fixed inset-0 z-40 md:hidden">
-            <div className="absolute inset-0 bg-black/45" onClick={() => setMobileOpen(false)} aria-hidden />
-            <aside
-              role="dialog"
-              aria-modal="true"
-              aria-label="주 메뉴"
-              className="absolute inset-y-0 left-0 flex w-64 flex-col border-r border-line bg-sidebar"
-              onKeyDown={(event) => event.key === 'Escape' && setMobileOpen(false)}
-            >
-              <Sidebar collapsed={false} onClose={() => setMobileOpen(false)} />
+      {/* 모바일 드로어: Radix Dialog(초기 포커스, Tab 순환, 배경 조작 차단, Escape, 닫은 뒤 트리거로 포커스 복귀) — UI-RV-03 */}
+      <RadixDialog.Root open={mobileOpen} onOpenChange={setMobileOpen}>
+        <div className="flex min-h-screen bg-bg text-text">
+          <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[70] focus:rounded-md focus:bg-surface focus:px-3 focus:py-2">
+            본문으로 건너뛰기
+          </a>
+          {/* 데스크톱 사이드바 */}
+          <div className={cn('hidden shrink-0 border-r border-line bg-sidebar md:block', collapsed ? 'w-16' : 'w-60')}>
+            <aside className="sticky top-0 flex h-screen flex-col">
+              <Sidebar collapsed={collapsed} onToggleCollapsed={toggleCollapsed} />
             </aside>
           </div>
-        )}
-        <div className="flex min-w-0 flex-1 flex-col">
-          <Header onOpenMenu={() => setMobileOpen(true)} />
-          <main id="main" className="mx-auto w-full max-w-[80rem] flex-1 px-4 py-6 sm:px-6 lg:px-8">
-            <Outlet />
-          </main>
+          {/* 모바일 드로어 */}
+          <RadixDialog.Portal>
+            <RadixDialog.Overlay className="fixed inset-0 z-40 bg-black/45 md:hidden" />
+            <RadixDialog.Content
+              aria-describedby={undefined}
+              className="fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-line bg-sidebar text-text md:hidden"
+            >
+              <RadixDialog.Title className="sr-only">주 메뉴</RadixDialog.Title>
+              <Sidebar collapsed={false} onClose={() => setMobileOpen(false)} />
+            </RadixDialog.Content>
+          </RadixDialog.Portal>
+          <div className="flex min-w-0 flex-1 flex-col">
+            <Header />
+            <main id="main" className="mx-auto w-full max-w-[80rem] flex-1 px-4 py-6 sm:px-6 lg:px-8">
+              <Outlet />
+            </main>
+          </div>
         </div>
-      </div>
+      </RadixDialog.Root>
     </TooltipProvider>
   )
 }
@@ -100,6 +112,7 @@ function Sidebar({
   const [theme, setTheme] = useTheme()
   const signOut = useMutation({
     mutationFn: logout,
+    meta: AUTH_FLOW_META,
     onSettled: async (_data, error) => {
       if (error) toast.error('로그아웃 요청이 실패했습니다. 세션을 정리하고 로그인 화면으로 이동합니다.')
       queryClient.removeQueries({ predicate: (query) => query.queryKey[0] !== ME_KEY[0] })
@@ -193,7 +206,7 @@ function Sidebar({
 
 type ServerState = 'up' | 'checking' | 'down'
 
-function Header({ onOpenMenu }: { onOpenMenu: () => void }) {
+function Header() {
   const location = useLocation()
   const place = locate(location.pathname)
   const me = useQuery({ queryKey: ME_KEY, queryFn: currentUser, retry: false })
@@ -201,7 +214,9 @@ function Header({ onOpenMenu }: { onOpenMenu: () => void }) {
   const server: ServerState = health.isPending ? 'checking' : health.data?.status === 'UP' ? 'up' : 'down'
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-line bg-surface/95 px-4 backdrop-blur sm:px-6">
-      <IconButton label="메뉴 열기" className="md:hidden" onClick={onOpenMenu} icon={<Menu aria-hidden className="size-4" />} />
+      <RadixDialog.Trigger asChild>
+        <IconButton label="메뉴 열기" className="md:hidden" icon={<Menu aria-hidden className="size-4" />} />
+      </RadixDialog.Trigger>
       <nav aria-label="현재 위치" className="min-w-0 flex-1">
         <ol className="flex min-w-0 items-center gap-1.5 text-base">
           {place && (

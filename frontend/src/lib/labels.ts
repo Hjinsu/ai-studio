@@ -59,6 +59,28 @@ export const ENTRY_TYPE: Record<string, Label & { help: string }> = {
   REFUND: { ...of('환불', 'success'), help: '정산 후 환불받은 금액을 비용에서 뺍니다.' },
 }
 
+/** 내레이션·시각 스타일 값의 한국어 표시(입력값은 그대로 저장). 미등록 값은 원문 표시. */
+export const STYLE: Record<string, string> = {
+  DOCUMENTARY: '다큐멘터리',
+  CINEMATIC: '시네마틱',
+}
+
+const LANGUAGE: Record<string, string> = {
+  ko: '한국어',
+  en: '영어',
+  ja: '일본어',
+  zh: '중국어',
+  es: '스페인어',
+  fr: '프랑스어',
+  de: '독일어',
+}
+
+/** 언어 코드 표시: "영어(en)", "영어(en-US)". 모르는 코드는 코드 그대로. */
+export function languageLabel(code: string): string {
+  const name = LANGUAGE[code.split('-')[0].toLowerCase()]
+  return name ? `${name}(${code})` : code
+}
+
 export const ACTOR: Record<string, string> = {
   ADMIN: '관리자',
   CLI: '관리 명령',
@@ -81,7 +103,7 @@ export const CHECK_CODE: Record<string, string> = {
   BUCKET_RESERVED_MISMATCH: '기간 예산의 예약액이 연결된 원장 합계와 다릅니다.',
   BUCKET_SPENT_MISMATCH: '기간 예산의 지출액이 연결된 원장 합계와 다릅니다.',
   BUCKET_OVERLAP: '같은 정책의 기간이 겹칩니다.',
-  BUCKET_REVISION_MISMATCH: '기간 예산의 한도가 정책 revision과 다릅니다.',
+  BUCKET_REVISION_MISMATCH: '기간 예산의 한도가 정책 버전과 다릅니다.',
   CLOSED_RESERVATION_HAS_RESERVE: '종료된 예약에 남은 예약액이 있습니다.',
   MISSING_RESERVE_EVENT: '예약 이벤트가 없는 예약이 있습니다.',
   RESERVATION_BUCKET_LINK_MISMATCH: '예산 예약 연결 불일치',

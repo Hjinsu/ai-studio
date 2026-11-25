@@ -4,7 +4,7 @@ import { Link, useNavigate } from 'react-router'
 import { Plus, Tv } from 'lucide-react'
 import { createChannel, currentChannelConfig, listChannels, type Channel } from '../api/admin'
 import { fieldErrors } from '../lib/errors'
-import { CHANNEL_STATUS, CONTENT_TYPE, label, text } from '../lib/labels'
+import { CHANNEL_STATUS, CONTENT_TYPE, label, languageLabel, text } from '../lib/labels'
 import { browserTimeZone } from '../lib/time'
 import { Button, LinkButton } from '../ui/Button'
 import { DataTable, Pagination, type Column } from '../ui/DataTable'
@@ -37,7 +37,7 @@ export function ChannelsPage() {
         </Link>
       ),
     },
-    { key: 'language', header: '언어', cell: (c) => c.language },
+    { key: 'language', header: '언어', cell: (c) => languageLabel(c.language) },
     { key: 'timezone', header: '시간대', cell: (c) => c.timezone, hideBelow: 'lg' },
     { key: 'type', header: '기본 콘텐츠 유형', cell: (c) => <ConfigCell channel={c} field="type" /> },
     { key: 'status', header: '운영 상태', cell: (c) => <LabelBadge value={label(CHANNEL_STATUS, c.status)} /> },
@@ -154,7 +154,7 @@ function CreateChannelDialog({ open, onOpenChange }: { open: boolean; onOpenChan
       open={open}
       onOpenChange={(next) => !create.isPending && onOpenChange(next)}
       title="채널 등록"
-      description="기본 정보와 첫 제작 설정(revision 1)을 함께 저장합니다. 설정은 이후 새 revision으로 바꿀 수 있습니다."
+      description="기본 정보와 첫 제작 설정(설정 버전 1)을 함께 저장합니다. 설정은 이후 새 설정 버전으로 바꿀 수 있습니다."
       size="lg"
       footer={
         <>

@@ -37,13 +37,13 @@ export function Tabs({
 }) {
   return (
     <RadixTabs.Root value={value} onValueChange={onValueChange}>
-      <RadixTabs.List aria-label={label} className="flex gap-1 overflow-x-auto border-b border-line">
+      <RadixTabs.List aria-label={label} className="flex gap-1 overflow-x-auto overflow-y-hidden border-b border-line">
         {items.map((item) => (
           <RadixTabs.Trigger
             key={item.value}
             value={item.value}
             className={cn(
-              '-mb-px inline-flex items-center gap-1.5 border-b-2 border-transparent px-3 py-2 text-base whitespace-nowrap text-muted',
+              '-mb-px inline-flex items-center gap-1.5 border-b-2 border-transparent px-3 py-2 text-base whitespace-nowrap text-muted focus-visible:-outline-offset-2',
               'hover:text-text data-[state=active]:border-primary data-[state=active]:font-medium data-[state=active]:text-text',
             )}
           >

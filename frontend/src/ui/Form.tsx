@@ -12,7 +12,7 @@ import { cn } from '../lib/cn'
 import { timeZoneSuggestions } from '../lib/time'
 
 const CONTROL =
-  'w-full rounded-md border border-line-strong bg-surface px-3 text-base text-text placeholder:text-muted ' +
+  'w-full rounded-md border border-input-border bg-surface px-3 text-base text-text placeholder:text-muted ' +
   'disabled:cursor-not-allowed disabled:opacity-60 aria-[invalid=true]:border-danger'
 
 export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(function Input(

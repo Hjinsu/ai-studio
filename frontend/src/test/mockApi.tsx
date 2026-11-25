@@ -63,14 +63,14 @@ export const health = on('GET', '/actuator/health', 200, { status: 'UP' })
 export function renderApp(path = '/') {
   const router = createMemoryRouter(routes, { initialEntries: [path] })
   const client = createQueryClient()
-  render(
+  const view = render(
     <QueryClientProvider client={client}>
       <ToastProvider>
         <App router={router} />
       </ToastProvider>
     </QueryClientProvider>,
   )
-  return { router, client }
+  return { router, client, unmount: view.unmount }
 }
 
 export const page = <T,>(items: T[]) => ({ page: 0, size: 20, totalElements: items.length, totalPages: 1, items })

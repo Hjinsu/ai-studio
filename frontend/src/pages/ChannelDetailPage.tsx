@@ -13,7 +13,7 @@ import {
   type ChannelConfig,
 } from '../api/admin'
 import { fieldErrors } from '../lib/errors'
-import { CHANNEL_STATUS, label } from '../lib/labels'
+import { CHANNEL_STATUS, label, languageLabel } from '../lib/labels'
 import { Button } from '../ui/Button'
 import { Card } from '../ui/Card'
 import { ConfirmDialog, Dialog } from '../ui/Dialog'
@@ -49,7 +49,7 @@ export function ChannelDetailPage() {
           <PageHeader
             title={data.name}
             meta={<LabelBadge value={label(CHANNEL_STATUS, data.status)} />}
-            description={`언어 ${data.language} · 시간대 ${data.timezone}`}
+            description={`언어 ${languageLabel(data.language)} · 시간대 ${data.timezone}`}
             actions={<StatusActions channel={data} />}
           />
           <Tabs
@@ -136,7 +136,7 @@ function Overview({ channel }: { channel: Channel }) {
         <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
           <Item label="채널명" value={channel.name} />
           <Item label="운영 상태" value={<LabelBadge value={label(CHANNEL_STATUS, channel.status)} />} />
-          <Item label="언어" value={channel.language} />
+          <Item label="언어" value={languageLabel(channel.language)} />
           <Item label="시간대" value={channel.timezone} />
           <Item label="등록" value={<DateTime value={channel.createdAt} timeZone={channel.timezone} />} />
           <Item label="최근 변경" value={<DateTime value={channel.updatedAt} timeZone={channel.timezone} />} />
@@ -231,11 +231,11 @@ function CurrentSettings({ channel }: { channel: Channel }) {
           description={<>적용 <DateTime value={config.createdAt} timeZone={channel.timezone} /> · 관리자 #{config.createdBy}</>}
           actions={channel.status !== 'ARCHIVED' && (
             <Button variant="primary" size="sm" icon={<Plus aria-hidden className="size-3.5" />} onClick={() => setEditing(true)}>
-              새 설정 revision
+              새 설정 버전
             </Button>
           )}
         >
-          <p className="mb-4 text-sm text-muted">설정을 바꾸면 기존 revision은 그대로 남고 새 revision이 추가됩니다.</p>
+          <p className="mb-4 text-sm text-muted">설정을 바꾸면 기존 설정 버전은 그대로 남고 새 설정 버전이 추가됩니다.</p>
           <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
             {SETTING_FIELDS.map((field) => (
               <Item key={field.key} label={field.label} value={field.format(settingsOf(config))} />
@@ -277,8 +277,8 @@ function RevisionDialog({ channel, base, onClose }: { channel: Channel; base: Ch
       open
       size="lg"
       onOpenChange={(open) => !open && !create.isPending && onClose()}
-      title={`새 설정 revision (기준 r${base.revisionNo})`}
-      description="다른 사람이 먼저 새 revision을 만들었다면 저장이 거부됩니다. 새로고침 후 다시 작성하세요."
+      title={`새 설정 버전 (기준 r${base.revisionNo})`}
+      description="다른 사람이 먼저 새 설정 버전을 만들었다면 저장이 거부됩니다. 새로고침 후 다시 작성하세요."
       footer={
         <>
           <span className="mr-auto self-center text-sm text-muted">
@@ -286,12 +286,12 @@ function RevisionDialog({ channel, base, onClose }: { channel: Channel; base: Ch
           </span>
           <Button onClick={onClose} disabled={create.isPending}>취소</Button>
           <Button type="submit" form="revision-form" variant="primary" loading={create.isPending} disabled={preview !== undefined && changes.length === 0}>
-            revision 저장
+            설정 버전 저장
           </Button>
         </>
       }
     >
-      <form id="revision-form" onSubmit={submit} className="grid gap-6" aria-label="새 설정 revision">
+      <form id="revision-form" onSubmit={submit} className="grid gap-6" aria-label="새 설정 버전">
         <ChannelSettingsFields draft={draft} onChange={setDraft} errors={errors} />
         <FormField label="변경 메모" optional hint="무엇을 왜 바꿨는지 이력에 남깁니다." error={errors.changeNote}>
           <Input maxLength={500} value={changeNote} onChange={(e) => setChangeNote(e.target.value)} />
@@ -315,7 +315,7 @@ function ConfigHistory({ channel }: { channel: Channel }) {
         const items = data.items
         return (
           <div className="grid gap-6 lg:grid-cols-[1fr_22rem]">
-            <Card title="설정 이력" description="최신 revision이 위에 있습니다. 각 항목은 직전 revision 대비 변경 내용입니다.">
+            <Card title="설정 이력" description="최신 설정 버전이 위에 있습니다. 각 항목은 직전 설정 버전 대비 변경 내용입니다.">
               <RevisionHistory
                 label="채널 설정 이력"
                 entries={items.map((config, index) => {
@@ -345,14 +345,14 @@ function ConfigHistory({ channel }: { channel: Channel }) {
   )
 }
 
-/** 불러온 revision 중 두 개를 골라 비교. */
+/** 불러온 설정 버전 중 두 개를 골라 비교. */
 function CompareRevisions({ configs }: { configs: ChannelConfig[] }) {
   const [left, setLeft] = useState(configs[1]?.revisionNo ?? configs[0]?.revisionNo ?? 0)
   const [right, setRight] = useState(configs[0]?.revisionNo ?? 0)
   if (configs.length < 2) {
     return (
-      <Card title="revision 비교">
-        <InlineNotice>비교하려면 revision이 2개 이상 있어야 합니다.</InlineNotice>
+      <Card title="설정 버전 비교">
+        <InlineNotice>비교하려면 설정 버전이 2개 이상 있어야 합니다.</InlineNotice>
       </Card>
     )
   }
@@ -360,7 +360,7 @@ function CompareRevisions({ configs }: { configs: ChannelConfig[] }) {
   const b = configs.find((c) => c.revisionNo === right)
   const changes = a && b ? diffSettings(settingsOf(a), settingsOf(b)) : []
   return (
-    <Card title="revision 비교" description="두 revision의 설정 차이를 봅니다.">
+    <Card title="설정 버전 비교" description="두 설정 버전의 차이를 봅니다.">
       <div className="grid grid-cols-2 gap-3">
         <FormField label="이전">
           <Select value={left} onChange={(e) => setLeft(Number(e.target.value))}>
@@ -375,7 +375,7 @@ function CompareRevisions({ configs }: { configs: ChannelConfig[] }) {
       </div>
       <div className="mt-4">
         {changes.length === 0 ? (
-          <p className="text-sm text-muted">두 revision의 설정이 같습니다.</p>
+          <p className="text-sm text-muted">두 설정 버전의 내용이 같습니다.</p>
         ) : (
           <dl className="grid gap-2.5 text-sm">
             {changes.map((change) => (

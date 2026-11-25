@@ -1,14 +1,21 @@
 import type { RouteObject } from 'react-router'
 import { AppShell } from './layout/AppShell'
+import { LoadingSkeleton } from './ui/States'
 
 /**
  * T02 관리자 화면 (ADR-035). 제작·검수·게시 화면은 후속 단계. 메뉴는 layout/nav.ts와 함께 추가한다.
  * 화면별 코드 분할: React Router route.lazy로 화면 모듈을 필요할 때 불러온다.
+ * 첫 진입 시 lazy 모듈을 기다리는 동안 hydrateFallbackElement를 보여준다(없으면 React Router가 콘솔 경고, UI-RV-A03).
  */
 export const routes: RouteObject[] = [
   {
     path: '/',
     element: <AppShell />,
+    hydrateFallbackElement: (
+      <main className="grid min-h-screen place-items-center bg-bg px-4">
+        <LoadingSkeleton rows={2} className="w-64" />
+      </main>
+    ),
     children: [
       { index: true, lazy: () => import('./pages/DashboardPage').then((m) => ({ Component: m.DashboardPage })) },
       { path: 'channels', lazy: () => import('./pages/ChannelsPage').then((m) => ({ Component: m.ChannelsPage })) },

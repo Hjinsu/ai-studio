@@ -26,6 +26,7 @@ describe('Channels', () => {
     expect(within(table).getByText('일시정지')).toBeInTheDocument()
     expect(within(table).getByText('보관됨')).toBeInTheDocument()
     expect((await within(table).findAllByText('롱폼')).length).toBeGreaterThan(0)
+    expect(within(table).getByText('영어(en)')).toBeInTheDocument()
 
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: '채널 등록' }))
@@ -88,15 +89,15 @@ describe('Channels', () => {
 
     const user = userEvent.setup()
     await user.click(screen.getByRole('tab', { name: '채널 설정' }))
-    await user.click(await screen.findByRole('button', { name: '새 설정 revision' }))
+    await user.click(await screen.findByRole('button', { name: '새 설정 버전' }))
     const dialog = await screen.findByRole('dialog')
-    const save = within(dialog).getByRole('button', { name: 'revision 저장' })
+    const save = within(dialog).getByRole('button', { name: '설정 버전 저장' })
     expect(save).toBeDisabled()
-    await user.type(within(dialog).getByLabelText(/provider 옵션/), '"x"')
+    await user.type(within(dialog).getByLabelText(/AI 서비스 설정/), '"x"')
     await user.click(within(dialog).getByRole('checkbox'))
     await user.click(save)
     expect(await within(dialog).findByText(/JSON 객체 형식이어야 합니다/)).toBeInTheDocument()
-    await user.clear(within(dialog).getByLabelText(/provider 옵션/))
+    await user.clear(within(dialog).getByLabelText(/AI 서비스 설정/))
     await user.type(within(dialog).getByLabelText(/변경 메모/), 'no disclosure')
     await user.click(save)
     await waitFor(() => expect(calls.some((c) => c.method === 'POST')).toBe(true))
@@ -179,6 +180,30 @@ describe('Spending control and consistency', () => {
     await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
     expect(calls.find((c) => c.method === 'POST')?.body).toEqual({ enabled: true, reason: 'test window', version: 4 })
     expect(await screen.findByText('신규 지출을 허용했습니다.')).toBeInTheDocument()
+  })
+
+  it.each([
+    [false, 'OK', '신규 지출 차단됨', '관리자 설정 차단 · 정합성 정상'],
+    [false, 'ERROR', '신규 지출 차단됨', '관리자 설정 차단 · 정합성 오류'],
+    [true, 'OK', '관리자 설정: 신규 지출 허용', '관리자 설정 허용 · 정합성 정상'],
+    [true, 'ERROR', '신규 지출 차단됨', '관리자 설정 허용 · 정합성 오류'],
+    [true, 'UNKNOWN', '관리자 설정: 신규 지출 허용', '관리자 설정 허용 · 정합성 미검사'],
+  ])('admin %s + consistency %s → %s (UI-RV-01)', async (enabled, status, heading, line) => {
+    const calls = mockApi(
+      me, csrf, health,
+      on('GET', '/api/v1/budget/control', 200, { ...control(enabled, 2), consistency: { status, checkedAt: null, issueCount: status === 'ERROR' ? 1 : 0 } }),
+      on('GET', '/api/v1/budget-policies', 200, page([])),
+    )
+    renderApp('/budget/control')
+    expect(await screen.findByRole('heading', { name: heading })).toBeInTheDocument()
+    expect(screen.getByText(line)).toBeInTheDocument()
+    if (heading === '신규 지출 차단됨') {
+      expect(screen.getByText(/이미 잡힌 예약의 정산과 조회는 계속할 수 있습니다/)).toBeInTheDocument()
+    }
+    if (status === 'UNKNOWN') expect(screen.getByText(/정합성 검사를 아직 하지 않았습니다/)).toBeInTheDocument()
+    // 표시만 바꾸며 관리자 설정을 자동으로 바꾸지 않는다
+    expect(screen.getByRole('button', { name: enabled ? '긴급 지출 차단' : '지출 허용…' })).toBeInTheDocument()
+    expect(calls.some((c) => c.method === 'POST')).toBe(false)
   })
 
   it('shows consistency issues in Korean with the raw code', async () => {
@@ -327,6 +352,115 @@ describe('Reservations and settlement', () => {
   })
 })
 
+describe('Ledger order and lost settlement responses', () => {
+  it('keeps the server ledger order and BIGINT ids exactly (UI-RV-05)', async () => {
+    const base = reservation.events[0]
+    const events = [
+      // 서버 순서(원장 id 오름차순). 시각 표기가 서로 다르다(정수 초 / 소수초 / 같은 시각).
+      { ...base, id: '9007199254740992', eventKey: 'k1', entryType: 'RESERVE', occurredAt: '2026-11-25T00:00:00Z', recordedAt: '2026-11-25T00:00:00Z' },
+      { ...base, id: '9007199254740993', eventKey: 'k2', entryType: 'PROVISIONAL', occurredAt: '2026-11-25T00:00:00.001Z', recordedAt: '2026-11-25T00:00:00.001Z', reserveDeltaKrw: '-1120', costDeltaKrw: '1120' },
+      { ...base, id: '9223372036854775807', eventKey: 'k3', entryType: 'CONFIRM', occurredAt: '2026-11-25T00:00:00.001Z', recordedAt: '2026-11-25T00:00:00.001Z', reserveDeltaKrw: '-280.123457', costDeltaKrw: '280.123457' },
+    ]
+    mockApi(me, csrf, health, allChannels, on('GET', '/api/v1/budget-reservations/11', 200, { ...reservation, status: 'SETTLED', events }))
+    renderApp('/budget/reservations/11')
+    const timeline = await screen.findByRole('list', { name: '원장 이벤트' })
+    const items = within(timeline).getAllByRole('listitem')
+    // 시각 문자열로 정렬하면 '…00.001Z' < '…00Z'라 RESERVE가 뒤로 가고, Number 변환이면 앞의 두 id가 같아진다
+    expect(items).toHaveLength(3)
+    expect(within(items[0]).getByText('예약')).toBeInTheDocument()
+    expect(within(items[1]).getByText('잠정 비용')).toBeInTheDocument()
+    expect(within(items[2]).getByText('확정 비용')).toBeInTheDocument()
+  })
+
+  it('detects that a lost-response adjustment was already recorded and does not resend it (UI-RV-A01)', async () => {
+    const settled = { ...reservation, status: 'SETTLED' }
+    let recordedKey: string | undefined
+    const calls = mockApi(
+      me, csrf, health, allChannels,
+      (call) => {
+        if (call.method === 'GET' && call.url === '/api/v1/budget-reservations/11') {
+          const events = recordedKey
+            ? [...settled.events, { ...settled.events[0], id: '2', eventKey: recordedKey, entryType: 'ADJUSTMENT', reserveDeltaKrw: '0', costDeltaKrw: '-50' }]
+            : settled.events
+          return { status: 200, body: { ...settled, events } }
+        }
+        if (call.method === 'POST' && call.url.endsWith('/adjustments')) {
+          recordedKey = call.headers['Idempotency-Key'] // 서버는 커밋했지만
+          return { status: 502, body: error('INTERNAL_SERVER_ERROR', 'gateway') } // 응답이 유실됨
+        }
+        return undefined
+      },
+    )
+    renderApp('/budget/reservations/11')
+    const user = userEvent.setup()
+    await user.type(await screen.findByLabelText('금액(USD)'), '-0.1')
+    await user.type(screen.getByLabelText('메모(필수, 감사 기록)'), 'fix')
+    await user.click(screen.getByRole('button', { name: '기록 전 확인' }))
+    const dialog = await screen.findByRole('alertdialog')
+    expect(dialog).toHaveTextContent('새로고침했거나 화면을 떠났다면')
+    await user.click(within(dialog).getByRole('button', { name: '원장에 기록' }))
+    expect(await screen.findByText(/원장에 이미 기록된 것을 확인했습니다/)).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
+    expect(calls.filter((c) => c.method === 'POST')).toHaveLength(1)
+    expect(within(screen.getByRole('list', { name: '원장 이벤트' })).getByText('조정')).toBeInTheDocument()
+  })
+
+  it('when a lost response was not recorded, explains that retrying in the same dialog reuses the key (UI-RV-A01)', async () => {
+    let attempts = 0
+    const calls = mockApi(
+      me, csrf, health, allChannels,
+      on('GET', '/api/v1/budget-reservations/11', 200, { ...reservation, status: 'SETTLED' }),
+      (call) => {
+        if (call.method === 'POST' && call.url.endsWith('/adjustments')) {
+          attempts += 1
+          if (attempts === 1) throw new TypeError('Failed to fetch') // 네트워크 끊김
+          return { status: 200, body: { ...reservation, status: 'SETTLED' } }
+        }
+        return undefined
+      },
+    )
+    renderApp('/budget/reservations/11')
+    const user = userEvent.setup()
+    await user.type(await screen.findByLabelText('금액(USD)'), '0.1')
+    await user.type(screen.getByLabelText('메모(필수, 감사 기록)'), 'fix')
+    await user.click(screen.getByRole('button', { name: '기록 전 확인' }))
+    const dialog = await screen.findByRole('alertdialog')
+    await user.click(within(dialog).getByRole('button', { name: '원장에 기록' }))
+    expect(await within(dialog).findByText(/원장에는 아직 이 요청이 없습니다/)).toBeInTheDocument()
+    // 자동 재전송 없음
+    expect(calls.filter((c) => c.method === 'POST')).toHaveLength(1)
+    await user.click(within(dialog).getByRole('button', { name: '원장에 기록' }))
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
+    const posts = calls.filter((c) => c.method === 'POST')
+    expect(posts).toHaveLength(2)
+    expect(posts[1].headers['Idempotency-Key']).toBe(posts[0].headers['Idempotency-Key'])
+  })
+
+  it('a reloaded screen uses a new idempotency key, so the guide says to check the ledger first (UI-RV-A01 residual risk)', async () => {
+    const calls = mockApi(
+      me, csrf, health, allChannels,
+      on('GET', '/api/v1/budget-reservations/11', 200, { ...reservation, status: 'SETTLED' }),
+      on('POST', '/api/v1/budget-reservations/11/adjustments', 500, error('INTERNAL_SERVER_ERROR', 'x')),
+    )
+    const submitOnce = async () => {
+      const user = userEvent.setup()
+      await user.type(await screen.findByLabelText('금액(USD)'), '0.1')
+      await user.type(screen.getByLabelText('메모(필수, 감사 기록)'), 'fix')
+      await user.click(screen.getByRole('button', { name: '기록 전 확인' }))
+      await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: '원장에 기록' }))
+      await screen.findByText(/원장에는 아직 이 요청이 없습니다/)
+    }
+    const first = renderApp('/budget/reservations/11')
+    await submitOnce()
+    first.unmount()
+    renderApp('/budget/reservations/11')
+    await submitOnce()
+    const keys = calls.filter((c) => c.method === 'POST').map((c) => c.headers['Idempotency-Key'])
+    expect(keys).toHaveLength(2)
+    expect(keys[1]).not.toBe(keys[0])
+  })
+})
+
 describe('Ledger, usage, exchange rates', () => {
   it('shows ledger rows with Korean types and signed deltas', async () => {
     mockApi(me, health, allChannels, on('GET', '/api/v1/cost-ledger', 200, page([{
@@ -353,9 +487,14 @@ describe('Ledger, usage, exchange rates', () => {
     await user.click(await screen.findByRole('tab', { name: '채널 예산' }))
     await waitFor(() => expect(screen.getByLabelText('채널')).not.toBeDisabled())
     await user.selectOptions(screen.getByLabelText('채널'), '5')
-    expect(await screen.findByText(/가장 작은 잔여/)).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '예산 정책 기준 잔여 한도' })).toBeInTheDocument()
     expect(screen.getByText('₩5,000', { selector: 'p span' })).toBeInTheDocument()
-    expect(screen.getByText(/콘텐츠 유형 한도, 지출 차단/)).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        '시스템 및 채널 예산 중 가장 낮은 잔여 한도입니다. 실제 지출 가능 여부는 콘텐츠 한도, 지출 제어 상태, 정합성, 채널 상태 및 환율 유효성 등에 따라 결정됩니다.',
+        { normalizer: (t) => t.replace(/\s+/g, ' ').trim() },
+      ),
+    ).toBeInTheDocument()
     expect(calls.some((c) => c.url === '/api/v1/budget/usage?channelId=5')).toBe(true)
   })
 
@@ -375,6 +514,34 @@ describe('Ledger, usage, exchange rates', () => {
     await waitFor(() => expect(calls.some((c) => c.method === 'POST')).toBe(true))
     expect(calls.find((c) => c.method === 'POST')?.body).toEqual({ baseCurrency: 'USD', rate: '1400.1234567891' })
     expect(await screen.findByText('환율 1 USD = ₩1,500을 등록했습니다.')).toBeInTheDocument()
+  })
+
+  it('uses the server order for rate status without string sorting or falling back to an older rate (UI-RV-04)', async () => {
+    const hour = 3_600_000
+    const second = (ms: number) => new Date(Math.floor((Date.now() + ms) / 1000) * 1000).toISOString().replace('.000Z', 'Z')
+    const rate = (id: string, baseCurrency: string, effectiveFrom: string, validUntil: string, value: string) => ({
+      id, baseCurrency, quoteCurrency: 'KRW', rate: value, effectiveFrom, validUntil, source: 'MANUAL', note: null, createdBy: '1', createdAt: effectiveFrom,
+    })
+    const t0 = second(-hour) // 정수 초
+    const t0Fraction = t0.replace('Z', '.5Z') // 같은 초 + 0.5초: 문자열 비교로는 t0보다 앞선 것으로 보인다
+    // 서버 정렬: effective_from DESC, id DESC
+    const items = [
+      rate('9', 'USD', second(hour), second(73 * hour), '1500'), // 적용 예정
+      rate('8', 'USD', t0Fraction, second(70 * hour), '1410'), // 적용 중(최신)
+      rate('7', 'USD', t0, second(71 * hour), '1400'), // 이전 환율
+      rate('5', 'EUR', second(-2 * hour), second(-hour), '1600'), // 최신이 만료
+      rate('4', 'EUR', second(-3 * hour), second(60 * hour), '1550'), // 더 오래된 것이 유효해도 대신 쓰지 않음
+    ]
+    mockApi(me, csrf, health, on('GET', '/api/v1/exchange-rates', 200, page(items)))
+    renderApp('/exchange-rates')
+    const table = await screen.findByRole('table')
+    const statusOf = (value: string) =>
+      within(within(table).getByText(value, { exact: false }).closest('tr')!).getByText(/^(적용 중|적용 예정|만료|이전 환율)$/).textContent
+    expect(statusOf('₩1,500')).toBe('적용 예정')
+    expect(statusOf('₩1,410')).toBe('적용 중')
+    expect(statusOf('₩1,400')).toBe('이전 환율')
+    expect(statusOf('₩1,600')).toBe('만료')
+    expect(statusOf('₩1,550')).toBe('이전 환율')
   })
 
   it('shows loading, empty and error states', async () => {

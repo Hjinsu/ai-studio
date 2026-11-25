@@ -1,5 +1,5 @@
 import type { ChannelConfig, ChannelConfigSettings } from '../../api/admin'
-import { CONTENT_TYPE, text } from '../../lib/labels'
+import { CONTENT_TYPE, STYLE, text } from '../../lib/labels'
 
 /** 채널 설정 필드의 화면 이름과 표시 형식(비교·이력 공용). */
 export const SETTING_FIELDS: { key: keyof ChannelConfigSettings; label: string; format: (s: ChannelConfigSettings) => string }[] = [
@@ -8,10 +8,10 @@ export const SETTING_FIELDS: { key: keyof ChannelConfigSettings; label: string; 
   { key: 'longformMinSeconds', label: '롱폼 길이', format: (s) => `${minutes(s.longformMinSeconds)}–${minutes(s.longformMaxSeconds)}` },
   { key: 'contentStrategy', label: '콘텐츠 전략', format: (s) => s.contentStrategy ?? '미입력' },
   { key: 'targetAudience', label: '타깃 시청자', format: (s) => s.targetAudience ?? '미입력' },
-  { key: 'narrationStyle', label: '내레이션 스타일', format: (s) => s.narrationStyle ?? '미입력' },
-  { key: 'visualStyle', label: '시각 스타일', format: (s) => s.visualStyle ?? '미입력' },
+  { key: 'narrationStyle', label: '내레이션 스타일', format: (s) => (s.narrationStyle ? text(STYLE, s.narrationStyle) : '미입력') },
+  { key: 'visualStyle', label: '시각 스타일', format: (s) => (s.visualStyle ? text(STYLE, s.visualStyle) : '미입력') },
   { key: 'syntheticDisclosureDefault', label: '합성 콘텐츠 고지 기본값', format: (s) => (s.syntheticDisclosureDefault ? '고지함' : '고지 안 함') },
-  { key: 'providerOptions', label: 'provider 옵션', format: (s) => (s.providerOptions ? JSON.stringify(s.providerOptions) : '없음') },
+  { key: 'providerOptions', label: 'AI 서비스 설정', format: (s) => (s.providerOptions ? JSON.stringify(s.providerOptions) : '없음') },
 ]
 
 export function minutes(seconds: number): string {

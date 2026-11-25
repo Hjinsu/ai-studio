@@ -134,7 +134,7 @@ function ReviseForm({ policy }: { policy: BudgetPolicy }) {
   }
   const timezoneChanged = timezone.trim() !== policy.currentRevision.timezone
   return (
-    <Card title="한도·시간대 변경" description={`새 revision으로 저장됩니다(기준 r${policy.currentRevision.revisionNo}). 기존 revision은 바뀌지 않습니다.`}>
+    <Card title="한도·시간대 변경" description={`새 정책 버전으로 저장됩니다(기준 r${policy.currentRevision.revisionNo}). 기존 버전은 바뀌지 않습니다.`}>
       <form onSubmit={submit} className="grid max-w-xl gap-4" aria-label="한도·시간대 변경">
         <FormField label="한도" hint="한도 변경은 지금 진행 중인 기간에 바로 적용됩니다." error={localError ?? errors.limitKrw}>
           <KrwInput required value={limitKrw} onChange={setLimitKrw} />
@@ -253,6 +253,6 @@ function Buckets({ policy }: { policy: BudgetPolicy }) {
 
 function BucketState({ bucket }: { bucket: BudgetBucket }) {
   const state = budgetState(bucket.limitKrw, bucket.spentKrw, bucket.reservedKrw, bucket.remainingKrw)
-  const map = { ok: ['정상', 'success'], near: ['소진 임박', 'warning'], over: ['한도 초과', 'danger'], blocked: ['전면 차단', 'danger'] } as const
+  const map = { ok: ['정상', 'success'], near: ['소진 임박', 'warning'], exhausted: ['한도 소진', 'danger'], over: ['한도 초과', 'danger'], blocked: ['전면 차단', 'danger'] } as const
   return <StatusBadge tone={map[state][1]}>{map[state][0]}</StatusBadge>
 }

@@ -4,6 +4,7 @@ import { CircleAlert, CircleCheck, ShieldAlert, ShieldCheck, Tv, WalletCards } f
 import { dashboardSummary, type BudgetBucket } from '../api/admin'
 import { CONSISTENCY, label } from '../lib/labels'
 import { percentOf } from '../lib/decimal'
+import { spendingView } from '../lib/budget'
 import { Card, StatCard } from '../ui/Card'
 import { DateTime, Money } from '../ui/Display'
 import { BudgetMeter } from '../ui/Meter'
@@ -35,15 +36,22 @@ export function DashboardPage() {
           const day = systemBucket(data.systemUsage, 'DAY')
           const month = systemBucket(data.systemUsage, 'MONTH')
           const consistency = label(CONSISTENCY, data.consistency.status)
+          const spending = spendingView(data.spendingEnabled, data.consistency.status)
           return (
             <div className="grid gap-6">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <StatCard
-                  label="지출 제어"
-                  icon={data.spendingEnabled ? <ShieldCheck aria-hidden className="size-4" /> : <ShieldAlert aria-hidden className="size-4" />}
-                  value={data.spendingEnabled ? '지출 허용' : '지출 차단'}
-                  tone={data.spendingEnabled ? 'success' : 'warning'}
-                  detail={<Link to="/budget/control" className="text-primary underline-offset-2 hover:underline">지출 제어 화면</Link>}
+                  label="신규 지출"
+                  icon={spending.blocked ? <ShieldAlert aria-hidden className="size-4" /> : <ShieldCheck aria-hidden className="size-4" />}
+                  value={spending.blocked ? '차단' : '관리자 허용'}
+                  tone={spending.blocked ? (spending.consistencyError ? 'danger' : 'warning') : 'success'}
+                  detail={
+                    <>
+                      {!spending.adminEnabled ? '관리자 차단' : spending.consistencyError ? '정합성 오류로 차단(관리자 설정은 허용)' : '나머지 조건은 예약 시 서버가 검사'}
+                      {' · '}
+                      <Link to="/budget/control" className="text-primary underline-offset-2 hover:underline">지출 제어</Link>
+                    </>
+                  }
                 />
                 <StatCard
                   label="정합성"

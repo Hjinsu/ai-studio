@@ -30,15 +30,14 @@ type RateStatus = 'current' | 'scheduled' | 'expired' | 'superseded'
 /**
  * 환율 상태(표시용, 브라우저 시각 기준). 통화별로 발효된 가장 최근 환율 1건만 "적용 중"이며, 그 환율이 만료되면 이전
  * 환율로 대체하지 않는다(ADR-046) — 서버가 같은 규칙으로 판단한다.
+ * "가장 최근"은 서버 목록 순서(발효 시각 내림차순, id 내림차순)를 그대로 쓴다. 시각 문자열을 화면에서 다시 정렬하지
+ * 않는다(소수초 표기가 다르면 문자열 순서가 실제 시각 순서와 달라진다, UI-RV-04). 시각 비교는 Date 값으로 한다.
  */
 function statusOf(rate: ExchangeRate, all: ExchangeRate[], now: number): RateStatus {
-  const effective = new Date(rate.effectiveFrom).getTime()
-  if (effective > now) return 'scheduled'
-  const latest = all
-    .filter((r) => r.baseCurrency === rate.baseCurrency && new Date(r.effectiveFrom).getTime() <= now)
-    .sort((a, b) => b.effectiveFrom.localeCompare(a.effectiveFrom))[0]
+  if (Date.parse(rate.effectiveFrom) > now) return 'scheduled'
+  const latest = all.find((r) => r.baseCurrency === rate.baseCurrency && Date.parse(r.effectiveFrom) <= now)
   if (latest?.id !== rate.id) return 'superseded'
-  return new Date(rate.validUntil).getTime() <= now ? 'expired' : 'current'
+  return Date.parse(rate.validUntil) <= now ? 'expired' : 'current'
 }
 
 const STATUS: Record<RateStatus, { text: string; tone: 'success' | 'primary' | 'neutral' | 'danger' }> = {

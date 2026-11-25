@@ -1,10 +1,10 @@
 # 작업 상태
-기준선: v0.1 설계 패키지 + ADR-006~065 승인(2026-11-25). 실제 계정 및 API 미연동.
-현재 작업: T02 (IMPLEMENTED — UI(PR #1)와 백엔드 수정(PR #2 `6a32c64`) **통합 완료**, Codex UI 독립 리뷰·사용자 실제 화면 검증·최종 승인 대기, DONE 아님). 보고서 [docs/reports/T02_REPORT.md](docs/reports/T02_REPORT.md) §11, 사용자 검증 [docs/guides/T02_USER_VERIFICATION.md](docs/guides/T02_USER_VERIFICATION.md).
+기준선: v0.1 설계 패키지 + ADR-006~066 승인(2026-11-25). 실제 계정 및 API 미연동.
+현재 작업: T02 (IMPLEMENTED — 통합 완료, Codex UI 리뷰 결함 수정 **T02-UI-FIX 완료**, Codex 표적 교차 리뷰·사용자 재확인·최종 승인 대기, DONE 아님). 보고서 [docs/reports/T02_UI_FIX_REPORT.md](docs/reports/T02_UI_FIX_REPORT.md), [docs/reports/T02_REPORT.md](docs/reports/T02_REPORT.md) §11~12, 사용자 검증 [docs/guides/T02_USER_VERIFICATION.md](docs/guides/T02_USER_VERIFICATION.md).
 | ID | 상태 | 작업 |
 |---|---|---|
 | T01 | DONE (2026-11-25 승인, 커밋 55e33ec, CI run 45440907314) | 프로젝트 bootstrap, 버전 고정, DB/Flyway, CI, health check |
-| T02 | IMPLEMENTED (PR #1에 PR #2 통합, 통합 HEAD `ab68286` CI 45557933535 7/7, Codex UI 리뷰·사용자 검증·최종 승인 대기) | 인증, 채널, 설정, 비용 원장 |
+| T02 | IMPLEMENTED (PR #1에 PR #2 통합, Codex UI 리뷰 결함 수정 T02-UI-FIX 완료, Codex 표적 교차 리뷰·사용자 재확인·최종 승인 대기) | 인증, 채널, 설정, 비용 원장 |
 | T03 | TODO (선행 조건·필수 설계 제약만 기록: docs/plans/T03_PLAN.md, 착수 금지) | 콘텐츠 revision, DB 큐, lease, 재시도 |
 | T04 | TODO | fake provider, 조사/대본/스토리보드 |
 | T05 | TODO | 이미지/TTS/자막/FFmpeg 로컬 렌더링 |
@@ -15,6 +15,17 @@
 | T10 | TODO | 트렌드 및 멀티채널 확장 |
 ## 인수인계 기록
 작업 ID / 상태 / 변경 파일 / 테스트 명령 및 실제 결과 / 미해결 문제 / 다음 작업 / 필요 환경변수. 커밋 해시는 생성된 경우만 기록.
+
+### T02-UI-FIX — Codex UI 리뷰 결함·사용자 확인 항목 수정 — Claude Code (2026-11-25, IMPLEMENTED, DONE 아님)
+요구사항: 사용자 지시(UI-RV-01~06 전체 수정, UI-F01·F02·F03·F04·F05·F07·F11·F12·F13, 안전 검토 A01·A02·A03). 리뷰 [T02_CODEX_FRONTEND_REVIEW](docs/reviews/T02_CODEX_FRONTEND_REVIEW.md), 결과 [T02_UI_FIX_REPORT](docs/reports/T02_UI_FIX_REPORT.md), ADR-066, 제안 P-T02-05.
+- 브랜치 `wip/t02-implementation-checkpoint-2026-11-25`(Draft PR #1). 수정 전 HEAD `6f4589f`. 커밋·CI는 아래 "커밋·CI" 줄(푸시 후 갱신).
+- 변경: `frontend/` 화면·공통 컴포넌트·테스트, 문서. **API·OpenAPI·생성 타입·백엔드·DB·Flyway 변경 없음**, 새 의존성 없음.
+- 실제 결과: frontend lint·typecheck·build 통과, vitest **60/60**(기존 39 유지), Playwright E2E **10/10**(Edge, **Mock API** — 실제 백엔드 연동 아님, 3회 연속 통과), OpenAPI lint 유효(기존 경고 2)·생성 타입 일치, 백엔드 단위 **133/133**·통합 **97/97**(격리 임시 MariaDB 11.8.2 `127.0.0.1:3307`, 종료함)·bootJar 성공. 수정 전 코드(`6f4589f`)에 새 테스트를 적용하면 vitest 16건·E2E 3건 실패(재현 확인, 임시 worktree는 제거).
+- 이전 CI 재실행: `6f4589f` run 45558365457 — 1차 Maven Central HTTP 429로 Backend Linux 실패, 2차 시도 7/7 성공.
+- 사용자 검증(사용자 보고): 통합 UI 주요 화면 확인, 관리자·IFNOVA·예산 정책 6개·테스트 환율·지출 차단 보존, 정합성 검사 정상, 예약·원장 비어 있음 정상, 서버 상태 정상, 실제 유료 예약·정산 미실행.
+- 미해결: A01 새로고침 후 수동 재입력 중복 가능성(P-T02-05, 실제 비용 발생 전 해결 또는 명시적 수용), UI-F06·F08·F09·F10 보류, 실제 백엔드 대상 브라우저 E2E 미실행, CR-01·CR-02(ADR-065).
+- DB: 사용자 개발 DB(3306) 미사용·미변경, 새 migration 없음.
+- 다음 작업: Codex 표적 교차 리뷰(TASKS `T02-UI-FIX-RV`) → 사용자 재확인 → 최종 종료 승인. main 병합·T02 DONE·T03 착수 금지(별도 승인).
 
 ### T02-INT — PR #1에 PR #2 통합 및 최종 검증 — Claude Code (2026-11-25, IMPLEMENTED, DONE 아님)
 요구사항: 사용자 T02 조건부 통합 승인(ADR-063·064·065, P-T02-02 승인, P-T02-03 보류, P-T02-04 조건부 수용). 상세: [T02_REPORT §11](docs/reports/T02_REPORT.md).

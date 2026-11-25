@@ -142,10 +142,84 @@ test('mobile layout: drawer navigation and no page overflow', async ({ page }) =
   await shot(page, '14-mobile-ledger')
 })
 
+test('mobile menu is a keyboard-accessible modal dialog (UI-RV-03)', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await installMockApi(page, { signedIn: true })
+  await page.goto('/')
+  await expect(page.getByRole('heading', { name: '대시보드' })).toBeVisible()
+  const trigger = page.getByRole('button', { name: '메뉴 열기' })
+  // 키보드로 트리거까지 이동해 연다
+  await page.keyboard.press('Tab') // 본문으로 건너뛰기
+  await page.keyboard.press('Tab')
+  await expect(trigger).toBeFocused()
+  await page.keyboard.press('Enter')
+  const dialog = page.getByRole('dialog', { name: '주 메뉴' })
+  await expect(dialog).toBeVisible()
+  // 초기 포커스가 대화상자 안에 있고, 배경은 보조기술에서 숨겨진다
+  expect(await dialog.evaluate((el) => el.contains(document.activeElement))).toBe(true)
+  // 배경 차단: 포인터 차단 + 보조기술에서 숨김. Radix(aria-hidden)는 aria-live 영역과 그 조상은 남기므로
+  // 알림 영역이 없는 헤더(메뉴 트리거·서버 상태 링크)로 확인한다.
+  await expect(page.locator('body')).toHaveCSS('pointer-events', 'none')
+  await expect.poll(() => page.locator('body > #root header.sticky').evaluate((el) => el.closest('[aria-hidden="true"]') !== null)).toBe(true)
+  // Tab / Shift+Tab이 대화상자 안에서만 순환한다
+  for (let i = 0; i < 25; i++) {
+    await page.keyboard.press('Tab')
+    expect(await dialog.evaluate((el) => el.contains(document.activeElement))).toBe(true)
+  }
+  for (let i = 0; i < 25; i++) {
+    await page.keyboard.press('Shift+Tab')
+    expect(await dialog.evaluate((el) => el.contains(document.activeElement))).toBe(true)
+  }
+  // Escape로 닫고 트리거로 포커스 복귀
+  await page.keyboard.press('Escape')
+  await expect(dialog).toBeHidden()
+  await expect(trigger).toBeFocused()
+  // 다시 열어 키보드로 메뉴를 선택하면 이동 후 닫힌다
+  await page.keyboard.press('Enter')
+  await expect(dialog).toBeVisible()
+  const target = dialog.getByRole('link', { name: '비용 원장' })
+  for (let i = 0; i < 30 && !(await target.evaluate((el) => el === document.activeElement)); i++) {
+    await page.keyboard.press('Tab')
+  }
+  await expect(target).toBeFocused()
+  await page.keyboard.press('Enter')
+  await expect(page.getByRole('heading', { name: '비용 원장', level: 1 })).toBeVisible()
+  await expect(dialog).toBeHidden()
+  await expect.poll(() => page.locator('body > #root header.sticky').evaluate((el) => el.closest('[aria-hidden="true"]') === null)).toBe(true)
+  // 열린 채 데스크톱 폭이 되면 닫혀 배경이 다시 조작 가능해진다
+  await trigger.click()
+  await expect(dialog).toBeVisible()
+  await page.setViewportSize({ width: 1280, height: 844 })
+  await expect(dialog).toBeHidden()
+  await expect.poll(() => page.locator('body > #root header.sticky').evaluate((el) => el.closest('[aria-hidden="true"]') === null)).toBe(true)
+})
+
+test('tabs have no vertical scrollbar and keep horizontal scroll and keyboard focus (UI-F01)', async ({ page }) => {
+  await installMockApi(page, { signedIn: true })
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 844 })
+    await page.goto('/channels/1')
+    const tablist = page.getByRole('tablist')
+    await expect(tablist).toBeVisible()
+    // 세로 스크롤바(위·아래 버튼)가 생기지 않음: 세로 스크롤바 폭 0
+    const box = await tablist.evaluate((el: HTMLElement) => ({ overflowY: getComputedStyle(el).overflowY, overflowX: getComputedStyle(el).overflowX, verticalScrollbar: el.offsetWidth - el.clientWidth }))
+    expect(box.overflowY).toBe('hidden')
+    expect(box.overflowX).toBe('auto')
+    expect(box.verticalScrollbar).toBe(0)
+    await page.getByRole('tab').first().focus()
+    await page.keyboard.press('ArrowRight')
+    await expect(page.getByRole('tab').nth(1)).toBeFocused()
+  }
+})
+
 test('remaining screens render without errors', async ({ page }) => {
   await installMockApi(page, { signedIn: true })
   const errors: string[] = []
   page.on('pageerror', (e) => errors.push(e.message))
+  // 첫 진입 lazy 라우트에서 HydrateFallback 경고가 없어야 한다(UI-RV-A03)
+  page.on('console', (m) => {
+    if ((m.type() === 'warning' || m.type() === 'error') && /HydrateFallback|hydrateFallbackElement/.test(m.text())) errors.push(m.text())
+  })
   for (const [path, heading, name] of [
     ['/budget/usage', '예산 사용량', '15-usage'],
     ['/budget/reservations', '예약·정산', '16-reservations'],

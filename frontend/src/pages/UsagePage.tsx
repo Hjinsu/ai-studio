@@ -87,13 +87,13 @@ function ChannelUsage() {
             return (
               <div className="grid gap-5">
                 {applicable !== null && (
-                  <Card title="이 채널에서 지금 쓸 수 있는 금액(참고)">
+                  <Card title="예산 정책 기준 잔여 한도">
                     <p className="num text-xl font-semibold">
                       <Money value={applicable} />
                     </p>
                     <InlineNotice icon={<Info className="size-4 text-muted" />}>
-                      시스템 일간·월간과 채널 정책 중 <strong>가장 작은 잔여</strong>입니다. 콘텐츠 유형 한도, 지출 차단, 정합성 상태,
-                      채널 상태, 환율 유효성은 포함하지 않았습니다. 실제 예약 가능 여부는 서버가 예약 시점에 판단합니다.
+                      시스템 및 채널 예산 중 가장 낮은 잔여 한도입니다. 실제 지출 가능 여부는 콘텐츠 한도, 지출 제어 상태, 정합성, 채널 상태 및
+                      환율 유효성 등에 따라 결정됩니다.
                     </InlineNotice>
                   </Card>
                 )}

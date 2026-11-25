@@ -73,7 +73,7 @@ export function ReservationsPage() {
       </div>
       <QueryView query={reservations}>
         {(data) => data.items.length === 0 ? (
-          <EmptyState icon={<Receipt className="size-6" />} title="예약이 없습니다" description={status ? '다른 상태를 선택해 보세요.' : '비용 예약은 제작 작업이 provider를 호출하기 전에 자동으로 만들어집니다.'} />
+          <EmptyState icon={<Receipt className="size-6" />} title="예약이 없습니다" description={status ? '다른 상태를 선택해 보세요.' : '비용 예약은 제작 작업이 AI 서비스 등을 호출하기 전에 자동으로 만들어집니다.'} />
         ) : (
           <>
             <DataTable

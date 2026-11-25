@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useParams } from 'react-router'
+import { ApiError } from '../api/client'
 import { adjustReservation, getReservation, newIdempotencyKey, resolveReservation, type ReservationDetail, type Schemas } from '../api/admin'
 import { useChannelName } from '../api/useChannels'
 import { formatMoney, matchesAmount } from '../lib/decimal'
@@ -34,7 +35,7 @@ export function ReservationDetailPage() {
             <div className="mb-5">
               <InlineNotice tone="danger">
                 <strong>정산 확인 필요</strong> — 외부 결과를 확인하지 못했습니다{r.reconciliationReason ? `(사유: ${r.reconciliationReason})` : ''}. 자동으로
-                해제되지 않으니 provider 청구 내역을 확인해 아래에서 과금 여부를 기록하세요.
+                해제되지 않으니 AI 서비스 등의 청구 내역을 확인해 아래에서 과금 여부를 기록하세요.
               </InlineNotice>
             </div>
           )}
@@ -68,7 +69,8 @@ function Timeline({ reservation }: { reservation: ReservationDetail }) {
   if (reservation.events.length === 0) {
     return <EmptyState title="원장 이벤트가 없습니다" />
   }
-  const events = [...reservation.events].sort((a, b) => a.recordedAt.localeCompare(b.recordedAt) || Number(a.id) - Number(b.id))
+  // 서버가 기록 순서(원장 id 오름차순)로 준다. 시각 문자열·Number 변환으로 다시 정렬하지 않는다(UI-RV-05).
+  const events = reservation.events
   return (
     <ol aria-label="원장 이벤트" className="grid gap-0">
       {events.map((event, index) => {
@@ -109,6 +111,50 @@ function useRefreshReservation(id: string) {
   }
 }
 
+type LostCheck = 'recorded' | 'not-recorded' | 'unknown'
+
+/** 응답을 받지 못한 오류(네트워크 끊김·5xx): 서버가 이미 기록했을 수 있어 결과가 불확실하다. */
+function isUncertain(error: unknown): boolean {
+  return !(error instanceof ApiError) || error.status >= 500
+}
+
+/**
+ * 응답 유실 확인(UI-RV-A01): 예약을 다시 조회해 이번 요청 키(= 원장 eventKey)가 이미 기록됐는지 본다.
+ * 자동으로 다시 보내지 않는다. 다시 기록할지는 관리자가 결과를 보고 같은 확인 창(같은 키)에서 정한다.
+ */
+function useLostResponseCheck(id: string) {
+  const queryClient = useQueryClient()
+  return async (key: string): Promise<LostCheck> => {
+    try {
+      const fresh = await queryClient.fetchQuery({ queryKey: ['reservation', id], queryFn: () => getReservation(id), staleTime: 0 })
+      return fresh.events.some((event) => event.eventKey === key) ? 'recorded' : 'not-recorded'
+    } catch {
+      return 'unknown'
+    }
+  }
+}
+
+function LostResponseNotice({ state }: { state: LostCheck | undefined }) {
+  if (state === 'not-recorded') {
+    return (
+      <InlineNotice tone="warning">
+        서버 응답을 받지 못했지만 원장에는 아직 이 요청이 없습니다. 이 확인 창에서 다시 기록하면 같은 요청 키로 보내므로 두 번 기록되지 않습니다.
+      </InlineNotice>
+    )
+  }
+  if (state === 'unknown') {
+    return (
+      <InlineNotice tone="danger">
+        서버 응답을 받지 못했고 기록 여부도 확인하지 못했습니다. 먼저 원장 타임라인을 새로고침해 이미 기록됐는지 확인하세요. 다시 기록할 때는 이
+        확인 창에서 진행해야 같은 요청 키가 유지됩니다.
+      </InlineNotice>
+    )
+  }
+  return null
+}
+
+const RELOAD_GUIDE = '응답을 받지 못한 채 새로고침했거나 화면을 떠났다면, 다시 기록하기 전에 원장 타임라인에서 이미 기록됐는지 먼저 확인하세요(새 화면에서는 새 요청 키가 쓰입니다).'
+
 /**
  * 관리자 정산 확인(ADR-028, 048): 과금됨(확정 총액) 또는 미과금(해제). RELEASED는 지연 과금(과금됨)만 가능하며
  * 외부 근거·사유가 필수다. 한 번의 작업 동안 같은 멱등 키를 유지해 재시도해도 중복 기록되지 않는다.
@@ -124,6 +170,8 @@ function ResolveForm({ reservation }: { reservation: ReservationDetail }) {
   const [open, setOpen] = useState(false)
   const [key, setKey] = useState(newIdempotencyKey)
   const [localError, setLocalError] = useState<string | undefined>()
+  const [lost, setLost] = useState<LostCheck | undefined>()
+  const checkLost = useLostResponseCheck(reservation.id)
   const effectiveOutcome = late ? 'CHARGED' : outcome
   const resolve = useMutation({
     mutationFn: () => {
@@ -138,6 +186,18 @@ function ResolveForm({ reservation }: { reservation: ReservationDetail }) {
       toast.success(effectiveOutcome === 'CHARGED' ? '확정 비용을 기록했습니다.' : '예약을 해제했습니다.')
       await refresh()
     },
+    onError: async (error) => {
+      if (!isUncertain(error)) return
+      const state = await checkLost(key)
+      if (state === 'recorded') {
+        setOpen(false)
+        setKey(newIdempotencyKey())
+        toast.success('응답은 받지 못했지만 원장에 이미 기록된 것을 확인했습니다. 다시 기록하지 마세요.')
+        await refresh()
+        return
+      }
+      setLost(state)
+    },
   })
   const errors = fieldErrors(resolve.error)
   const submit = (event: FormEvent) => {
@@ -147,6 +207,7 @@ function ResolveForm({ reservation }: { reservation: ReservationDetail }) {
       return
     }
     setLocalError(undefined)
+    setLost(undefined)
     resolve.reset()
     setOpen(true)
   }
@@ -183,7 +244,10 @@ function ResolveForm({ reservation }: { reservation: ReservationDetail }) {
         title="정산 결과를 원장에 기록할까요?"
         confirmLabel="원장에 기록"
         busy={resolve.isPending}
-        onConfirm={() => resolve.mutate()}
+        onConfirm={() => {
+          setLost(undefined)
+          resolve.mutate()
+        }}
         onCancel={() => setOpen(false)}
       >
         <p>
@@ -192,7 +256,9 @@ function ResolveForm({ reservation }: { reservation: ReservationDetail }) {
             : '남은 예약을 해제합니다.'}
         </p>
         <p className="text-sm text-muted">원장 기록은 수정·삭제할 수 없습니다. 잘못 기록하면 조정·환불로 바로잡습니다.</p>
+        <p className="text-sm text-muted">{RELOAD_GUIDE}</p>
         {resolve.error && <ErrorState error={resolve.error} compact />}
+        <LostResponseNotice state={resolve.error ? lost : undefined} />
       </ConfirmDialog>
     </Card>
   )
@@ -211,6 +277,8 @@ function AdjustForm({ reservation }: { reservation: ReservationDetail }) {
   const [open, setOpen] = useState(false)
   const [key, setKey] = useState(newIdempotencyKey)
   const [localError, setLocalError] = useState<string | undefined>()
+  const [lost, setLost] = useState<LostCheck | undefined>()
+  const checkLost = useLostResponseCheck(reservation.id)
   const adjust = useMutation({
     mutationFn: () => adjustReservation(reservation.id, key, { entryType, basis, amount, reasonCode, note: note.trim(), ...(externalRef.trim() ? { externalRef: externalRef.trim() } : {}) }),
     onSuccess: async () => {
@@ -218,6 +286,18 @@ function AdjustForm({ reservation }: { reservation: ReservationDetail }) {
       setKey(newIdempotencyKey())
       toast.success(entryType === 'REFUND' ? '환불을 기록했습니다.' : '조정을 기록했습니다.')
       await refresh()
+    },
+    onError: async (error) => {
+      if (!isUncertain(error)) return
+      const state = await checkLost(key)
+      if (state === 'recorded') {
+        setOpen(false)
+        setKey(newIdempotencyKey())
+        toast.success('응답은 받지 못했지만 원장에 이미 기록된 것을 확인했습니다. 다시 기록하지 마세요.')
+        await refresh()
+        return
+      }
+      setLost(state)
     },
   })
   const errors = fieldErrors(adjust.error)
@@ -233,6 +313,7 @@ function AdjustForm({ reservation }: { reservation: ReservationDetail }) {
       return
     }
     setLocalError(undefined)
+    setLost(undefined)
     adjust.reset()
     setOpen(true)
   }
@@ -277,14 +358,19 @@ function AdjustForm({ reservation }: { reservation: ReservationDetail }) {
         title={`${entryType === 'REFUND' ? '환불' : '조정'}을 원장에 기록할까요?`}
         confirmLabel="원장에 기록"
         busy={adjust.isPending}
-        onConfirm={() => adjust.mutate()}
+        onConfirm={() => {
+          setLost(undefined)
+          adjust.mutate()
+        }}
         onCancel={() => setOpen(false)}
       >
         <p>
           {formatMoney(amount || '0', currency)} · {text(REASON, reasonCode)}
         </p>
         <p className="text-sm text-muted">원장 기록은 수정·삭제할 수 없습니다.</p>
+        <p className="text-sm text-muted">{RELOAD_GUIDE}</p>
         {adjust.error && <ErrorState error={adjust.error} compact />}
+        <LostResponseNotice state={adjust.error ? lost : undefined} />
       </ConfirmDialog>
     </Card>
   )

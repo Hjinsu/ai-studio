@@ -2,7 +2,7 @@ import { FormField, FormSection, Input, Select, Textarea } from '../../ui/Form'
 import { minutes, type SettingsDraft } from './settings'
 
 /**
- * 채널 설정 입력(관련 설정별 그룹 + 의미 설명). 채널 생성과 새 설정 revision에서 같이 쓴다(ADR-034, 039).
+ * 채널 설정 입력(관련 설정별 그룹 + 의미 설명). 채널 생성과 새 설정 버전에서 같이 쓴다(ADR-034, 039).
  */
 export function ChannelSettingsFields({
   draft,
@@ -71,8 +71,8 @@ export function ChannelSettingsFields({
           </span>
         </label>
       </FormSection>
-      <FormSection title="고급" description="provider(이미지·음성 생성 서비스) 옵션입니다. API 키 같은 비밀값은 넣지 마세요.">
-        <FormField label="provider 옵션(JSON)" optional hint='예: {"imageModel": "draft"}' error={errors.providerOptions}>
+      <FormSection title="고급" description="이미지·음성을 만드는 AI 서비스에 넘길 설정입니다. API 키 같은 비밀값은 넣지 마세요.">
+        <FormField label="AI 서비스 설정(JSON)" optional hint='예: {"imageModel": "draft"}' error={errors.providerOptions}>
           <Textarea className="font-mono text-sm" value={draft.providerOptions} onChange={(e) => set('providerOptions', e.target.value)} />
         </FormField>
       </FormSection>

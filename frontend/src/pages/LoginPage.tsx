@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Eye, EyeOff, LogIn } from 'lucide-react'
 import { login } from '../api/admin'
-import { ME_KEY } from '../queryClient'
+import { AUTH_FLOW_META, ME_KEY } from '../queryClient'
 import { consumeSessionExpired } from '../lib/session'
 import { Button, IconButton } from '../ui/Button'
 import { FormField, Input } from '../ui/Form'
@@ -20,6 +20,7 @@ export function LoginPage() {
   const [reveal, setReveal] = useState(false)
   const signIn = useMutation({
     mutationFn: () => login({ login: loginId.trim(), password }),
+    meta: AUTH_FLOW_META,
     onSuccess: (user) => {
       setPassword('')
       queryClient.setQueryData(ME_KEY, user)

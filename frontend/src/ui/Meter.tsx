@@ -27,6 +27,7 @@ export function ProgressBar({ value, label, tone = 'primary' }: { value: number;
 const STATE_TEXT: Record<BudgetState, string> = {
   ok: '여유',
   near: '소진 임박',
+  exhausted: '한도 소진',
   over: '한도 초과',
   blocked: '전면 차단(한도 0원)',
 }
@@ -63,7 +64,7 @@ export function BudgetMeter({
         <span
           className={cn(
             'text-sm font-medium',
-            state === 'over' || state === 'blocked' ? 'text-danger' : state === 'near' ? 'text-warning' : 'text-muted',
+            state === 'over' || state === 'blocked' || state === 'exhausted' ? 'text-danger' : state === 'near' ? 'text-warning' : 'text-muted',
           )}
         >
           {STATE_TEXT[state]}
