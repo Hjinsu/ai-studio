@@ -152,7 +152,7 @@ public class BudgetReservationService {
             throw new ApiException(ErrorCode.PREREQUISITE_NOT_MET,
                     "Budget consistency check failed; new reservations are blocked until it passes.");
         }
-        requireSystemPolicies(policies);
+        ReservationPolicies.requireSystemPolicies(policies);
         // 2) channel S: ACTIVE만 (ADR-042)
         if (command.channelId() != null) {
             if (channel == null) {
@@ -210,21 +210,6 @@ public class BudgetReservationService {
                 estimateKrw, BigDecimal.ZERO, BigDecimal.ZERO, null, null, "SYSTEM", null, MDC.get("traceId"), now,
                 now));
         return new ReservationResult(mapper.reservation(reservationId), false);
-    }
-
-    private void requireSystemPolicies(List<BudgetMapper.Policy> policies) {
-        boolean day = false;
-        boolean month = false;
-        for (BudgetMapper.Policy policy : policies) {
-            if (BudgetPolicyService.SYSTEM.equals(policy.scope())) {
-                day |= "DAY".equals(policy.periodType());
-                month |= "MONTH".equals(policy.periodType());
-            }
-        }
-        if (!day || !month) {
-            throw new ApiException(ErrorCode.PREREQUISITE_NOT_MET,
-                    "Active SYSTEM DAY and MONTH budget policies are required before spending.");
-        }
     }
 
     /** 정책 행 잠금 하에서 현재 bucket을 찾거나 만든다(동시 생성은 정책 잠금으로 직렬화, UNIQUE는 최종 방어). */
