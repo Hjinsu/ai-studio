@@ -86,4 +86,39 @@ class AdminCommandRunnerTest {
                 .isEqualTo(AdminCommandRunner.EXIT_REJECTED);
         assertThat(runner().execute(List.of("admin", "create"), null)).isEqualTo(AdminCommandRunner.EXIT_REJECTED);
     }
+
+    // ---------------------------------------------------------------- 인자 해석 (2026-11-25 CLI 결함 회귀)
+    @Test
+    void parsesDocumentedSpaceSeparatedLoginAndEqualsForm() {
+        // 문서화된 형태: Spring ApplicationArguments는 이 형태를 비옵션 인자 3개로 나눠 사용법 오류가 났었다
+        AdminCommandRunner.Parsed spaced = AdminCommandRunner.parse(new String[] {"admin", "create", "--login", "admin"});
+        assertThat(spaced.commands()).containsExactly("admin", "create");
+        assertThat(spaced.logins()).containsExactly("admin");
+        AdminCommandRunner.Parsed equals = AdminCommandRunner.parse(new String[] {"admin", "reset-password", "--login=ops"});
+        assertThat(equals.commands()).containsExactly("admin", "reset-password");
+        assertThat(equals.logins()).containsExactly("ops");
+        // Spring 설정 재정의(--key=value)는 명령 해석에서 제외
+        AdminCommandRunner.Parsed withConfig = AdminCommandRunner.parse(
+                new String[] {"admin", "create", "--spring.profiles.active=prod", "--login", "admin"});
+        assertThat(withConfig.commands()).containsExactly("admin", "create");
+        assertThat(withConfig.logins()).containsExactly("admin");
+    }
+
+    @Test
+    void rejectsMalformedArguments() {
+        for (String[] args : List.of(
+                new String[] {"admin", "create"},
+                new String[] {"admin", "create", "--login"},
+                new String[] {"admin", "create", "--login", "--x=y"},
+                new String[] {"admin", "create", "--login="},
+                new String[] {"admin", "create", "--login", "a", "--login", "b"},
+                new String[] {"admin", "create", "--force", "--login", "a"},
+                new String[] {"admin", "create", "--login", "a", "extra"})) {
+            AdminCommandRunner.Parsed parsed = AdminCommandRunner.parse(args);
+            int code = runner("correct-horse-battery-1", "correct-horse-battery-1")
+                    .execute(parsed.commands(), parsed.logins());
+            assertThat(code).as(String.join(" ", args)).isEqualTo(AdminCommandRunner.EXIT_REJECTED);
+        }
+        verifyNoInteractions(accounts);
+    }
 }

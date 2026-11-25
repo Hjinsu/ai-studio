@@ -16,6 +16,15 @@
 ## 인수인계 기록
 작업 ID / 상태 / 변경 파일 / 테스트 명령 및 실제 결과 / 미해결 문제 / 다음 작업 / 필요 환경변수. 커밋 해시는 생성된 경우만 기록.
 
+### T02 — 관리자 CLI 결함 수정 (2026-11-25, IMPLEMENTED 유지, DONE 아님)
+요구사항: 사용자 검증 결함(`java -jar ... admin create --login admin` → BeanCreationException), ADR-031. 상세: [T02_REPORT §8](docs/reports/T02_REPORT.md).
+- **원인**: (1) `AdminCommandRunner` 생성자 2개에 `@Autowired` 없음 → Spring이 기본 생성자 탐색 실패. (2) Spring `ApplicationArguments`는 `--login admin`(공백)을 옵션 값으로 인식하지 않아 문서대로의 명령이 항상 "사용법" 거부.
+- **변경 파일**: `backend/src/main/java/com/aistudio/security/AdminCommandRunner.java`(`@Autowired` 생성자 + `ObjectProvider<PasswordPrompt>`, 엄격 인자 해석 `parse`), `backend/src/main/java/com/aistudio/AiStudioApplication.java`(`adminCli()` 비웹 빌더 분리), `backend/build.gradle.kts`(integrationTest → bootJar 의존, jar 경로 전달), 테스트 `security/AdminCliIT.java`·`security/AdminCliJarIT.java`(신규), `AdminCommandRunnerTest.java`(+2).
+- **실제 결과**: 단위 127/127, 통합 71/71(임시 MariaDB 3307). 실제 bootJar + local profile CLI 실행: create/reset-password/`--login=` → 컨텍스트 정상·웹 서버 없음·콘솔 없음 거부(종료 2), 인자 누락 → 사용법(종료 2). 변이 2종(`@Autowired` 제거, 이전 인자 해석) 모두 검출.
+- **미검증**: 대화형 콘솔 숨김 입력 성공 경로의 실제 터미널 실행(이 환경에 TTY 없음) → 사용자 터미널에서 `java -jar backend/build/libs/backend-0.1.0-SNAPSHOT.jar admin create --login <id>` 재확인 필요. 3306 작업 DB 미사용·미변경.
+- **CI**: 이 수정 커밋의 결과는 아래 줄에 갱신(`git log`, PR #1).
+- **다음 작업**: 사용자 터미널 재확인 → 설계 담당 최종 검토 → T02 DONE 여부. T03 착수 금지.
+
 ### T02 — 2차 재개 세션: 설계 승인 반영·검증 완료 (2026-11-25, IMPLEMENTED, DONE 아님)
 요구사항: P-T02-01 승인(→ADR-062), T02 미완료 항목(T02_PLAN §2 단계 7~10), 예산 필수 검증 14항목, ADR-035 관리자 UI. T03 미착수. 브랜치 `wip/t02-implementation-checkpoint-2026-11-25`(커밋·푸시 승인, main 병합 금지).
 

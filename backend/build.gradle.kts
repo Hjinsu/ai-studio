@@ -71,6 +71,13 @@ tasks.register<Test>("integrationTest") {
         includeTags("integration")
     }
     shouldRunAfter(tasks.named("test"))
+    // AdminCliJarIT: 실제 bootJar로 관리자 CLI 실행 경로를 검증한다
+    val bootJar = tasks.named<org.springframework.boot.gradle.tasks.bundling.BootJar>("bootJar")
+    dependsOn(bootJar)
+    inputs.file(bootJar.flatMap { it.archiveFile }).withPathSensitivity(PathSensitivity.NONE)
+    jvmArgumentProviders.add(CommandLineArgumentProvider {
+        listOf("-Dai-studio.boot-jar=" + bootJar.get().archiveFile.get().asFile.absolutePath)
+    })
 }
 
 tasks.named<Jar>("jar") {

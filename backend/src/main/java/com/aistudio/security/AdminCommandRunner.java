@@ -2,9 +2,12 @@ package com.aistudio.security;
 
 import java.io.Console;
 import java.io.PrintStream;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.ExitCodeGenerator;
@@ -40,8 +43,14 @@ public class AdminCommandRunner implements ApplicationRunner, ExitCodeGenerator 
     private final PrintStream out;
     private int exitCode = EXIT_ERROR;
 
-    public AdminCommandRunner(AdminAccountService accounts) {
-        this(accounts, PasswordPrompt.systemConsole(), System.out);
+    /**
+     * Spring Bean 생성 경로(유일하게 주입에 쓰이는 생성자). 생성자가 둘이라 명시하지 않으면 Spring이 기본 생성자를 찾다
+     * 실패한다(BeanInstantiationException, 2026-11-25 CLI 결함). 입력 장치는 기본적으로 시스템 콘솔이며, 콘솔이 없으면
+     * 거부한다. PasswordPrompt Bean은 운영 코드에 정의하지 않는다(테스트 컨텍스트에서만 숨김 입력 대체용).
+     */
+    @Autowired
+    public AdminCommandRunner(AdminAccountService accounts, ObjectProvider<PasswordPrompt> prompt) {
+        this(accounts, prompt.getIfAvailable(PasswordPrompt::systemConsole), System.out);
     }
 
     AdminCommandRunner(AdminAccountService accounts, PasswordPrompt prompt, PrintStream out) {
@@ -52,12 +61,51 @@ public class AdminCommandRunner implements ApplicationRunner, ExitCodeGenerator 
 
     @Override
     public void run(ApplicationArguments args) {
-        exitCode = execute(args.getNonOptionArgs(), args.getOptionValues("login"));
+        Parsed parsed = parse(args.getSourceArgs());
+        exitCode = execute(parsed.commands(), parsed.logins());
+    }
+
+    /** 원본 인자에서 명령과 로그인을 분리한 결과. 형식 오류면 logins가 null이라 execute가 사용법으로 거부한다. */
+    record Parsed(List<String> commands, List<String> logins) {
+    }
+
+    /**
+     * 원본 인자를 엄격하게 해석한다. 문서화된 `--login <id>`(공백)와 `--login=<id>`를 모두 받는다.
+     * Spring의 ApplicationArguments는 `--name=value`만 옵션 값으로 인식해 `--login admin`을 비옵션 인자로 나누므로
+     * 직접 해석한다(2026-11-25 CLI 결함). `--login` 이외의 `--key=value`는 Spring 설정 재정의로 보고 무시한다.
+     * 그 밖의 형태(값 없는 --login, 중복 --login, 알 수 없는 옵션, 남는 인자)는 거부한다.
+     */
+    static Parsed parse(String[] source) {
+        List<String> commands = new ArrayList<>();
+        List<String> logins = new ArrayList<>();
+        boolean invalid = false;
+        for (int i = 0; i < source.length; i++) {
+            String arg = source[i];
+            if (arg.equals("--login")) {
+                if (i + 1 >= source.length || source[i + 1].startsWith("--")) {
+                    invalid = true;
+                } else {
+                    logins.add(source[++i]);
+                }
+            } else if (arg.startsWith("--login=")) {
+                logins.add(arg.substring("--login=".length()));
+            } else if (arg.startsWith("--")) {
+                if (!arg.contains("=")) {
+                    invalid = true;
+                }
+            } else {
+                commands.add(arg);
+            }
+        }
+        if (invalid || logins.size() != 1 || logins.getFirst().isBlank()) {
+            return new Parsed(commands, null);
+        }
+        return new Parsed(commands, logins);
     }
 
     int execute(List<String> commands, List<String> logins) {
         if (commands.size() != 2 || !"admin".equals(commands.get(0)) || logins == null || logins.size() != 1) {
-            out.println("사용법: admin create --login <id> | admin reset-password --login <id>");
+            out.println("사용법: admin create --login <id> | admin reset-password --login <id> (--login=<id>도 허용)");
             return EXIT_REJECTED;
         }
         String command = commands.get(1);

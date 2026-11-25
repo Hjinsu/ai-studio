@@ -28,6 +28,7 @@ mkdir -p <TMP>
 AI_STUDIO_IT_DB_HOST=127.0.0.1 AI_STUDIO_IT_DB_PORT=3307 AI_STUDIO_IT_DB_USER=root AI_STUDIO_IT_DB_PASSWORD=<PW> \
   ./gradlew.bat :backend:integrationTest
 ```
+- `integrationTest`는 `bootJar`를 먼저 만든다(AdminCliJarIT가 실제 jar로 관리자 CLI를 실행).
 - 결과 XML: `backend/build/test-results/{test,integrationTest}/`. 명세(`docs/api/openapi.yaml`)·운영 권한 템플릿(`infra/mariadb/prod-app-grants.sql`)은 Gradle 테스트 입력으로 선언되어 바뀌면 다시 실행된다.
 - 프론트(대문자 드라이브 경로에서 실행): PowerShell `Set-Location 'C:\...\ai-studio\frontend'; npm run lint; npm run typecheck; npm test; npm run build`.
   소문자 드라이브(`c:\...`)를 작업 경로로 vitest를 실행하면 vitest 모듈이 두 번 로드되어 "failed to find the current suite"로 모든 파일이 실패한다(환경 문제, 코드와 무관).
@@ -40,7 +41,7 @@ AI_STUDIO_IT_DB_HOST=127.0.0.1 AI_STUDIO_IT_DB_PORT=3307 AI_STUDIO_IT_DB_USER=ro
 AI_STUDIO_DB_URL=jdbc:mariadb://127.0.0.1:3307/ai_studio AI_STUDIO_DB_USER=root AI_STUDIO_DB_PASSWORD=<PW> ./gradlew.bat :backend:bootRun
 cd frontend && npx vite --host 127.0.0.1 --port 5173      # 프록시 → 127.0.0.1:8080
 ```
-관리자는 `java -jar backend/build/libs/<jar> admin create --login <id>`(콘솔 숨김 입력, ADR-031)로 만든다.
+관리자는 대화형 터미널(cmd/PowerShell)에서 `java -jar backend/build/libs/<jar> admin create --login <id>`(또는 `--login=<id>`, 콘솔 숨김 입력, ADR-031)로 만든다. 콘솔이 없는 실행(IDE 출력 창, 파이프)은 거부된다(종료 코드 2).
 
 ## 5. 종료·정리
 ```bash

@@ -1,5 +1,5 @@
 # T02 구현 보고서 (설계 검토용)
-작성 2026-11-25 · 작성 Claude Code · 브랜치 `wip/t02-implementation-checkpoint-2026-11-25` · 상태: **IMPLEMENTED — CI 전 job 통과(run 45526843601), 최종 설계 승인 대기(DONE 아님)** · T03 미착수
+작성 2026-11-25 · 작성 Claude Code · 브랜치 `wip/t02-implementation-checkpoint-2026-11-25` · 상태: **IMPLEMENTED — 관리자 CLI 결함 수정(§8), CI 재검증, 최종 설계 승인 대기(DONE 아님)** · T03 미착수
 
 ## 1. 범위와 결과 요약
 | 영역 | 상태 | 근거 |
@@ -86,3 +86,32 @@ CI는 Draft PR [#1](https://github.com/Hjinsu/ai-studio/pull/1)(main 대상, **�
 | **45526843601** | **93bbde3** | **전 job 통과** — Backend Linux(unit + Testcontainers integration + bootJar + compose config + Docker image), Backend Windows(unit + bootJar), Frontend ubuntu/windows(lint·typecheck·test 4파일·build), OpenAPI contract(Redocly 유효, 생성 타입 일치), gitleaks(no leaks found) |
 
 한계: Gradle 로그는 테스트별 개수를 출력하지 않아 CI의 통합 테스트 개수(로컬 69)는 직접 확인하지 못했다. 오탐 예외 방식은 DECISIONS P-T02-02(승인 대기)로 기록.
+
+## 8. 사용자 검증 결함: 관리자 CLI 실행 실패 (2026-11-25 수정)
+**증상**: `java -jar backend/build/libs/backend-0.1.0-SNAPSHOT.jar admin create --login admin` → `BeanCreationException: adminCommandRunner` / `No default constructor found` / `NoSuchMethodException: AdminCommandRunner.<init>()`.
+
+**원인 (2건)**
+1. **Bean 생성자 선택 실패**: `AdminCommandRunner`에 public 생성자(1인자, 운영용)와 package-private 생성자(3인자, 단위 테스트용)가 함께 있고 어느 쪽에도 `@Autowired`가 없었다. 생성자가 둘 이상이면 Spring은 주입할 생성자를 고르지 못하고 기본 생성자를 찾다 실패한다. 단위 테스트는 3인자 생성자를 직접 호출했고, `ai-studio.cli.admin=true`로 컨텍스트를 띄우는 테스트가 없어 누락됐다.
+2. **인자 해석 불일치(1을 고친 뒤 드러남)**: Spring `ApplicationArguments`는 `--name=value`만 옵션 값으로 인식한다. 문서·사용법의 `--login admin`(공백)은 `--login`(값 없음) + 비옵션 `admin`이 되어 명령 인자가 3개 → 항상 "사용법" 거부. 즉 결함 1이 없었어도 문서대로의 명령은 동작하지 않았다.
+
+**수정 (기본 생성자 추가 없음, 정책 완화 없음)**
+- `AdminCommandRunner`: Spring 생성자를 `@Autowired`로 명시 — `(AdminAccountService, ObjectProvider<PasswordPrompt>)`. 입력 장치는 PasswordPrompt Bean이 없으면 시스템 콘솔(운영 코드에는 Bean 정의 없음, 테스트 컨텍스트에서만 숨김 입력 대체). 콘솔 없으면 거부·stdin 평문 대체 금지는 그대로.
+- `AdminCommandRunner.parse`: 원본 인자를 엄격 해석 — `--login <id>`와 `--login=<id>` 모두 허용, `--key=value`(Spring 설정 재정의)는 무시, 값 없는/중복 `--login`·알 수 없는 옵션·남는 인자는 거부.
+- `AiStudioApplication.adminCli()`: CLI용 비웹(`WebApplicationType.NONE`) 빌더를 분리해 main과 테스트가 같은 구성을 사용.
+- `backend/build.gradle.kts`: `integrationTest`가 `bootJar`에 의존하고 jar 경로를 시스템 속성으로 전달.
+
+**추가 테스트**
+| 테스트 | 검증 |
+|---|---|
+| `security/AdminCliIT` (통합) | main과 같은 `adminCli()` 구성으로 실제 Spring Bean 생성 경로 실행: 비웹 컨텍스트(WebServerApplicationContext 아님), Runner Bean 1개, 콘솔 없음 거부(기록 0), 확인 불일치 거부, create 성공(BCrypt 해시·bootstrap 기록), 두 번째 create 거부, reset-password 성공(해시 변경·credential_version +1), 없는 로그인·약한 비밀번호 거부, 잘못된 명령 거부. `--login <id>`와 `--login=<id>` 모두 사용 |
+| `security/AdminCliJarIT` (통합) | **실제 bootJar를 하위 프로세스로 실행**(콘솔 없음): create·reset-password 모두 Spring 컨텍스트 정상 초기화(Flyway V1~V5 적용 확인) → "콘솔 없음" 거부(종료 코드 2), BeanCreation/시작 실패 문구 없음, 웹 서버(Tomcat 등) 로그 없음, 스스로 종료, 관리자 미생성, 사용법 오류 시 종료 코드 2 |
+| `AdminCommandRunnerTest` (+2) | 인자 해석: 공백/등호 형식, 설정 재정의 무시, 잘못된 형식 7종 거부(서비스 호출 없음) |
+회귀 확인(변이): `@Autowired` 제거 → 두 통합 테스트가 보고된 것과 같은 `No default constructor found`/`NoSuchMethodException: AdminCommandRunner.<init>()`로 실패. 인자 해석만 이전 방식으로 되돌림 → 두 통합 테스트 실패. 모두 원복.
+
+**실제 실행 결과 (Windows, Java 21.0.13)**
+| 실행 | 결과 |
+|---|---|
+| bootJar + local profile(`AI_STUDIO_DB_*`를 임시 인스턴스 3307의 `ai_studio`로 지정, 콘솔 없는 하위 셸) `admin create --login admin` / `admin reset-password --login admin` / `admin create --login=admin` | DB 검증 → Flyway up to date → "콘솔이 없습니다" 거부, 종료 코드 2, 웹 서버 로그 없음 |
+| 같은 조건 `admin create` | "사용법" 거부, 종료 코드 2 |
+| `./gradlew.bat :backend:test :backend:integrationTest --rerun-tasks` | 단위 127/127, 통합 71/71 (AuthIT 9, AdminBootstrapIT 2, ProductionGrantsIT 2, AdminCliIT 1, AdminCliJarIT 1 포함) |
+미검증: 실제 대화형 콘솔에서의 숨김 입력 성공 경로(자동화 도구에 TTY가 없음 — 성공 경로는 AdminCliIT의 실제 Bean 경로로 검증). 사용자 터미널(cmd/PowerShell)에서 `admin create --login <id>` 재확인 필요. 3306 작업 DB는 이번 검증에서 사용하지 않았다.
