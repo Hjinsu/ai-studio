@@ -76,7 +76,7 @@
 | OpenAPI `lint:openapi` / 생성 타입 `check` | 유효(기존 경고 2건) / 일치 |
 | 백엔드 단위·통합·Boot JAR (`--no-build-cache --rerun-tasks`, 격리 임시 MariaDB 11.8.2 `127.0.0.1:3307`) | 단위 **133/133**, 통합 **97/97**, bootJar 성공. 임시 DB 종료 |
 | gitleaks | 로컬 미설치 → CI job으로 확인 |
-| GitHub Actions 7개 job | 푸시 후 STATE.md·TASKS.md에 run id와 결과 기록 |
+| GitHub Actions 7개 job | 커밋 `646179a`, run 45567226915 **7/7 success** |
 
 브라우저 확인(스크린샷, Mock API): 로그인, 대시보드(라이트), 채널 목록·등록 대화상자(입력 경계), 지출 제어(다크), 예산 사용량, 모바일 390px 드로어·원장, 빈 예산 상태. 사용자 개발 DB(3306)는 사용·변경하지 않았다.
 

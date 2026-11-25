@@ -208,5 +208,5 @@ CI는 Draft PR [#1](https://github.com/Hjinsu/ai-studio/pull/1)(main 대상, **�
 
 ### 12.3 결과 요약
 - UI-RV-01~06 수정, UI-F01·F02·F03·F04·F05·F07·F11·F12·F13 표시 문구 반영(enum·API 불변), A02(정확히 100% = 한도 소진)·A03(HydrateFallback) 해결, A01은 응답 유실 확인 안내로 완화하고 근본 해결을 P-T02-05로 제안(실제 비용 발생 전 해결 또는 수용 필요).
-- 검증: vitest 60/60, E2E 10/10(Mock API, 3회 연속), lint·typecheck·build, OpenAPI·생성 타입, 백엔드 단위 133/133·통합 97/97(격리 MariaDB 3307)·bootJar. CI 결과는 STATE.md에 기록.
+- 검증: vitest 60/60, E2E 10/10(Mock API, 3회 연속), lint·typecheck·build, OpenAPI·생성 타입, 백엔드 단위 133/133·통합 97/97(격리 MariaDB 3307)·bootJar. 커밋 `646179a` CI run 45567226915 **7/7 success**.
 - 보류: UI-F06·F08·F09·F10. API·DB·Flyway 변경 없음.

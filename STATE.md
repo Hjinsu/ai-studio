@@ -18,7 +18,7 @@
 
 ### T02-UI-FIX — Codex UI 리뷰 결함·사용자 확인 항목 수정 — Claude Code (2026-11-25, IMPLEMENTED, DONE 아님)
 요구사항: 사용자 지시(UI-RV-01~06 전체 수정, UI-F01·F02·F03·F04·F05·F07·F11·F12·F13, 안전 검토 A01·A02·A03). 리뷰 [T02_CODEX_FRONTEND_REVIEW](docs/reviews/T02_CODEX_FRONTEND_REVIEW.md), 결과 [T02_UI_FIX_REPORT](docs/reports/T02_UI_FIX_REPORT.md), ADR-066, 제안 P-T02-05.
-- 브랜치 `wip/t02-implementation-checkpoint-2026-11-25`(Draft PR #1). 수정 전 HEAD `6f4589f`. 커밋·CI는 아래 "커밋·CI" 줄(푸시 후 갱신).
+- 브랜치 `wip/t02-implementation-checkpoint-2026-11-25`(Draft PR #1). 수정 전 HEAD `6f4589f`. 커밋 `646179a` "fix(T02-UI): resolve Codex UI review UI-RV-01..06 and approved UI-F items" → PR #1 푸시. GitHub Actions run [45567226915](https://github.com/Hjinsu/ai-studio/actions/runs/45567226915) **7/7 job success**(Backend Linux unit+integration, Backend Windows, Frontend ubuntu·windows, Frontend E2E Edge, gitleaks, OpenAPI·생성 타입). 이후 커밋은 기록용 문서만.
 - 변경: `frontend/` 화면·공통 컴포넌트·테스트, 문서. **API·OpenAPI·생성 타입·백엔드·DB·Flyway 변경 없음**, 새 의존성 없음.
 - 실제 결과: frontend lint·typecheck·build 통과, vitest **60/60**(기존 39 유지), Playwright E2E **10/10**(Edge, **Mock API** — 실제 백엔드 연동 아님, 3회 연속 통과), OpenAPI lint 유효(기존 경고 2)·생성 타입 일치, 백엔드 단위 **133/133**·통합 **97/97**(격리 임시 MariaDB 11.8.2 `127.0.0.1:3307`, 종료함)·bootJar 성공. 수정 전 코드(`6f4589f`)에 새 테스트를 적용하면 vitest 16건·E2E 3건 실패(재현 확인, 임시 worktree는 제거).
 - 이전 CI 재실행: `6f4589f` run 45558365457 — 1차 Maven Central HTTP 429로 Backend Linux 실패, 2차 시도 7/7 성공.
