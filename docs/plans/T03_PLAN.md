@@ -1,5 +1,5 @@
 # T03 계획 — 선행 조건과 필수 설계 제약 (초안)
-작성 2026-11-25 · 상태: **설계 제약만 기록, T03 미착수**(T02 DONE 및 T03 설계 승인 전 제품 코드 개발 금지) · 근거: T02 통합 승인, [T02_CLAUDE_BACKEND_REVIEW](../reviews/T02_CLAUDE_BACKEND_REVIEW.md) §7, DECISIONS ADR-064·065, P-T02-04
+작성 2026-11-25 · 상태: **설계 제약만 기록, T03 미착수**. T02는 2026-11-25 DONE으로 승인됐으며 T03 설계 승인이 남아 있다. · 근거: T02 통합 승인, [T02_CLAUDE_BACKEND_REVIEW](../reviews/T02_CLAUDE_BACKEND_REVIEW.md) §7, DECISIONS ADR-064·065, P-T02-04
 
 T03 범위(STATE.md): 콘텐츠 revision, DB 작업 큐, lease, 재시도. T03 상세 설계는 아래 제약을 모두 충족해야 승인 대상이 된다.
 

@@ -1,10 +1,10 @@
 # 작업 상태
 기준선: v0.1 설계 패키지 + ADR-006~066 승인(2026-11-25). 실제 계정 및 API 미연동.
-현재 작업: T02 (IMPLEMENTED — RVX-02-CB 최종 보강, 별도 세션의 콜백 경계 검토 및 최종 종료 승인 대기). [최종 보강 보고서](docs/reports/T02_FINAL_PATCH_REPORT.md), [T02 통합 보고서](docs/reports/T02_REPORT.md).
+현재 상태: T02 DONE (2026-11-25 최종 승인). T03 미착수, 별도 설계 승인 대기. [T02 통합 보고서](docs/reports/T02_REPORT.md), [최종 독립 검토](docs/reviews/T02_FINAL_PATCH_REVIEW.md).
 | ID | 상태 | 작업 |
 |---|---|---|
 | T01 | DONE (2026-11-25 승인, 커밋 55e33ec, CI run 45440907314) | 프로젝트 bootstrap, 버전 고정, DB/Flyway, CI, health check |
-| T02 | IMPLEMENTED (Draft PR #1, 사용자 화면 검증 14/14·최종 화면 재확인 6/6, RVX-02-CB 별도 확인 및 종료 승인 대기) | 인증, 채널, 설정, 비용 원장 |
+| T02 | DONE (2026-11-25 최종 승인, 제품 `55ea852`, [PR #1](https://github.com/Hjinsu/ai-studio/pull/1), 사용자 검증 14/14·최종 재확인 6/6) | 인증, 채널, 설정, 비용 원장 |
 | T03 | TODO (선행 조건·필수 설계 제약만 기록: docs/plans/T03_PLAN.md, 착수 금지) | 콘텐츠 revision, DB 큐, lease, 재시도 |
 | T04 | TODO | fake provider, 조사/대본/스토리보드 |
 | T05 | TODO | 이미지/TTS/자막/FFmpeg 로컬 렌더링 |
@@ -15,6 +15,12 @@
 | T10 | TODO | 트렌드 및 멀티채널 확장 |
 ## 인수인계 기록
 작업 ID / 상태 / 변경 파일 / 테스트 명령 및 실제 결과 / 미해결 문제 / 다음 작업 / 필요 환경변수. 커밋 해시는 생성된 경우만 기록.
+
+### T02-FINAL-CLOSE — 종료 승인 및 main 반영 (2026-11-25, DONE)
+- RVX-02-CB 독립 검토 PASS, 종료 권고 APPROVE, 새 종료 차단 결함 없음. 최종 검토 원문과 사용자 검증 14/14·최종 재확인 6/6을 보존했다.
+- 제품 `55ea852`, 종료 전 기준 HEAD `49334bc`의 CI [45578405327](https://github.com/Hjinsu/ai-studio/actions/runs/45578405327) 7/7. [PR 병합 및 최신 검사 기록](https://github.com/Hjinsu/ai-studio/pull/1/checks).
+- 백엔드 단위 133건·격리 MariaDB 통합 97건은 기존 T02 기록, 프론트엔드 Vitest 73건·Edge Mock API E2E 10건은 최종 보강 기록을 근거로 한다. 실제 백엔드 연결 브라우저 E2E 미실행. 종료 작업에서 제품·API·DB·migration 변경 없음.
+- CR-01·CR-02, P-T02-03·P-T02-05, UI-F06·F08·F09·F10 보류 및 T03 선행 제약 유지. 지출 차단을 유지하며 실제 비용 발생과 유료 API 활성화 전에 영속 정산 멱등성과 결과 복구가 필요하다. T03은 별도 설계 승인 전 미착수.
 
 ### T02-FINAL-PATCH — RVX-02-CB 최종 보강 (2026-11-25, IMPLEMENTED)
 - Draft PR #1 제품 커밋 `55ea852`. 보호 mutation의 캐시 조회와 토스트를 요청 세대에 결합하고 후속 UI 처리 전에 세대를 재확인했다. [최종 리뷰 원문](docs/reviews/T02_FINAL_REVIEW.md), [보강 및 검증 기록](docs/reports/T02_FINAL_PATCH_REPORT.md).

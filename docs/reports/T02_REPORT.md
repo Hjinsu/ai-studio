@@ -224,3 +224,18 @@ CI는 Draft PR [#1](https://github.com/Hjinsu/ai-studio/pull/1)(main 대상, **�
 - 최종 독립 검토에서 RVX-01·03과 RVX-02 지연 HTTP 응답 차단을 통과로 판정했다. 승인된 후속 범위는 RVX-02-CB이며 제품 커밋은 `55ea852`이다. [최종 리뷰](../reviews/T02_FINAL_REVIEW.md)
 - 새 세대가 시작되면 이전 콜백에서 진행 중인 캐시 조회와 알림을 정리하고, 기다리던 콜백이 화면을 바꾸기 전에 세대를 다시 확인한다. [보강 및 검증 기록](T02_FINAL_PATCH_REPORT.md)
 - 사용자 직접 검증 보고는 전체 화면 14/14, 최종 변경 화면 6/6 통과다. 정상 UI 흐름이 유지되어 기존 결과를 승계한다. T02는 IMPLEMENTED이며 변경 콜백 경계의 별도 확인 및 최종 종료 승인 대기다.
+
+## 15. T02-FINAL-CLOSE — 종료 승인 및 main 반영 (2026-11-25)
+
+T02는 2026-11-25 최종 승인으로 **DONE**이다. 제품 최종 커밋은 `55ea852`이고, [최종 독립 검토](../reviews/T02_FINAL_PATCH_REVIEW.md)는 RVX-02-CB PASS, 표적 회귀 3/3, 신규 종료 차단 결함 없음, 종료 권고 APPROVE를 기록했다. [PR #1](https://github.com/Hjinsu/ai-studio/pull/1)에서 최종 문서 커밋, 정확한 병합 커밋과 검사 이력을 확인할 수 있다.
+
+| 검증 | 결과 및 근거 |
+|---|---|
+| 백엔드 단위 | 133건, 기존 T02 통합 검증 §11~12, `./gradlew :backend:test` |
+| 백엔드 통합 | 97건, 기존 T02 통합 검증 §11~12, 격리 임시 MariaDB 3307에서 `./gradlew :backend:integrationTest`. CI는 MariaDB Testcontainers 사용 |
+| 프론트엔드 단위 | 73/73, 최종 보강 및 별도 검토의 Vitest 결과. 기존 70건 및 신규 RVX-02-CB 3건 |
+| 브라우저 E2E | Edge Mock API 10/10, 최종 보강 결과. 실제 백엔드 연결 브라우저 E2E 미실행 |
+| 사용자 확인 | 전체 화면 14/14, 최종 변경 화면 재확인 6/6 |
+| CI 기준 | 문서 정리 전 [45578405327](https://github.com/Hjinsu/ai-studio/actions/runs/45578405327), `49334bc`, 7/7. [최종 PR 검사](https://github.com/Hjinsu/ai-studio/pull/1/checks) 및 [main CI](https://github.com/Hjinsu/ai-studio/actions?query=branch%3Amain) |
+
+종료 작업은 문서와 Git 처리로 한정됐다. 제품 코드와 사용자 개발 DB를 변경하지 않았으며 지출 차단을 유지한다. CR-01·CR-02, P-T02-03·P-T02-05, UI-F06·F08·F09·F10 보류 및 [T03 선행 설계 제약](../plans/T03_PLAN.md)을 승계한다. 서버 중심 영속 정산 멱등성과 결과 복구는 실제 비용 발생 및 유료 API 활성화 전에 해결해야 한다. T03 미착수.

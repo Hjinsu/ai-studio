@@ -19,9 +19,9 @@
 | T02-UI-FIX | UI-RV-01~06·UI-F01/F02/F03/F04/F05/F07/F11/F12/F13 수정, 안전 검토 A01~A03 | Claude Code | IMPLEMENTED — `docs/reports/T02_UI_FIX_REPORT.md`, 기준 `6f4589f`, 커밋 `646179a`, CI run 45567226915 7/7 | `frontend/`, 문서(API·DB 변경 금지) | 사용자 수정 승인(2026-11-25) |
 | T02-UI-FIX-RV | T02-UI-FIX 표적 교차 리뷰 | Codex | 완료 — `6f4589f..646179a`, RVX-01~03 보고, `docs/reviews/T02_CODEX_UI_FIX_REVIEW.md` 및 `refs/reviews/t02-ui-fix-rv` | 리뷰 보고서 | T02-UI-FIX 커밋·CI |
 | T02-UI-FIX-EXT | 세션 경계 및 정산 안전성(RVX-01~03) | Codex | IMPLEMENTED — `53b305b` 독립 검토에서 RVX-01·03과 RVX-02 지연 HTTP 통과, RVX-02-CB 후속 배정 | 프론트엔드 및 보고·결정 문서 | 사용자 승인 |
-| T02-FINAL-PATCH | RVX-02-CB mutation 콜백 세대 보강 | Codex | IMPLEMENTED — `55ea852`, 변경된 콜백 경계의 별도 검토 대기 | 직접 관련 프론트엔드 및 보고·결정 문서 | MEDIUM 잔여 위험 보강 승인 |
+| T02-FINAL-PATCH | RVX-02-CB mutation 콜백 세대 보강 | Codex | DONE — `55ea852`, 별도 검토 PASS 및 최종 승인 | 직접 관련 프론트엔드 및 보고·결정 문서 | MEDIUM 잔여 위험 보강 승인 |
 | T02-VERIFY | 통합·회귀·CI 및 사용자 검증 | 사용자 | 사용자 보고 화면 14/14 및 최종 변경 화면 재확인 6/6 완료 | 테스트 및 보고서 | UI 및 결함 수정 완료 |
-| T02-CLOSE | 최종 승인 및 PR 병합 | 사용자 | TODO | 상태·결정 기록 | 최신 HEAD CI 및 최종 검토 |
+| T02-FINAL-CLOSE | 최종 승인 기록 및 PR #1 병합 | 사용자 승인 · Codex 실행 | DONE — 2026-11-25 최종 종료 승인. [PR #1](https://github.com/Hjinsu/ai-studio/pull/1)에서 병합과 검사 추적 | 상태·결정·보고서, PR 및 Git 정리 | 최종 독립 검토 및 문서 HEAD CI 성공 후 병합 |
 | T03 | 콘텐츠 revision·DB 작업 큐·lease·재시도 | 미배정 | BLOCKED | 설계 후 배정 | T02 DONE 및 T03 설계 승인 |
 
 ## 작업 상세 템플릿

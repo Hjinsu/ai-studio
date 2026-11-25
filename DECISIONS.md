@@ -123,6 +123,11 @@
 - CR-01·CR-02, P-T02-03·P-T02-05 및 T03 선행 설계 제약을 유지한다. 실제 비용 발생 및 유료 API 활성화 전 정산 영속 멱등성과 결과 복구가 필요하다.
 - T02는 IMPLEMENTED를 유지한다. [최종 리뷰](docs/reviews/T02_FINAL_REVIEW.md) · [보강 보고서](docs/reports/T02_FINAL_PATCH_REPORT.md)
 
+### T02-FINAL-CLOSE — T02 종료 및 main 병합 승인 (2026-11-25)
+
+- RVX-02-CB의 최종 독립 검토 PASS, 표적 회귀 3/3 및 Vitest 73/73, 새 종료 차단 결함 없음으로 T02 종료를 승인했다. 사용자 실행 승인으로 T02는 DONE이며 [PR #1](https://github.com/Hjinsu/ai-studio/pull/1)은 최종 문서 HEAD의 CI 성공과 병합 조건 충족 후 main에 반영한다. [최종 독립 검토](docs/reviews/T02_FINAL_PATCH_REVIEW.md)
+- CR-01·CR-02, P-T02-03 보류, P-T02-05 조건부 수용, UI-F06·F08·F09·F10 보류와 T03 선행 설계 제약을 유지한다. 기존 지출 차단을 유지한다. 실제 비용 발생 및 유료 API 활성화 전에 서버 중심 영속 정산 멱등성 및 결과 복구를 해결해야 한다. T03 착수는 별도 설계 승인 사항이다.
+
 ### ADR-063 전문 — 관리자 UI 디자인 시스템과 기술 선택 (승인 2026-11-25)
 - **배경**: T02 관리자 화면을 상용 관리자 콘솔 수준으로 개선하고, T03~T10 화면이 같은 규칙을 쓰도록 확장 가능한 디자인 시스템이 필요했다. React 19.3.1·TypeScript 6.0.3·Vite 8.3.8은 유지하고 다운그레이드·의존성 충돌 무시 옵션(--force, --legacy-peer-deps)은 쓰지 않는다.
 - **결정**:
