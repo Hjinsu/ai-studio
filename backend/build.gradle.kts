@@ -48,6 +48,8 @@ tasks.withType<Test>().configureEach {
     useJUnitPlatform()
     systemProperty("user.timezone", "UTC")
     systemProperty("file.encoding", "UTF-8")
+    // 계약 테스트가 읽는 OpenAPI 명세 변경 시 테스트를 다시 실행한다(up-to-date 캐시로 건너뛰지 않음)
+    inputs.file(rootProject.file("docs/api/openapi.yaml")).withPathSensitivity(PathSensitivity.RELATIVE)
 }
 
 // 단위 테스트: Docker/DB 불필요

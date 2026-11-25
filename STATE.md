@@ -16,6 +16,45 @@
 ## 인수인계 기록
 작업 ID / 상태 / 변경 파일 / 테스트 명령 및 실제 결과 / 미해결 문제 / 다음 작업 / 필요 환경변수. 커밋 해시는 생성된 경우만 기록.
 
+### T02 — 재개 세션 (2026-11-25, 다른 PC, IN_PROGRESS 유지)
+요구사항: T02_PLAN §2 단계 6 검증·§4 테스트, ADR-026~061, T02_BUDGET_LEDGER §2~§6. T03 미착수. 커밋 없음(사용자 지시 대기). 브랜치 `wip/t02-implementation-checkpoint-2026-11-25`(origin에서 checkout, 4b29e7b 기준).
+
+**환경 (이 PC)**: Windows 11, Gradle JDK 17.0.8 + toolchain JDK 21.0.13, Node 24.21.0, MariaDB 11.8.2 서비스(3306), Docker 없음. 루트 `.env` 존재(필수 변수 3개 설정). 로컬 `ai_studio` DB: 비어 있음(`flyway_schema_history` 없음, collation `utf8mb4_unicode_ci`, 계정 `ai_studio`@localhost ALL on ai_studio). **V1~V5 미적용 — 의도적**: P-T02-01 결정 전 migration을 로컬 DB에 적용하지 않음(적용 후 수정 금지 규칙). 적용은 `./gradlew.bat :backend:bootRun`(local profile) 시 자동.
+
+**통합 테스트 실행 방법 (Docker 없는 PC)**: 작업 DB 서버가 아닌 **임시 MariaDB 인스턴스**를 띄우고 `AI_STUDIO_IT_DB_*`로 지정한다(TestDatabases가 `ai_studio_test_*` DB 생성).
+```
+"C:/Program Files/MariaDB 11.8/bin/mariadb-install-db.exe" --datadir=<임시폴더>/itdb --port=3307 --password=<임시>
+"C:/Program Files/MariaDB 11.8/bin/mariadbd.exe" --defaults-file=<임시폴더>/itdb/my.ini --bind-address=127.0.0.1 --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --default-time-zone=+00:00 --max-connections=300 --console
+AI_STUDIO_IT_DB_HOST=127.0.0.1 AI_STUDIO_IT_DB_PORT=3307 AI_STUDIO_IT_DB_USER=root AI_STUDIO_IT_DB_PASSWORD=<임시> ./gradlew.bat :backend:integrationTest
+```
+(이번 세션은 세션 scratchpad에 생성, 저장소 밖. 사용 후 프로세스 종료·폴더 삭제 가능.)
+
+**ChannelIT 실패 원인 분석 (이전 기록의 2건)**
+- 두 건 모두 500이 아니라 **OpenAPI 계약 검증 실패**였다(이전 기록의 "500"은 이 PC에서 재현되지 않음, line 97은 contract matcher).
+- (1) `createListGetAndUpdateChannelWithContract`: 검증 라이브러리(openapi-request-validator 3.0.0)가 응답 스키마에 `additionalProperties:false`를 자동 주입하는데 `allOf[PageMeta, {items}]` 하위 스키마마다 주입되어 정상 페이지 응답을 거부. `withResolveCombinators(true)`는 3.1 스펙에서 효과 없음(확인). 1차 조치였던 테스트 헬퍼 `strictAllOf`는 중첩 위반을 숨기는 것으로 확인되어 **제거**(P-T02-01). → 명세 평탄화로 해결, 통과.
+- (2) `configRevisionsAreImmutableHistoryWithOptimisticBase`: **스펙 자체 모순** — `ChannelConfigSettings`가 `additionalProperties:false`를 명시하므로 `ChannelConfig`(allOf) 응답이 어떤 경우에도 유효할 수 없음. DECISIONS.md `P-T02-01` 제안 → **승인(ADR-062)** → `openapi.yaml` 평탄화(allOf 10곳 제거, JSON 구조 불변)로 해결, 통과. 상세는 DECISIONS P-T02-01.
+
+**추가한 테스트 (예산 DB 통합, 이전 기록 "다음 작업 2")**
+- `budget/BudgetFailClosedIT`(1): 지출 차단 기본값→POLICY_VIOLATION, SYSTEM 정책 없음/DAY만/MONTH 비활성, 환율 없음, PAUSED 채널→PREREQUISITE_NOT_MET, 0원 정책→BUDGET_EXCEEDED, SYSTEM 한도 초과·한도와 같은 금액 허용, 정합성 ERROR 시 차단·OK 후 해제, 지출 차단 중 정산 허용. 실패 시 예약·원장·bucket 기록 0건 확인.
+- `budget/BudgetLedgerIT`(6): 설계 §2 USD 계산 예시 전체 단계 값 일치(PROVISIONAL 증감, CONFIRM 초과+BUDGET_OVERRUN audit, KRW 전용 ADJUSTMENT 후 C₀ 유지, 원본 REFUND), 연결 bucket 동일 반영, 불변식 위반 422 무기록, SETTLED→PROVISIONAL 409 / PROVISIONAL 없는 CONFIRM, RELEASE, 지연 과금(근거 필수, LATE_CHARGE), 비용 인식 후 RELEASE 거부, RECONCILIATION_REQUIRED 자동 해제 없음 / request_key 대소문자 구분·같은 키 다른 내용 409·event_key 멱등 / 20스레드 동시 예약(한도 1000, 100원씩) → 정확히 10건 성공·bucket 1개·reserved=1000, 같은 key 10스레드 동시 → 1건 / SYSTEM 사용량 중복 합산 없음, 대시보드·사용량·정책 목록·정합성 검사·환율 등록 API 계약 / cost_log·budget_reservation_bucket·exchange_rate·budget_policy_revision·budget_control 트리거 차단. 각 테스트 끝 정합성 검사 0건.
+- 변이 확인: `BudgetReservationService` 한도 검사를 임시 무력화 → 2건 실패 검출 → `git checkout`으로 원복(diff 없음 확인).
+
+**변경 파일**: `backend/src/test/java/com/aistudio/ApiTestSupport.java`(수정), `backend/src/test/java/com/aistudio/budget/{BudgetFailClosedIT,BudgetLedgerIT}.java`(신규), `DECISIONS.md`(P-T02-01 제안), `STATE.md`. main 코드·migration·openapi.yaml 변경 없음.
+
+**실행한 테스트 (실제 결과)**
+| 명령 | 결과 |
+|---|---|
+| `./gradlew.bat :backend:test` | 121 tests, 실패 0, skip 0 |
+| `./gradlew.bat :backend:integrationTest`(임시 MariaDB 11.8.2 :3307) | **51 tests, 실패 1**(ChannelIT config revision — P-T02-01 대기), 나머지 50 통과: ActuatorExposureIT 13, DatabaseBootstrapIT 8, DatabaseUpgradeIT 1, ErrorDispatchIT 5, AdminBootstrapIT 2, AuthIT 9, ChannelIT 5/6, BudgetFailClosedIT 1, BudgetLedgerIT 6 |
+- 미실행: CI(push 안 함), Docker/Testcontainers 경로, 프론트(변경 없음), gitleaks(미설치 — 변경은 테스트 코드·문서뿐이며 비밀값 없음, 임시 DB 비밀번호는 저장소 밖).
+
+**미해결**
+- P-T02-01 승인 필요 → 승인 시 openapi.yaml 대안 A 반영 후 ChannelIT 재실행.
+- 예산 미검증 항목(T02_PLAN §4): 정책 revision/시간대 변경·채널 일시정지·지출 차단과 예약의 **동시** 실행, 예약 도중 강제 예외 rollback, 운영 앱 계정 권한(`prod-app-grants.sql`) 적용 계정 검증, 환율 만료 시 fallback 없음(DB IT), 채널 설정 revision 동시 생성.
+- IDE(Eclipse/VS Code Java) 진단은 `backend/bin`의 오래된 classpath 기준이라 오류 표시가 실제 Gradle 빌드와 다름(`backend/bin/` untracked, 커밋 금지).
+
+**다음 작업**: (1) P-T02-01 결정 (2) 위 예산 미검증 항목 IT 추가 (3) 서버 검증 완료 후 T02_PLAN §2 단계 7(관리자 UI)·8(타입 생성 도구). T03 시작 금지.
+
 ### T02 — WIP 인수인계 (2026-11-25 02:54 KST, IN_PROGRESS 유지)
 이번 작업은 인수인계·저장만 수행했으며 신규 기능 코드는 수정하지 않았다. T02는 DONE이 아니고 T03는 시작하지 않았다.
 

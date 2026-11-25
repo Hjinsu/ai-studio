@@ -64,7 +64,12 @@ public final class ApiTestSupport {
         return OpenApiValidationMatchers.openApi().isValid(validator());
     }
 
-    private static synchronized OpenApiInteractionValidator validator() {
+    /**
+     * 원본 docs/api/openapi.yaml을 변형 없이 사용한다(P-T02-01: 헬퍼가 명세 오류를 숨기지 않도록).
+     * 검증기는 additionalProperties가 없는 스키마에 false를 주입하므로 allOf 조합은 명세에
+     * {@code unevaluatedProperties: false}를 명시해야 한다(OpenApiContractTest가 규칙과 동작을 검사).
+     */
+    public static synchronized OpenApiInteractionValidator validator() {
         if (validator == null) {
             try {
                 String spec = Files.readString(Path.of("..", "docs", "api", "openapi.yaml"), StandardCharsets.UTF_8);

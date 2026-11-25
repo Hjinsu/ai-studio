@@ -62,6 +62,7 @@
 | ADR-059 | 승인(2026-11-25, F-07) | channel_config revision 생성 시 channel 행 잠금 + baseRevisionNo 검증, 기존 revision 불변 |
 | ADR-060 | 승인(2026-11-25, F-08) | JSON 로그인의 세션 인증 전략·SecurityContext 저장·세션 ID 변경·CSRF 무효화 검증. credential_version으로 비밀번호 변경 후 세션 무효화(시각 비교 단독 금지) |
 | ADR-061 | 승인(2026-11-25, F-09) | budget_control.spending_enabled 기본 false, 관리자 긴급 지출 차단. 차단 중에도 기존 정산·조회 허용. 실제 provider 호출은 T07 승인 전 금지 |
+| ADR-062 | 승인(2026-11-25, P-T02-01) | OpenAPI는 allOf/anyOf 조합 대신 평탄화된 최종 스키마 사용(검증 라이브러리의 unevaluatedProperties 지원 불완전 실측). 공통 필드 일치·미정의 필드 거부를 OpenApiContractTest로 강제. JSON 구조 불변 |
 
 ## 미결 설계 이슈 상태
 | ID | 결정 | 상태 | 구현 예정 |
@@ -77,3 +78,13 @@
 | I-09 | ADR-023 | 결정됨(loopback은 T01 적용) | T02 |
 
 변경 제안 양식: ID / 배경 / 대안 / 영향 문서·DB·API / 마이그레이션 / 승인 여부. 사용자 승인 전 기준선 변경 금지.
+
+## 변경 제안
+### P-T02-01 — OpenAPI 조합 스키마와 추가 필드 검증 책임 분리 (2026-11-25 제안 → **승인(2026-11-25, 대안 A 방향)**, 평탄화로 구현)
+- 배경: `ChannelConfig = allOf[ChannelConfigSettings, 메타]`인데 `ChannelConfigSettings`가 `additionalProperties: false`를 명시 → 유효한 ChannelConfig가 존재할 수 없음(ChannelIT 실패). 또한 계약 검증 라이브러리(openapi-request-validator 3.0.0)는 additionalProperties가 없는 스키마에 false를 주입하는데 allOf 하위 스키마마다 주입해 `PageMeta + items` 페이지 응답도 거부.
+- 승인 조건: unevaluatedProperties 우선 검토·실측, 지원 불완전 시 평탄화 허용, JSON 구조 불변, 백엔드·DB 불필요 변경 금지, 미정의 필드 검증 유지, skip·검증 비활성화 금지, 테스트 헬퍼 재검토.
+- 실측 결과(`OpenApiContractTest`): allOf에 `unevaluatedProperties: false`를 두면 조합 최상위 미정의 필드는 거부되지만, 검증기가 조합 하위로 주입을 중단해 **중첩 스키마(페이지 items[]의 Channel 등)의 미정의 필드를 놓친다** → 지원 불완전. 1차 세션의 테스트 헬퍼(`strictAllOf`, 로딩 시 unevaluatedProperties 자동 부착)도 같은 이유로 중첩 위반을 숨기고 있었음 → **제거**.
+- 채택: **평탄화**. `allOf` 10곳(*Page 8개, ChannelConfig, ReservationDetail)을 필드를 명시한 단일 object로 변환. `ChannelConfigSettings`는 원래대로 `additionalProperties: false`(요청 전용 사용). 요청·응답 JSON 구조, 백엔드 코드, DB 변경 없음.
+- 중복 정의 보호: `OpenApiContractTest.schemasAreFlatAndConsistentWithTheirBases` — allOf/anyOf 금지, *Page ⊇ PageMeta, ChannelConfig ⊇ ChannelConfigSettings, ReservationDetail ⊇ Reservation(속성 정의 동일 + required 포함). `PageMeta`는 기준 스키마로 유지(Redocly no-unused-components 경고 1건 추가, 의도).
+- 검증기 동작 테스트: 정상 허용, 최상위·설정·페이지 항목 내부 미정의 필드 거부, 필수 누락(메타·설정·페이지) 거부, 자료형 오류 거부. 변이 확인(ChannelConfig에 additionalProperties: true + required 제거 → 실패 검출).
+- 부수: Gradle 테스트 태스크에 `docs/api/openapi.yaml` 입력 선언(명세만 바뀌면 up-to-date로 계약 테스트가 건너뛰어지던 문제).
