@@ -63,6 +63,7 @@
 | ADR-060 | 승인(2026-11-25, F-08) | JSON 로그인의 세션 인증 전략·SecurityContext 저장·세션 ID 변경·CSRF 무효화 검증. credential_version으로 비밀번호 변경 후 세션 무효화(시각 비교 단독 금지) |
 | ADR-061 | 승인(2026-11-25, F-09) | budget_control.spending_enabled 기본 false, 관리자 긴급 지출 차단. 차단 중에도 기존 정산·조회 허용. 실제 provider 호출은 T07 승인 전 금지 |
 | ADR-062 | 승인(2026-11-25, P-T02-01) | OpenAPI는 allOf/anyOf 조합 대신 평탄화된 최종 스키마 사용(검증 라이브러리의 unevaluatedProperties 지원 불완전 실측). 공통 필드 일치·미정의 필드 거부를 OpenApiContractTest로 강제. JSON 구조 불변 |
+| ADR-063 | 적용(2026-11-25, T02 UI 개선 지시) · 최종 설계 승인 대기 | 관리자 UI 디자인 시스템: Tailwind CSS 4.3.5(+@tailwindcss/vite), Lucide React 1.79.0, Pretendard 1.3.9(OFL, 로컬 번들), Radix Dialog 1.3.1·Tooltip 1.4.1·Tabs 1.2.1, clsx 2.1.1, tailwind-merge 3.7.1, Playwright 1.65.1(E2E, 설치된 Edge 사용). shadcn/ui는 CLI 생성 대신 같은 패턴으로 필요한 컴포넌트만 직접 작성. Recharts 미채택(시계열 API 없음). 규칙: docs/design/UI_DESIGN_SYSTEM.md |
 
 ## 미결 설계 이슈 상태
 | ID | 결정 | 상태 | 구현 예정 |
@@ -94,4 +95,16 @@
 - 적용(PR #1 CI 통과를 위해 작업 브랜치에 반영, 되돌릴 수 있음): 저장소 루트 `.gitleaksignore`에 **fingerprint(커밋:파일:규칙:줄) 단위**로만 예외 등록, 규칙·워크플로 변경 없음. 항목마다 근거 주석, 주석에 탐지 문자열 인용 금지.
 - 대안: `.gitleaks.toml` 경로·정규식 allowlist(범위가 넓어 비권장), 코드 줄에 `gitleaks:allow` 주석(히스토리 탐지는 해결 못 함).
 - 승인 여부: 대기(설계 담당 검토)
+
+### P-T02-03 — UI 개선 중 확인한 API 보완 후보 (2026-11-25, 제안, **승인 대기**, 이번 작업에서 미구현)
+- 채널 목록에 현재 설정 요약(기본 콘텐츠 유형, 설정 revision 시각) 필드 추가 — 현재 UI는 목록 행마다 `GET /channels/{id}/config`를 호출(N+1).
+- 예약 상태별 건수 조회 — 상태 필터 배지용. 현재는 대시보드의 정산 확인 필요 건수만 사용.
+- 통화별 현재 환율을 한 번에 조회 — 현재 UI는 목록으로 상태를 계산(서버 판단과 같은 규칙, 표시용).
+- 일·월 예산 사용 시계열 — 차트(Recharts 등) 도입의 전제.
+- 영향: OpenAPI·백엔드 추가(기존 계약 변경 없음). DB 변경 없음.
+
+### P-T02-04 — 백엔드 교차 리뷰 잠재 위험 (2026-11-25, Claude 교차 리뷰 `docs/reviews/T02_CLAUDE_BACKEND_REVIEW.md`, **결정 대기**)
+- CR-01: 로그인 동시 인증 상한(전체 4, IP 2)과 실패 차단이 `remoteAddr` 기준 — 역방향 프록시 뒤 운영 배포 시 관리자 전체가 한 IP로 묶인다. 운영 배포 설계(신뢰 프록시, ADR-045 후속)와 함께 결정.
+- CR-02: `RESERVATION_BUCKET_LINK_MISMATCH` 발생 시 진단·수동 복구 절차가 없다(자동 수정 금지는 유지). 운영 전 복구 절차 ADR 필요.
+- T03 제약: 콘텐츠(LIFETIME)·content bucket 연결 시 링크 검사 확장 필수, 재시도 경계는 상위 트랜잭션 안에서 호출 불가(작업 큐와 예산의 원자성은 멱등 키·아웃박스 등으로 별도 설계), `reserve:`·`reserve-v2:` 이벤트 키 접두사 예약.
 

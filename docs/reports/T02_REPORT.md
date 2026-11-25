@@ -1,5 +1,5 @@
 # T02 구현 보고서 (설계 검토용)
-작성 2026-11-25 · 작성 Claude Code · 브랜치 `wip/t02-implementation-checkpoint-2026-11-25` · 상태: **IMPLEMENTED — 관리자 CLI 결함 수정(§8), CI 재검증, 최종 설계 승인 대기(DONE 아님)** · T03 미착수
+작성 2026-11-25 · 작성 Claude Code · 브랜치 `wip/t02-implementation-checkpoint-2026-11-25` · 상태: **IMPLEMENTED — UI 개선(§9)·백엔드 교차 리뷰(§10) 완료, 브랜치 통합·최종 승인 대기(DONE 아님)** · T03 미착수
 
 ## 1. 범위와 결과 요약
 | 영역 | 상태 | 근거 |
@@ -117,3 +117,22 @@ CI는 Draft PR [#1](https://github.com/Hjinsu/ai-studio/pull/1)(main 대상, **�
 미검증: 실제 대화형 콘솔에서의 숨김 입력 성공 경로(자동화 도구에 TTY가 없음 — 성공 경로는 AdminCliIT의 실제 Bean 경로로 검증). 사용자 터미널(cmd/PowerShell)에서 `admin create --login <id>` 재확인 필요. 3306 작업 DB는 이번 검증에서 사용하지 않았다.
 
 **CI**: 수정 커밋 `6d5cccd` → run [45530093712](https://github.com/Hjinsu/ai-studio/actions/runs/45530093712) 전 job 통과(Backend Linux: bootJar → integrationTest, Testcontainers). Draft PR #1 유지.
+
+## 9. T02-UI: 관리자 UI·UX 개선과 디자인 시스템 (Claude Code, 커밋 `5d53065`)
+**사용자 실제 화면 검증(개선 전 UI, 사용자 보고)**: 관리자 계정 생성, 로그인, 채널 등록, 설정 수정·이력, 예산 정책 등록·수정, 예산 사용량, 정합성 검사, 예약·정산, 비용 원장, 환율 등록, 서버 상태, 로그아웃·재로그인 정상. **개선 후 UI는 사용자 재검증 전**이다.
+
+**구조 변경(전 → 후)**
+- 전: 단일 `styles.css`(전역 클래스), `Layout`(평면 메뉴 9개), 화면마다 직접 만든 표·폼, 금액 문자열 원본 표시(`300000.000000 KRW`), 채널 ID 직접 입력.
+- 후: Tailwind 4 토큰(라이트/다크 CSS 변수) + `src/ui`(공통 컴포넌트) + `src/layout`(AppShell: 그룹 사이드바·접기·테마·모바일 드로어, 헤더: 경로·서버 상태·계정) + `src/lib`(decimal·labels·time·theme·errors) + 화면별 지연 로딩. 금액 `₩300,000`(정밀도 유지, Number 변환 없음), 채널은 이름 선택.
+
+**디자인 시스템**: 토큰(Primary·Secondary·Background·Surface·Text·Muted·Success·Warning·Danger·Border, 타입 스케일 12/13/14/16/20/24, 간격, 반경 6/10/pill, overlay 그림자, 브레이크포인트·컨테이너 쿼리), Pretendard 로컬 번들. 공통 컴포넌트와 사용 규칙은 [UI_DESIGN_SYSTEM.md](../design/UI_DESIGN_SYSTEM.md). 의존성·채택 이유는 ADR-063, 미채택(Recharts, SearchInput)과 이유 포함.
+
+**화면별 개선**: 로그인(브랜드, 비밀번호 표시 전환, 진행 상태·중복 제출 방지, 세션 만료 안내) · 대시보드(지출 제어·정합성·정산 확인 필요·채널, 오늘/이번 달 예산·실제 지출·예약, 일간·월간 예산 미터, SYSTEM만 집계, 데이터 없음 표시) · 채널(한국어 상태 배지, 기본 콘텐츠 유형·최근 설정 변경, 그룹 폼과 설명, 상세 탭, revision 타임라인·직전 대비 변경·두 revision 비교) · 예산 정책(범위 배지·필터, 채널 선택(보관 제외), 한국어 범위·기간, ₩ 미리보기 입력, 0원 전면 차단 안내, 상세 탭: 기간별 사용·한도/시간대 변경·변경 이력) · 사용량(시스템/채널 탭, 미터, 소진 임박·초과, 적용 가능 잔여(참고)와 한계 명시) · 지출 제어(차단 상태 강조, 위험(risk) 버튼, 사유 필수 확인, 신규 지출 조건 체크리스트, 정합성 한국어 상태·오류 표) · 예약·정산(한국어 상태 배지·필터, 정산 확인 필요 강조, 원장 타임라인, 멱등 키 유지, 지연 과금·조정 규칙) · 원장(장부형 표, 한국어 유형, 증감 부호·화살표, 채널 선택 필터) · 환율(통화 선택, `1 USD = ₩1,500`, 적용 중/예정/만료/이전 상태, 남은 시간, 등록 제약 안내) · 서버 상태(정상/확인 중/연결 실패).
+
+**검증(실제 결과)**: `npm run lint`·`typecheck`(앱+E2E)·`test` **36/36**·`build`(초기 번들 354KB/gzip 113KB) · Playwright(설치된 Edge, 브라우저 네트워크 계층 API 대역) **8/8**: 로그인·CSRF·로그아웃, 다크 모드 적용·유지, 채널 목록·등록·이력 비교, 정책 생성(채널명 선택·보관 제외·문자열 금액), 지출 허용 확인 절차, 모바일 390px 7개 화면 가로 넘침 없음·드로어, 나머지 화면 오류 없음, 빈 예산 실제 빈 상태. 브라우저 스크린샷으로 라이트/다크·모바일 디자인 점검 후 수정(사이드바 높이, 금액 잘림, 0 증감 표시 등). 생성 타입 `npm run check` 일치. **CI run 45554314696(PR #1, `5d53065`) 7/7 통과**(신규 `Frontend E2E (Edge, windows-2025)` 포함).
+- 실제 백엔드와의 브라우저 E2E는 이번에 실행하지 않았다(API 계층·계약 불변, 이전 프록시 스모크로 API 흐름 확인). 사용자 실제 화면 재검증 필요.
+- 구현하지 않은 개선(새 API 필요): P-T02-03.
+
+## 10. 백엔드 독립 교차 리뷰 (Claude Code, `fa32535..6a32c64`)
+보고서: [T02_CLAUDE_BACKEND_REVIEW.md](../reviews/T02_CLAUDE_BACKEND_REVIEW.md). RV-01~09 모두 해결 판정, **새로 확인된 결함 없음**, 잠재 위험 CR-01(프록시 뒤 로그인 제한)·CR-02(링크 오류 복구 절차 부재)는 P-T02-04로 기록. 독립 재실행: 검토 전용 worktree에서 단위 133/133·통합 97/97·bootJar 성공, UI+Codex 생성 타입 결합 시 프론트 36/36·E2E 8/8·타입 일치, `git merge-tree` 충돌·공통 수정 파일 0개. 통합 시 `CHECK_CODE`에 `RESERVATION_BUCKET_LINK_MISMATCH` 레이블 추가 필요.
+
