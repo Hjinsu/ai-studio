@@ -1,5 +1,7 @@
 # 설계 문서 목차
 
+현재 제품 및 개발 기준은 [AI Studio v2](v2/README.md)다. 아래 T03 문서는 과거 설계·검증 이력이며, 기존 코드·안전 결과를 검토할 때 참고한다. 현재 착수 순서는 [v2 로드맵](v2/03_ROADMAP.md)을 따른다.
+
 - [01_REQUIREMENTS](01_REQUIREMENTS.md)
 - [02_ARCHITECTURE](02_ARCHITECTURE.md)
 - [03_DATABASE](03_DATABASE.md)

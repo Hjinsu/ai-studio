@@ -6,6 +6,15 @@
 
 `TODO` 대기 · `IN_PROGRESS` 작업 중 · `BLOCKED` 중단/승인 대기 · `IMPLEMENTED` 구현 완료/검증 대기 · `REVIEW` 검토 중 · `DONE` 최종 승인 완료.
 
+## v2 현재 배정
+
+| ID | 담당 | 상태 | 범위와 선행 조건 |
+|---|---|---|---|
+| V2-00 | Codex | DONE · 사용자 승인 | v2 문서 전용 기준선. 분기 원점 `dab7013c4557ba87d4440dfc86417344bb2c4e1d`. [검토](docs/v2/V2-00_REPOSITORY_REVIEW.md) |
+| V2-01 | Claude Code 실행 / Codex 비용·공통 계약 | TODO · 다음 개발 작업, 착수 승인 대기 | Claude는 제작 요청의 고정 단계 실행·claim/lease·취소·재개·무효과 테스트. Codex는 선정 전 제작 요청 ID·전 구간 비용 귀속·영속 효과 키·단일 dispatch·불명 결과·정산/receipt·공용 Migration/OpenAPI/포트. 신규 Migration 번호와 V7 이력 호환을 이 단계에서 확정. 기준은 승인된 v2 문서 커밋, 분리 시 별도 worktree. [완료 기준](docs/v2/03_ROADMAP.md) |
+
+T02/T03 표는 과거 배정 기록이다. T03-C/D는 WIP로 보존한다.
+
 ## T02 배정 이력
 
 | ID | 작업 | 담당 제안 | 상태 | 수정 범위 | 선행 조건 |
@@ -22,7 +31,7 @@
 | T02-FINAL-PATCH | RVX-02-CB mutation 콜백 세대 보강 | Codex | DONE — `55ea852`, 별도 검토 PASS 및 최종 승인 | 직접 관련 프론트엔드 및 보고·결정 문서 | MEDIUM 잔여 위험 보강 승인 |
 | T02-VERIFY | 통합·회귀·CI 및 사용자 검증 | 사용자 | 사용자 보고 화면 14/14 및 최종 변경 화면 재확인 6/6 완료 | 테스트 및 보고서 | UI 및 결함 수정 완료 |
 | T02-FINAL-CLOSE | 최종 승인 기록 및 PR #1 병합 | 사용자 승인 · Codex 실행 | DONE — 2026-11-25 최종 종료 승인. [PR #1](https://github.com/Hjinsu/ai-studio/pull/1)에서 병합과 검사 추적 | 상태·결정·보고서, PR 및 Git 정리 | 최종 독립 검토 및 문서 HEAD CI 성공 후 병합 |
-## T03 현재 배정
+## T03 배정 이력
 
 | ID | 작업 | 담당 | 상태 | 산출물·선행 조건 |
 |---|---|---|---|---|
