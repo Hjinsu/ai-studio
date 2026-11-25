@@ -1,0 +1,72 @@
+import { render } from '@testing-library/react'
+import { QueryClientProvider } from '@tanstack/react-query'
+import { createMemoryRouter } from 'react-router'
+import { vi } from 'vitest'
+import { App } from '../App'
+import { resetCsrf } from '../api/http'
+import { createQueryClient } from '../queryClient'
+import { routes } from '../routes'
+
+export interface Call {
+  method: string
+  url: string
+  headers: Record<string, string>
+  body: unknown
+}
+
+type Handler = (call: Call) => { status: number; body?: unknown } | undefined
+
+/** fetch 대역: 등록한 핸들러 순서대로 일치하는 첫 응답을 돌려주고 모든 호출을 기록한다. */
+export function mockApi(...handlers: Handler[]) {
+  const calls: Call[] = []
+  const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const call: Call = {
+      method: init?.method ?? 'GET',
+      url: String(input),
+      headers: (init?.headers ?? {}) as Record<string, string>,
+      body: typeof init?.body === 'string' ? (JSON.parse(init.body) as unknown) : undefined,
+    }
+    calls.push(call)
+    for (const handler of handlers) {
+      const result = handler(call)
+      if (result) {
+        return new Response(result.body === undefined ? '' : JSON.stringify(result.body), {
+          status: result.status,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+    }
+    return new Response(JSON.stringify(error('RESOURCE_NOT_FOUND', 'no mock')), { status: 404 })
+  })
+  vi.stubGlobal('fetch', fetchMock)
+  resetCsrf()
+  return calls
+}
+
+export const on =
+  (method: string, path: string | RegExp, status: number, body?: unknown): Handler =>
+  (call) => {
+    const pathname = call.url.split('?')[0]
+    const matches = typeof path === 'string' ? pathname === path : path.test(pathname)
+    return call.method === method && matches ? { status, body } : undefined
+  }
+
+export function error(code: string, message: string) {
+  return { code, message, traceId: 'trace-1', timestamp: '2026-11-25T00:00:00Z', details: [] }
+}
+
+export const csrf = on('GET', '/api/v1/auth/csrf', 200, { headerName: 'X-XSRF-TOKEN', token: 'tok-1' })
+export const me = on('GET', '/api/v1/auth/me', 200, { id: '1', login: 'admin', role: 'ADMIN', lastLoginAt: null })
+
+export function renderApp(path = '/') {
+  const router = createMemoryRouter(routes, { initialEntries: [path] })
+  const client = createQueryClient()
+  render(
+    <QueryClientProvider client={client}>
+      <App router={router} />
+    </QueryClientProvider>,
+  )
+  return { router, client }
+}
+
+export const page = <T,>(items: T[]) => ({ page: 0, size: 20, totalElements: items.length, totalPages: 1, items })
