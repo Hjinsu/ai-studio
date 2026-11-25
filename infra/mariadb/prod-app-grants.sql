@@ -15,3 +15,10 @@ GRANT SELECT, INSERT, UPDATE ON @DB@.budget_reservation TO '@APP_USER@'@'@APP_HO
 GRANT SELECT, INSERT ON @DB@.budget_reservation_bucket TO '@APP_USER@'@'@APP_HOST@';
 GRANT SELECT, INSERT ON @DB@.cost_log TO '@APP_USER@'@'@APP_HOST@';
 GRANT SELECT ON @DB@.flyway_schema_history TO '@APP_USER@'@'@APP_HOST@';
+-- T03-B(V6) 콘텐츠 도메인. topic·content_revision·queue_command_log는 불변·추가 전용(트리거와 이중 방어).
+-- content·content_run은 상태 행. channel_config UNIQUE 추가는 migration 계정 소관(앱 권한 변경 없음).
+GRANT SELECT, INSERT ON @DB@.topic TO '@APP_USER@'@'@APP_HOST@';
+GRANT SELECT, INSERT, UPDATE ON @DB@.content TO '@APP_USER@'@'@APP_HOST@';
+GRANT SELECT, INSERT ON @DB@.content_revision TO '@APP_USER@'@'@APP_HOST@';
+GRANT SELECT, INSERT, UPDATE ON @DB@.content_run TO '@APP_USER@'@'@APP_HOST@';
+GRANT SELECT, INSERT ON @DB@.queue_command_log TO '@APP_USER@'@'@APP_HOST@';

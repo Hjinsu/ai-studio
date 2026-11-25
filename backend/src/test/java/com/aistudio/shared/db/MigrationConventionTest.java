@@ -34,7 +34,8 @@ class MigrationConventionTest {
             "V2__fix_database_collation.sql", "7e65c9546f7333d41c6611d5e9eccca75e7d936cc0572ac2d4796c687e977151",
             "V3__create_admin_and_audit.sql", "4224b08f5e0149829b27e1dcef51fd7b7e3f33faa6720a975834eed23b1b6384",
             "V4__create_channel.sql", "06d9de8f625d4575f9bc278263cd70a336535305a018bc3e977dcfd2e47d98ec",
-            "V5__create_budget_and_ledger.sql", "a5d798c38c636d56d1974d8eb4494db46e9fcd8916ebd65d8ac3de325aa9ea5d");
+            "V5__create_budget_and_ledger.sql", "a5d798c38c636d56d1974d8eb4494db46e9fcd8916ebd65d8ac3de325aa9ea5d",
+            "V6__create_content_domain.sql", "4fa717cc451bcd0593bf8eb0c3d9ce7b1a2954b912398939d2086db4f0780c9b");
 
     /** V1은 ADR-014 이전 기준선이므로 collation 규칙 검사에서 제외한다 (수정 금지). */
     private static final List<String> COLLATION_RULE_EXEMPT = List.of("V1__initial_baseline.sql");
@@ -97,7 +98,13 @@ class MigrationConventionTest {
             "budget_reservation.request_fingerprint",
             "cost_log.event_key",
             "cost_log.event_fingerprint",
-            "cost_log.request_key");
+            "cost_log.request_key",
+            // T03-B(V6): 정규화 hash·revision hash·manifest hash와 멱등 키·지문
+            "topic.normalized_hash",
+            "content_revision.revision_hash",
+            "content_run.output_manifest_hash",
+            "queue_command_log.request_key",
+            "queue_command_log.request_fingerprint");
 
     private static final Pattern CREATE_TABLE = Pattern.compile("create\\s+table\\s+(\\w+)");
     private static final Pattern COLUMN_COLLATE = Pattern.compile("^\\s*(\\w+)\\s+[^\\n]*?\\bcollate\\s*=?\\s*(\\w+)");

@@ -43,6 +43,8 @@ import com.aistudio.budget.BudgetReservationService.ReserveCommand;
 import com.aistudio.budget.ExchangeRateService;
 import com.aistudio.channel.ChannelService;
 import com.aistudio.channel.ChannelSettings;
+import com.aistudio.content.ContentService;
+import com.aistudio.topic.TopicService;
 
 /**
  * 운영 앱 계정 최소 권한 (ADR-025, 026, 058). migration 계정(관리자)으로 Flyway를 적용한 뒤
@@ -61,7 +63,9 @@ class ProductionGrantsIT {
     static final Path GRANTS = Path.of("..", "infra", "mariadb", "prod-app-grants.sql");
     /** prod-app-grants.sql 기준 SELECT/INSERT만 허용되는 불변·추가 전용 테이블. */
     static final Set<String> IMMUTABLE = Set.of("admin_bootstrap", "audit_event", "channel_config", "exchange_rate",
-            "budget_policy_revision", "budget_reservation_bucket", "cost_log", "flyway_schema_history");
+            "budget_policy_revision", "budget_reservation_bucket", "cost_log", "flyway_schema_history",
+            // T03-B(V6): 불변 입력·소재·명령 로그
+            "topic", "content_revision", "queue_command_log");
 
     static {
         Flyway.configure().dataSource(DB.dataSource()).locations("classpath:db/migration").load().migrate();
@@ -128,6 +132,12 @@ class ProductionGrantsIT {
     @Autowired
     private BudgetReservationService reservations;
 
+    @Autowired
+    private TopicService topics;
+
+    @Autowired
+    private ContentService contents;
+
     /** 앱 계정으로 접속된 JdbcTemplate(이 컨텍스트의 DataSource). */
     @Autowired
     private JdbcTemplate appJdbc;
@@ -145,6 +155,16 @@ class ProductionGrantsIT {
         channels.resume(channelId, channels.get(channelId).channel().version(), admin);
         long archived = channels.create("grants-archived", "en", "UTC", null, admin).channel().id();
         channels.archive(archived, channels.get(archived).channel().version(), admin);
+
+        // T03-B: topic·content·revision 작성과 콘텐츠 보관이 B 권한(SELECT/INSERT, content UPDATE)만으로 동작한다
+        long topicId = topics.create(new TopicService.CreateTopic("grants-topic-1", channelId, "Grants topic", null),
+                admin).topic().id();
+        long contentId = contents.create(new ContentService.CreateContent("grants-content-1", channelId, topicId,
+                "SHORTS", "Grants", "Brief", null, 50, null, null, null), admin).view().content().id();
+        contents.createRevision(new ContentService.CreateRevision("grants-revision-1", contentId, 1, "Grants 2",
+                "Brief", "en", 50, null, null, null), admin);
+        contents.archive(contentId, 1, admin);
+        assertThat(contents.get(contentId).content().status()).isEqualTo("ARCHIVED");
 
         var day = policies.create("SYSTEM", null, null, "DAY", new BigDecimal("100000"), "UTC", null, admin);
         policies.create("SYSTEM", null, null, "MONTH", new BigDecimal("1000000"), "UTC", null, admin);
@@ -186,7 +206,8 @@ class ProductionGrantsIT {
         List<String> tables = appJdbc.queryForList("""
                 SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE() ORDER BY table_name""",
                 String.class);
-        assertThat(tables).containsAll(IMMUTABLE).contains("budget_control", "budget_reservation", "channel");
+        assertThat(tables).containsAll(IMMUTABLE).contains("budget_control", "budget_reservation", "channel", "content",
+                "content_run");
         for (String table : tables) {
             String column = appJdbc.queryForObject("""
                     SELECT column_name FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = ?

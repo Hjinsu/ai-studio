@@ -84,6 +84,10 @@ interface ChannelMapper {
     int updateStatus(@Param("id") long id, @Param("version") long version, @Param("status") String status,
             @Param("archivedAt") Instant archivedAt, @Param("now") Instant now);
 
+    /** FD-16: 활성 run 포인터가 있는 콘텐츠 수(잠금 없는 읽기, channel X 획득 뒤 호출). */
+    @Select("SELECT COUNT(*) FROM content WHERE channel_id = #{channelId} AND active_run_id IS NOT NULL")
+    long countActiveRuns(long channelId);
+
     @Insert("""
             INSERT INTO channel_config (channel_id, revision_no, default_content_type, shorts_min_seconds,
                    shorts_max_seconds, longform_min_seconds, longform_max_seconds, content_strategy, target_audience,

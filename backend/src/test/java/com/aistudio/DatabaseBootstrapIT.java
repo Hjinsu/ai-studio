@@ -50,7 +50,7 @@ class DatabaseBootstrapIT {
     void allMigrationsAreAppliedOnCleanDatabase() {
         List<String> versions = jdbcTemplate.queryForList(
                 "SELECT version FROM flyway_schema_history WHERE success = 1 ORDER BY installed_rank", String.class);
-        assertThat(versions).containsExactly("1", "2", "3", "4", "5");
+        assertThat(versions).containsExactly("1", "2", "3", "4", "5", "6");
         assertThat(flyway.info().pending()).isEmpty();
     }
 
@@ -67,13 +67,17 @@ class DatabaseBootstrapIT {
         assertThat(tables).contains("admin_user", "admin_bootstrap", "audit_event", "channel", "channel_config",
                 "budget_control", "exchange_rate", "budget_policy", "budget_policy_revision", "budget_bucket",
                 "budget_reservation", "budget_reservation_bucket", "cost_log");
+        // T03-B(V6) 콘텐츠 도메인. 큐 실행·비용 테이블은 V7 이후(C/D) 범위라 아직 없다
+        assertThat(tables).contains("topic", "content", "content_revision", "content_run", "queue_command_log")
+                .doesNotContain("automation_job", "job_attempt", "queue_control", "job_operation");
         List<String> binaryColumns = jdbcTemplate.queryForList(
                 "SELECT CONCAT(table_name, '.', column_name) FROM information_schema.columns "
                         + "WHERE table_schema = DATABASE() AND collation_name = 'utf8mb4_bin' AND data_type <> 'longtext' "
                         + "ORDER BY 1", String.class);
         assertThat(binaryColumns).containsExactly("admin_user.password_hash", "budget_reservation.request_fingerprint",
-                "budget_reservation.request_key", "cost_log.event_fingerprint", "cost_log.event_key",
-                "cost_log.request_key");
+                "budget_reservation.request_key", "content_revision.revision_hash", "content_run.output_manifest_hash",
+                "cost_log.event_fingerprint", "cost_log.event_key", "cost_log.request_key",
+                "queue_command_log.request_fingerprint", "queue_command_log.request_key", "topic.normalized_hash");
         Integer otherCollations = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() "
                         + "AND collation_name NOT IN ('utf8mb4_unicode_ci', 'utf8mb4_bin')", Integer.class);
