@@ -22,6 +22,7 @@
 - 보고서: [reports/T02_DESIGN_REPORT](reports/T02_DESIGN_REPORT.md), [reports/T02_REPORT](reports/T02_REPORT.md), [reports/T02_CODEX_FIX_REPORT](reports/T02_CODEX_FIX_REPORT.md), [reports/T02_CODEX_EXT_FIX_REPORT](reports/T02_CODEX_EXT_FIX_REPORT.md), [reports/T02_UI_FIX_REPORT](reports/T02_UI_FIX_REPORT.md) (Codex UI 리뷰 결함·사용자 확인 항목 수정)
 - 리뷰: [reviews/T02_CODEX_REVIEW](reviews/T02_CODEX_REVIEW.md) (Codex 최초 리뷰, 기준 fa32535), [reviews/T02_CLAUDE_BACKEND_REVIEW](reviews/T02_CLAUDE_BACKEND_REVIEW.md) (Claude 교차 리뷰, fa32535..6a32c64), [reviews/T02_CODEX_FRONTEND_REVIEW](reviews/T02_CODEX_FRONTEND_REVIEW.md) (Codex UI 독립 리뷰, fa32535..8319672)
 - 표적 UI 교차 리뷰와 후속 수정: [reviews/T02_CODEX_UI_FIX_REVIEW](reviews/T02_CODEX_UI_FIX_REVIEW.md), [reports/T02_UI_EXT_FIX_REPORT](reports/T02_UI_EXT_FIX_REPORT.md)
+- 최종 독립 리뷰와 콜백 경계 보강: [reviews/T02_FINAL_REVIEW](reviews/T02_FINAL_REVIEW.md), [reports/T02_FINAL_PATCH_REPORT](reports/T02_FINAL_PATCH_REPORT.md)
 - 가이드: [guides/LOCAL_TEST_GUIDE](guides/LOCAL_TEST_GUIDE.md) (Docker 없는 PC의 임시 MariaDB 통합 테스트, 프론트·계약 검사), [guides/LOCAL_RUN_GUIDE](guides/LOCAL_RUN_GUIDE.md) (로컬 서버 실행), [guides/T02_USER_VERIFICATION](guides/T02_USER_VERIFICATION.md) (T02 최종 사용자 검증·읽기 전용 DB 점검), [guides/CODEX_COLLABORATION](guides/CODEX_COLLABORATION.md) (Claude Code/Codex 협업)
 - 작업 배정: [../TASKS.md](../TASKS.md)
 
