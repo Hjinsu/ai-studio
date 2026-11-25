@@ -84,8 +84,15 @@ interface ChannelMapper {
     int updateStatus(@Param("id") long id, @Param("version") long version, @Param("status") String status,
             @Param("archivedAt") Instant archivedAt, @Param("now") Instant now);
 
-    /** FD-16: 활성 run 포인터가 있는 콘텐츠 수(잠금 없는 읽기, channel X 획득 뒤 호출). */
-    @Select("SELECT COUNT(*) FROM content WHERE channel_id = #{channelId} AND active_run_id IS NOT NULL")
+    /**
+     * FD-16: 활성 run 포인터를 가진 콘텐츠 수 + 이 채널 콘텐츠의 실제 비종료(QUEUED/RUNNING) run 수. 포인터만 세면 포인터
+     * 없는 고아 run을 놓치므로 둘 다 센다(RV-B-01, fail closed). 잠금 없는 읽기, channel X 획득 뒤 호출.
+     */
+    @Select("""
+            SELECT (SELECT COUNT(*) FROM content WHERE channel_id = #{channelId} AND active_run_id IS NOT NULL)
+                 + (SELECT COUNT(*) FROM content_run r JOIN content c ON c.id = r.content_id
+                     WHERE c.channel_id = #{channelId} AND r.nonterminal_content_id IS NOT NULL)
+            """)
     long countActiveRuns(long channelId);
 
     @Insert("""

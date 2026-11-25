@@ -14,6 +14,7 @@ import com.aistudio.channel.Channel;
 import com.aistudio.channel.ChannelService;
 import com.aistudio.content.command.CanonicalJson;
 import com.aistudio.content.command.IdempotentCommands;
+import com.aistudio.content.command.Texts;
 import com.aistudio.shared.api.ApiException;
 import com.aistudio.shared.api.ErrorCode;
 import com.aistudio.shared.api.ErrorDetail;
@@ -28,6 +29,7 @@ public class TopicService {
 
     static final String CREATE_TOPIC = "CREATE_TOPIC";
     static final int TITLE_MAX = 255;
+    static final int NOTE_MAX = 500;
 
     private final TopicMapper mapper;
     private final ChannelService channels;
@@ -48,13 +50,15 @@ public class TopicService {
     }
 
     public TopicResult create(CreateTopic command, Actor actor) {
+        // 길이는 코드포인트 기준(OpenAPI maxLength, utf8mb4 VARCHAR와 같은 단위). 지문 계산 전에 유니코드를 검사한다
         String title = command.title() == null ? "" : command.title().strip();
-        if (title.isEmpty() || title.length() > TITLE_MAX) {
-            throw ApiException.validation("title", "must be 1 to 255 characters");
-        }
+        Texts.requireLength("title", title, 1, TITLE_MAX);
         String normalized = TopicNormalizer.normalize(title);
-        if (normalized.isEmpty() || normalized.length() > TITLE_MAX) {
+        if (normalized.isEmpty() || Texts.length(normalized) > TITLE_MAX) {
             throw ApiException.validation("title", "normalized title must be 1 to 255 characters");
+        }
+        if (command.note() != null) {
+            Texts.requireLength("note", command.note(), 1, NOTE_MAX);
         }
         String note = command.note() == null || command.note().isBlank() ? null : command.note();
         String hash = TopicNormalizer.hash(TopicNormalizer.VERSION, normalized);

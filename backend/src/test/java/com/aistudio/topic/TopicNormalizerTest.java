@@ -29,12 +29,31 @@ class TopicNormalizerTest {
     }
 
     @Test
-    void hashIsSha256OfVersionConcatenatedWithNormalizedTitle() {
+    void hashIsSha256OfTheCanonicalVersionTitleArray() {
         String normalized = TopicNormalizer.normalize("Space Travel");
         String hash = TopicNormalizer.hash(TopicNormalizer.VERSION, normalized);
-        assertThat(hash).matches("^[0-9a-f]{64}$").isEqualTo(CanonicalJson.sha256Hex("1space travel"));
+        assertThat(TopicNormalizer.preimage(1, normalized)).isEqualTo("[1,\"space travel\"]");
+        assertThat(hash).matches("^[0-9a-f]{64}$").isEqualTo(CanonicalJson.sha256Hex("[1,\"space travel\"]"));
         assertThat(TopicNormalizer.hash(TopicNormalizer.VERSION, TopicNormalizer.normalize("SPACE  travel")))
                 .isEqualTo(hash);
         assertThat(TopicNormalizer.hash(2, normalized)).isNotEqualTo(hash);
+    }
+
+    @Test
+    void versionAndTitleBoundaryCannotCollide() {
+        // RV-B-03: 구분자 없는 연결이면 (1, "2topic")과 (12, "topic")이 모두 "12topic"이 된다
+        assertThat(TopicNormalizer.preimage(1, "2topic")).isEqualTo("[1,\"2topic\"]");
+        assertThat(TopicNormalizer.preimage(12, "topic")).isEqualTo("[12,\"topic\"]");
+        assertThat(TopicNormalizer.hash(1, "2topic")).isNotEqualTo(TopicNormalizer.hash(12, "topic"));
+        // 따옴표·쉼표·대괄호가 든 제목도 JSON 이스케이프로 경계가 유지된다
+        assertThat(TopicNormalizer.preimage(1, "a\",2,\"b")).isEqualTo("[1,\"a\\\",2,\\\"b\"]");
+        assertThat(TopicNormalizer.hash(1, "a\",2,\"b")).isNotEqualTo(TopicNormalizer.hash(2, "b"));
+        for (int v = 1; v <= 20; v++) {
+            for (int w = 1; w <= 20; w++) {
+                if (v != w) {
+                    assertThat(TopicNormalizer.preimage(v, w + "x")).isNotEqualTo(TopicNormalizer.preimage(w, v + "x"));
+                }
+            }
+        }
     }
 }

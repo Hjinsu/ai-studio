@@ -7,7 +7,10 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.Tag;
@@ -46,11 +49,36 @@ class AdminCliJarIT {
                 "-jar", jar));
         command.addAll(List.of(cliArgs));
         Path log = workDir.resolve("cli.log");
-        Process process = new ProcessBuilder(command).directory(workDir.toFile()).redirectErrorStream(true)
-                .redirectOutput(log.toFile()).redirectInput(ProcessBuilder.Redirect.PIPE).start();
+        ProcessBuilder builder = new ProcessBuilder(command).directory(workDir.toFile()).redirectErrorStream(true)
+                .redirectOutput(log.toFile()).redirectInput(ProcessBuilder.Redirect.PIPE);
+        isolate(builder.environment());
+        Process process = builder.start();
         process.getOutputStream().close(); // stdin 평문 입력 경로 없음
         assertThat(process.waitFor(120, TimeUnit.SECONDS)).as("CLI must exit by itself").isTrue();
         return new Outcome(process.exitValue(), Files.readString(log, StandardCharsets.UTF_8));
+    }
+
+    /**
+     * 상속 환경변수가 Spring 설정을 바꾸지 않도록 격리한다(RV-B-06). 예: 개발자 셸의 DEBUG=1은 Spring Boot debug 모드를
+     * 켜 조건 평가 보고서에 "Tomcat" 클래스 이름을 출력하므로, 웹 서버가 뜨지 않았는데도 아래 부정 단언이 실패한다.
+     * 접속 정보는 모두 -D로 넘기므로 Spring·로깅·AI_STUDIO_ 접두사 변수는 하위 프로세스에 전달하지 않는다.
+     */
+    static void isolate(Map<String, String> environment) {
+        environment.keySet().removeIf(name -> {
+            String upper = name.toUpperCase(Locale.ROOT);
+            return upper.equals("DEBUG") || upper.equals("TRACE") || upper.startsWith("SPRING_")
+                    || upper.startsWith("LOGGING_") || upper.startsWith("AI_STUDIO_") || upper.equals("JAVA_TOOL_OPTIONS")
+                    || upper.equals("JDK_JAVA_OPTIONS") || upper.equals("_JAVA_OPTIONS");
+        });
+    }
+
+    @Test
+    void inheritedSpringAndDebugVariablesAreRemoved() {
+        Map<String, String> environment = new HashMap<>(Map.of("DEBUG", "1", "debug", "true", "TRACE", "1",
+                "SPRING_MAIN_WEB_APPLICATION_TYPE", "servlet", "LOGGING_LEVEL_ROOT", "debug", "AI_STUDIO_DB_URL", "x",
+                "PATH", "kept"));
+        isolate(environment);
+        assertThat(environment).containsOnlyKeys("PATH");
     }
 
     @Test
@@ -60,6 +88,7 @@ class AdminCliJarIT {
             assertThat(outcome.output()).as(command)
                     .doesNotContain("BeanCreationException", "BeanInstantiationException", "APPLICATION FAILED TO START")
                     .doesNotContain("Tomcat", "Netty", "Undertow", "web server")
+                    .doesNotContainPattern("(?i)started on port|listening on port")
                     .contains("콘솔이 없습니다");
             assertThat(outcome.exitCode()).as(command + "\n" + outcome.output()).isEqualTo(AdminCommandRunner.EXIT_REJECTED);
         }

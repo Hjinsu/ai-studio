@@ -51,6 +51,49 @@ class CanonicalJsonTest {
     }
 
     @Test
+    void deeplyNestedObjectsAreSortedAtEveryLevelAndArraysKeepOrder() {
+        Map<String, Object> level3 = new LinkedHashMap<>();
+        level3.put("z", 1);
+        level3.put("a", 2);
+        Map<String, Object> level2 = new LinkedHashMap<>();
+        level2.put("y", List.of(level3, "b", "a"));
+        level2.put("b", level3);
+        Map<String, Object> root = new LinkedHashMap<>();
+        root.put("k2", level2);
+        root.put("k1", true);
+        assertThat(CanonicalJson.write(root))
+                .isEqualTo("{\"k1\":true,\"k2\":{\"b\":{\"a\":2,\"z\":1},\"y\":[{\"a\":2,\"z\":1},\"b\",\"a\"]}}");
+    }
+
+    @Test
+    void largeInputsAreDeterministic() {
+        Map<String, Object> forward = new LinkedHashMap<>();
+        Map<String, Object> backward = new LinkedHashMap<>();
+        for (int i = 0; i < 2000; i++) {
+            forward.put("key" + i, "v" + i);
+        }
+        for (int i = 1999; i >= 0; i--) {
+            backward.put("key" + i, "v" + i);
+        }
+        assertThat(CanonicalJson.write(forward)).isEqualTo(CanonicalJson.write(backward));
+    }
+
+    @Test
+    void malformedUnicodeIsRejectedButSupplementaryCharactersAreKept() {
+        String emoji = new String(Character.toChars(0x1F600));
+        assertThat(CanonicalJson.write(Map.of("k", emoji))).isEqualTo("{\"k\":\"" + emoji + "\"}");
+        assertThatThrownBy(() -> CanonicalJson.write(Map.of("k", "\uD83D")))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> CanonicalJson.write(Map.of("\uDE00", 1))).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> CanonicalJson.write(List.of("ok", "x\uDE00y")))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThat(Texts.length(emoji + "a")).isEqualTo(2);
+        assertThat((emoji + "a").length()).isEqualTo(3);
+        assertThat(Texts.wellFormed(emoji)).isTrue();
+        assertThat(Texts.wellFormed("\uD83D\uD83D")).isFalse();
+    }
+
+    @Test
     void nonIntegerNumbersAndUnsupportedValuesAreRejected() {
         assertThatThrownBy(() -> CanonicalJson.write(Map.of("ratio", 1.5)))
                 .isInstanceOf(IllegalArgumentException.class);

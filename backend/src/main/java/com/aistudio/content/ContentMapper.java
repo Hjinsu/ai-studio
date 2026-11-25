@@ -182,6 +182,10 @@ interface ContentMapper {
     long countRevisions(long contentId);
 
     // ---------------------------------------------------------------- run (읽기 전용, 실행 연결은 T03-C)
+    /** 콘텐츠의 비종료(QUEUED/RUNNING) run ID. uk_content_run_nonterminal로 최대 1개. 잠금 없는 읽기. */
+    @Select("SELECT id FROM content_run WHERE nonterminal_content_id = #{contentId}")
+    Long nonterminalRunId(long contentId);
+
     @Select("SELECT status FROM content_run WHERE id = #{runId} AND content_id = #{contentId}")
     String runStatus(@Param("contentId") long contentId, @Param("runId") long runId);
 }

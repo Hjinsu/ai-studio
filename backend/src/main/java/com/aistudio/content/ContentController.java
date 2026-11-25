@@ -51,17 +51,17 @@ class ContentController {
     record ContentCreateRequest(@NotNull @Pattern(regexp = ApiId.PATTERN) String channelId,
             @NotNull @Pattern(regexp = ApiId.PATTERN) String topicId,
             @NotNull @Pattern(regexp = "SHORTS|LONGFORM") String contentType,
-            @NotBlank @Size(max = 255) String workingTitle, @NotBlank @Size(max = 4000) String brief,
+            @NotBlank String workingTitle, @NotBlank String brief,
             @Size(min = 1, max = 16) @Pattern(regexp = LANGUAGE) String language,
             @NotNull @Min(1) @Max(14400) Integer targetDurationSeconds, Map<String, Object> settings,
-            @Min(1) Integer channelConfigRevisionNo, @Size(min = 1, max = 500) String changeReason) {
+            @Min(1) Integer channelConfigRevisionNo, @Size(min = 1) String changeReason) {
     }
 
     record RevisionCreateRequest(@NotNull @Min(1) Integer baseRevisionNo,
-            @NotBlank @Size(max = 255) String workingTitle, @NotBlank @Size(max = 4000) String brief,
+            @NotBlank String workingTitle, @NotBlank String brief,
             @NotNull @Size(min = 1, max = 16) @Pattern(regexp = LANGUAGE) String language,
             @NotNull @Min(1) @Max(14400) Integer targetDurationSeconds, Map<String, Object> settings,
-            @Pattern(regexp = ApiId.PATTERN) String baseRunId, @Size(min = 1, max = 500) String changeReason) {
+            @Pattern(regexp = ApiId.PATTERN) String baseRunId, @Size(min = 1) String changeReason) {
     }
 
     record VersionRequest(@NotNull @Min(0) Long version) {

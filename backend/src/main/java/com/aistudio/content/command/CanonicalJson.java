@@ -14,9 +14,9 @@ import java.util.TreeMap;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * 결정적 JSON 정규화와 SHA-256(revision hash v1, 명령 지문). 공백 없는 JSON, 객체 키는 유니코드 코드포인트 순,
- * null은 명시 출력, 숫자는 정수만 허용한다. 문자열은 값 그대로 쓴다(줄바꿈 통일은 입력 단계 책임).
- * 예산 Fingerprints는 변경하지 않는다(T03-B 범위 밖). 공용 shared 이동은 통합 담당자와 조율한다.
+ * 결정적 JSON 정규화와 SHA-256(revision hash v1, topic hash v1, 명령 지문). 공백 없는 JSON, 객체 키는 유니코드
+ * 코드포인트 순, 배열 순서 유지, null은 명시 출력, 숫자는 정수만 허용한다. 문자열은 값 그대로 쓰되(줄바꿈 통일은 입력
+ * 단계 책임) 짝이 없는 surrogate는 거절한다. 예산 Fingerprints는 변경하지 않는다(T03-B 범위 밖).
  */
 public final class CanonicalJson {
 
@@ -59,9 +59,13 @@ public final class CanonicalJson {
         }
     }
 
-    /** 정수가 아닌 숫자 등 허용되지 않는 값이 있으면 IllegalArgumentException. */
+    /** 정수가 아닌 숫자, 잘못된 유니코드 등 허용되지 않는 값이 있으면 IllegalArgumentException. */
     static Object canonical(Object value) {
-        if (value == null || value instanceof String || value instanceof Boolean) {
+        if (value instanceof String text) {
+            requireWellFormed(text);
+            return text;
+        }
+        if (value == null || value instanceof Boolean) {
             return value;
         }
         if (value instanceof Integer || value instanceof Long || value instanceof Short || value instanceof Byte
@@ -74,6 +78,7 @@ public final class CanonicalJson {
                 if (!(entry.getKey() instanceof String key)) {
                     throw new IllegalArgumentException("object keys must be strings");
                 }
+                requireWellFormed(key);
                 sorted.put(key, canonical(entry.getValue()));
             }
             return sorted;
@@ -86,5 +91,11 @@ public final class CanonicalJson {
             return copy;
         }
         throw new IllegalArgumentException("only strings, booleans, integers, null, objects and arrays are allowed");
+    }
+
+    private static void requireWellFormed(String text) {
+        if (!Texts.wellFormed(text)) {
+            throw new IllegalArgumentException("strings must be well-formed Unicode");
+        }
     }
 }

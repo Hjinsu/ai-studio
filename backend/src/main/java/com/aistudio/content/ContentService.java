@@ -18,6 +18,7 @@ import com.aistudio.channel.ChannelConfig;
 import com.aistudio.channel.ChannelService;
 import com.aistudio.content.command.CanonicalJson;
 import com.aistudio.content.command.IdempotentCommands;
+import com.aistudio.content.command.Texts;
 import com.aistudio.shared.api.ApiException;
 import com.aistudio.shared.api.ErrorCode;
 import com.aistudio.shared.api.ErrorDetail;
@@ -45,6 +46,7 @@ public class ContentService {
     private static final Pattern LANGUAGE = Pattern.compile("^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$");
     private static final TypeReference<Map<String, Object>> MAP = new TypeReference<>() {
     };
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(ContentService.class);
 
     private final ContentMapper mapper;
     private final ChannelService channels;
@@ -164,6 +166,7 @@ public class ContentService {
             Channel channel = channels.lockShared(unlocked.channelId());
             Content content = requireContent(mapper.lockById(c.contentId()));
             requireDraft(content, "revised");
+            requireNoRun(content, "revised");
             if (Channel.ARCHIVED.equals(channel.status())) {
                 throw new ApiException(ErrorCode.PREREQUISITE_NOT_MET, "Contents of archived channels cannot be revised.");
             }
@@ -204,6 +207,7 @@ public class ContentService {
             channels.lockShared(unlocked.channelId());
             Content content = requireContent(mapper.lockById(contentId));
             requireDraft(content, "archived");
+            requireNoRun(content, "archived");
             if (content.version() != version) {
                 throw new ApiException(ErrorCode.RESOURCE_CONFLICT,
                         "The content was changed by another request. Reload and retry.");
@@ -273,12 +277,12 @@ public class ContentService {
     private RevisionInput normalize(String workingTitle, String brief, String language, Integer duration,
             Map<String, Object> settings, String changeReason, String contentType, ChannelConfig config) {
         String title = workingTitle == null ? "" : lines(workingTitle).strip();
-        if (title.isEmpty() || title.length() > 255) {
-            throw ApiException.validation("workingTitle", "must be 1 to 255 characters");
-        }
+        // 길이는 코드포인트 기준(OpenAPI maxLength, utf8mb4 VARCHAR와 같은 단위)
+        Texts.requireLength("workingTitle", title, 1, 255);
         String normalizedBrief = brief == null ? "" : lines(brief);
-        if (normalizedBrief.isBlank() || normalizedBrief.length() > BRIEF_MAX) {
-            throw ApiException.validation("brief", "must be 1 to 4000 characters");
+        Texts.requireLength("brief", normalizedBrief, 1, BRIEF_MAX);
+        if (normalizedBrief.isBlank()) {
+            throw ApiException.validation("brief", "must not be blank");
         }
         if (language == null || language.length() > 16 || !LANGUAGE.matcher(language).matches()) {
             throw ApiException.validation("language", "must be a BCP 47 language tag (e.g. en, en-US)");
@@ -305,8 +309,8 @@ public class ContentService {
             }
         }
         String reason = changeReason == null || changeReason.isBlank() ? null : lines(changeReason);
-        if (reason != null && reason.length() > 500) {
-            throw ApiException.validation("changeReason", "must be at most 500 characters");
+        if (reason != null) {
+            Texts.requireLength("changeReason", reason, 1, 500);
         }
         return new RevisionInput(title, normalizedBrief, language, duration, canonicalSettings, settingsJson, reason);
     }
@@ -321,7 +325,16 @@ public class ContentService {
                 input.settingsJson(), hash, RevisionHash.VERSION, input.changeReason(), actor.userId());
     }
 
+    /**
+     * 멱등 지문 v1(RV-B-05): 명령 유형·경로 ID·요청 본문 값(요청 그대로, null 명시)의 canonical JSON SHA-256.
+     * trim·줄바꿈 통일·기본값 적용 전의 값이므로, 저장 결과가 같아도 요청 값이 다르면 같은 키에서 409가 된다.
+     */
     private static String fingerprint(Map<String, Object> fields) {
+        fields.forEach((name, value) -> {
+            if (value instanceof String text) {
+                Texts.requireWellFormed(name, text);
+            }
+        });
         try {
             return CanonicalJson.sha256(fields);
         } catch (IllegalArgumentException e) {
@@ -334,6 +347,23 @@ public class ContentService {
             throw new ApiException(ErrorCode.RESOURCE_NOT_FOUND);
         }
         return content;
+    }
+
+    /**
+     * RV-B-01 fail closed: 활성 포인터 또는 포인터 없는 비종료 run(고아·불일치)이 있으면 거절한다. 자동 보정·삭제하지 않고
+     * 경고만 남긴다. content X를 쥔 상태에서 호출하므로 Q0 경로의 run 생성과 직렬화된다.
+     */
+    private void requireNoRun(Content content, String action) {
+        Long nonterminal = mapper.nonterminalRunId(content.id());
+        if (content.activeRunId() == null && nonterminal == null) {
+            return;
+        }
+        if (!java.util.Objects.equals(content.activeRunId(), nonterminal)) {
+            log.warn("content {} run pointer mismatch: active_run_id={}, non-terminal run={}", content.id(),
+                    content.activeRunId(), nonterminal);
+        }
+        throw new ApiException(ErrorCode.INVALID_STATE_TRANSITION,
+                "Contents with a non-terminal run cannot be " + action + ".");
     }
 
     private static void requireDraft(Content content, String action) {

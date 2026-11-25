@@ -483,4 +483,131 @@ class ContentApiIT {
         postJson("/api/v1/contents/" + id + "/revisions", key(), revisionBody(1, "x", ""))
                 .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("PREREQUISITE_NOT_MET"));
     }
+
+    // ---------------------------------------------------------------- RV-B-01 고아 run fail closed
+    @Test
+    void orphanRunBlocksChannelArchive() throws Exception {
+        long channelId = channel();
+        JsonNode content = createContent(channelId);
+        long id = content.get("id").asLong();
+        long orphan = fx.run(id, content.at("/currentRevision/id").asLong(), 1); // 포인터 없는 QUEUED run
+        send(get("/api/v1/contents/" + id)).andExpect(jsonPath("$.status").value("DRAFT"))
+                .andExpect(jsonPath("$.activeRunId").isEmpty());
+        long version = channels.get(channelId).channel().version();
+        mockMvc.perform(post("/api/v1/channels/" + channelId + "/archive").with(ApiTestSupport.as(admin))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"version\":" + version + "}"))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("INVALID_STATE_TRANSITION"))
+                .andExpect(ApiTestSupport.matchesContract());
+        assertThat(channels.get(channelId).channel().status()).isEqualTo("ACTIVE");
+        // 자동 정리하지 않는다
+        assertThat(jdbc.queryForObject("SELECT status FROM content_run WHERE id = ?", String.class, orphan))
+                .isEqualTo("QUEUED");
+    }
+
+    @Test
+    void orphanRunBlocksContentArchiveAndRevision() throws Exception {
+        JsonNode content = createContent(channel());
+        long id = content.get("id").asLong();
+        String path = "/api/v1/contents/" + id;
+        fx.run(id, content.at("/currentRevision/id").asLong(), 1);
+        postJson(path + "/archive", null, "{\"version\":0}").andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("INVALID_STATE_TRANSITION"));
+        postJson(path + "/revisions", key(), revisionBody(1, "Blocked", "")).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("INVALID_STATE_TRANSITION"));
+        send(get(path)).andExpect(jsonPath("$.status").value("DRAFT")).andExpect(jsonPath("$.version").value(0))
+                .andExpect(jsonPath("$.currentRevision.revisionNo").value(1));
+    }
+
+    // ---------------------------------------------------------------- RV-B-05 유니코드·크기 경계, 지문 계약
+    private static String emoji(int count) {
+        return new String(Character.toChars(0x1F600)).repeat(count);
+    }
+
+    @Test
+    void lengthsAreCountedInCodePoints() throws Exception {
+        long channelId = channel();
+        // 보조 평면 문자 255개 = UTF-16 510단위. 코드포인트 기준으로 허용(OpenAPI maxLength·VARCHAR(255)와 같은 단위)
+        JsonNode topic = json(postJson("/api/v1/topics", key(), topicBody(channelId, emoji(255)))
+                .andExpect(status().isCreated()));
+        assertThat(jdbc.queryForObject("SELECT CHAR_LENGTH(title) FROM topic WHERE id = ?", Integer.class,
+                topic.get("id").asLong())).isEqualTo(255);
+        postInvalid("/api/v1/topics", key(), topicBody(channelId, emoji(256))).andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.details[0].field").value("title"));
+        String topicId = topic.get("id").asString();
+        String body = "{\"channelId\":\"" + channelId + "\",\"topicId\":\"" + topicId + "\",\"contentType\":\"SHORTS\","
+                + "\"workingTitle\":\"" + emoji(255) + "\",\"brief\":\"" + emoji(4000) + "\",\"targetDurationSeconds\":50}";
+        JsonNode content = json(postJson("/api/v1/contents", key(), body).andExpect(status().isCreated()));
+        assertThat(content.at("/currentRevision/brief").asString()).isEqualTo(emoji(4000));
+        postInvalid("/api/v1/contents", key(), body.replace(emoji(4000), emoji(4001)))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.details[0].field").value("brief"));
+        postInvalid("/api/v1/contents", key(), body.replace(emoji(255) + "\",\"brief", emoji(256) + "\",\"brief"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.details[0].field").value("workingTitle"));
+    }
+
+    @Test
+    void unpairedSurrogatesAreRejectedAsValidationErrors() throws Exception {
+        long channelId = channel();
+        postInvalid("/api/v1/topics", key(), topicBody(channelId, "bad \\ud83d title"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+        String topicId = createTopic(channelId, "Surrogate").get("id").asString();
+        postInvalid("/api/v1/contents", key(), contentBody(channelId, topicId, ",\"settings\":{\"k\":\"\\ude00\"}"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.details[0].field").value("settings"));
+        postInvalid("/api/v1/contents", key(),
+                contentBody(channelId, topicId, "").replace("Explain the topic.", "x\\udc00"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.details[0].field").value("brief"));
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM content WHERE channel_id = ?", Integer.class, channelId))
+                .isZero();
+    }
+
+    @Test
+    void settingsSizeLimitIsCheckedOnCanonicalJson() throws Exception {
+        long channelId = channel();
+        String topicId = createTopic(channelId, "Settings").get("id").asString();
+        // 정규화 JSON {"k":"xxx..."} = 8바이트 + 값 길이. 16,384바이트 경계
+        String fits = ",\"settings\":{\"k\":\"" + "x".repeat(16384 - 8) + "\"}";
+        String over = ",\"settings\":{\"k\":\"" + "x".repeat(16384 - 7) + "\"}";
+        postJson("/api/v1/contents", key(), contentBody(channelId, topicId, fits)).andExpect(status().isCreated());
+        postJson("/api/v1/contents", key(), contentBody(channelId, topicId, over)).andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.details[0].field").value("settings"));
+        // 많은 키·깊은 중첩도 결정적: 키 순서만 다른 같은 settings는 같은 revision hash
+        StringBuilder forward = new StringBuilder("{");
+        StringBuilder backward = new StringBuilder("{");
+        for (int i = 0; i < 300; i++) {
+            forward.append(i == 0 ? "" : ",").append("\"k").append(i).append("\":{\"b\":").append(i).append(",\"a\":[1,2]}");
+            int j = 299 - i;
+            backward.append(i == 0 ? "" : ",").append("\"k").append(j).append("\":{\"a\":[1,2],\"b\":").append(j).append("}");
+        }
+        forward.append("}");
+        backward.append("}");
+        JsonNode a = json(postJson("/api/v1/contents", key(), contentBody(channelId, topicId, ",\"settings\":" + forward))
+                .andExpect(status().isCreated()));
+        JsonNode b = json(postJson("/api/v1/contents", key(), contentBody(channelId, topicId, ",\"settings\":" + backward))
+                .andExpect(status().isCreated()));
+        String revisionA = a.at("/currentRevision/id").asString();
+        String revisionB = b.at("/currentRevision/id").asString();
+        assertThat(jdbc.queryForObject("SELECT settings_json FROM content_revision WHERE id = ?", String.class,
+                Long.parseLong(revisionA))).isEqualTo(jdbc.queryForObject(
+                        "SELECT settings_json FROM content_revision WHERE id = ?", String.class, Long.parseLong(revisionB)));
+    }
+
+    @Test
+    void fingerprintUsesRequestValuesNotStoredValues() throws Exception {
+        long channelId = channel();
+        String k = key();
+        postJson("/api/v1/topics", k, topicBody(channelId, "Same Title")).andExpect(status().isCreated());
+        // 저장값(strip 후)은 같지만 요청값이 다르므로 같은 키에서 409(지문 v1 계약)
+        postJson("/api/v1/topics", k, topicBody(channelId, " Same Title")).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("RESOURCE_CONFLICT"));
+        String topicId = createTopic(channelId, "FP").get("id").asString();
+        String k2 = key();
+        postJson("/api/v1/contents", k2, contentBody(channelId, topicId, "")).andExpect(status().isCreated());
+        // language 생략(채널 기본 en)과 명시 "en"은 저장 결과가 같아도 다른 요청
+        postJson("/api/v1/contents", k2, contentBody(channelId, topicId, ",\"language\":\"en\""))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("RESOURCE_CONFLICT"));
+        // JSON 키 순서·공백만 다른 같은 요청은 재생
+        String reordered = "{ \"targetDurationSeconds\": 50, \"brief\": \"Explain the topic.\", \"workingTitle\": "
+                + "\"Working Title\", \"contentType\": \"SHORTS\", \"topicId\": \"" + topicId + "\", \"channelId\": \""
+                + channelId + "\" }";
+        postJson("/api/v1/contents", k2, reordered).andExpect(status().isOk());
+    }
 }

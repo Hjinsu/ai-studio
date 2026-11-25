@@ -35,7 +35,8 @@ class MigrationConventionTest {
             "V3__create_admin_and_audit.sql", "4224b08f5e0149829b27e1dcef51fd7b7e3f33faa6720a975834eed23b1b6384",
             "V4__create_channel.sql", "06d9de8f625d4575f9bc278263cd70a336535305a018bc3e977dcfd2e47d98ec",
             "V5__create_budget_and_ledger.sql", "a5d798c38c636d56d1974d8eb4494db46e9fcd8916ebd65d8ac3de325aa9ea5d",
-            "V6__create_content_domain.sql", "4fa717cc451bcd0593bf8eb0c3d9ce7b1a2954b912398939d2086db4f0780c9b");
+            // V6: T03-B-FIX(RV-B-01/03) 미배포 보완, 사용자 예외 승인(2026-11-25). 이전 값 4fa717cc…0c9b(a2500a8)
+            "V6__create_content_domain.sql", "304900fda20821c83a9f3f3a56c9568f4215544158020569bd6f36e9d2412588");
 
     /** V1은 ADR-014 이전 기준선이므로 collation 규칙 검사에서 제외한다 (수정 금지). */
     private static final List<String> COLLATION_RULE_EXEMPT = List.of("V1__initial_baseline.sql");

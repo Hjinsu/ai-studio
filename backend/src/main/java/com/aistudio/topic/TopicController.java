@@ -41,7 +41,7 @@ class TopicController {
     }
 
     record TopicCreateRequest(@NotNull @Pattern(regexp = ApiId.PATTERN) String channelId,
-            @NotBlank @Size(max = 255) String title, @Size(min = 1, max = 500) String note) {
+            @NotBlank String title, @Size(min = 1) String note) {
     }
 
     private final TopicService service;

@@ -2,6 +2,8 @@
 -- T03_SCHEMA_DRAFT.sql(도메인 범위). 적용 후 수정 금지(ADR-009). 큐 실행·비용 테이블은 V7 이후(C/D) 범위다.
 -- CHARSET/COLLATE 생략으로 DB 기본 utf8mb4_unicode_ci 상속. utf8mb4_bin은 정확 비교 컬럼만(ADR-053).
 -- 순환 FK(content ↔ content_revision ↔ content_run)는 부모·자식 테이블 생성 뒤 ALTER로 추가한다.
+-- 2026-11-25 T03-B-FIX(RV-B-01/03): 미배포 V6 보완(사용자 예외 승인, 영속 DB 미적용 확인). 콘텐츠당 비종료 run UNIQUE
+-- guard, 활성 포인터 직접 교체 금지, 비종료 run이 남은 콘텐츠의 보관·revision 변경 거절(트리거 조회는 RC에서 무잠금).
 
 -- 1) revision → channel_config 소유권 복합 FK 대상 (V4는 (channel_id, revision_no)만 UNIQUE)
 ALTER TABLE channel_config ADD CONSTRAINT uk_channel_config_owner UNIQUE (channel_id, id);
@@ -114,9 +116,13 @@ CREATE TABLE content_run (
     created_at            DATETIME(6)  NOT NULL,
     started_at            DATETIME(6)  NULL,
     finished_at           DATETIME(6)  NULL,
+    -- RV-B-01: 비종료(QUEUED/RUNNING) run만 content_id, 종료 run은 NULL. UNIQUE로 콘텐츠당 비종료 run 최대 1개,
+    -- 종료 run 이력은 NULL이라 개수 제한 없이 보존된다
+    nonterminal_content_id BIGINT AS (CASE WHEN status IN ('QUEUED', 'RUNNING') THEN content_id END) PERSISTENT,
     CONSTRAINT pk_content_run PRIMARY KEY (id),
     CONSTRAINT uk_content_run_no UNIQUE (content_id, run_no),
     CONSTRAINT uk_content_run_owner UNIQUE (content_id, id),
+    CONSTRAINT uk_content_run_nonterminal UNIQUE (nonterminal_content_id),
     CONSTRAINT fk_run_revision FOREIGN KEY (content_id, content_revision_id)
         REFERENCES content_revision (content_id, id),
     CONSTRAINT fk_run_requested_by FOREIGN KEY (requested_by) REFERENCES admin_user (id),
@@ -226,9 +232,18 @@ BEGIN
     IF OLD.current_revision_id IS NOT NULL AND NEW.current_revision_id IS NULL THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'current revision cannot be cleared';
     END IF;
-    -- 활성 run이 있는 동안 현재 revision을 바꾸지 않는다(revision 생성은 DRAFT에서만)
-    IF OLD.active_run_id IS NOT NULL AND NOT (NEW.current_revision_id <=> OLD.current_revision_id) THEN
+    -- 활성 run(포인터 또는 포인터 없는 비종료 run)이 있는 동안 현재 revision을 바꾸지 않는다(fail closed)
+    IF NOT (NEW.current_revision_id <=> OLD.current_revision_id) AND (OLD.active_run_id IS NOT NULL OR EXISTS (
+            SELECT 1 FROM content_run r WHERE r.nonterminal_content_id = NEW.id)) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'current revision cannot change while a run is active';
+    END IF;
+    -- 비종료 run이 남은 콘텐츠는 보관하지 않는다(포인터 불일치·고아 run 포함, fail closed)
+    IF NEW.status = 'ARCHIVED' AND EXISTS (SELECT 1 FROM content_run r WHERE r.nonterminal_content_id = NEW.id) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'content with a non-terminal run cannot be archived';
+    END IF;
+    -- 활성 포인터를 다른 run으로 직접 교체하지 않는다(해제 → 종료 → 새 run 순서)
+    IF OLD.active_run_id IS NOT NULL AND NEW.active_run_id IS NOT NULL AND NEW.active_run_id <> OLD.active_run_id THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'active run pointer cannot be replaced directly';
     END IF;
     -- 제목은 현재 revision working_title의 정확한 복제본
     IF NEW.current_revision_id IS NOT NULL AND NOT EXISTS (

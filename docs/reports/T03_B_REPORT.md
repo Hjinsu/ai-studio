@@ -2,6 +2,8 @@
 
 작성 2026-11-25 · 담당 Claude Code · 상태 **IMPLEMENTED**(Codex 독립 리뷰·통합 검증·사용자 승인 전, DONE 아님)
 
+> **갱신(T03-B-FIX)**: Codex 리뷰 RV-B-01~06 수정으로 V6(사용자 예외 승인)·활성 run 방어·topic hash·길이 단위·권한 테스트가 바뀌었다. 최신 내용과 T03-C R10 인수 조건은 [T03_B_FIX_REPORT.md](T03_B_FIX_REPORT.md)가 이 문서보다 우선한다.
+
 ## 1. 기준 커밋 및 작업 브랜치
 
 | 항목 | 값 |

@@ -4,6 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
 import java.util.List;
 
 import org.flywaydb.core.Flyway;
@@ -354,5 +357,213 @@ class ContentSchemaIT {
         rejected(log, "uk_queue_command_key", "valid-key-2", ContentFixtures.hash("k2"), "CREATE_CONTENT", fx.admin());
         assertThatCode(() -> jdbc.update(log, "VALID-KEY-2", ContentFixtures.hash("k"), "CREATE_TOPIC", fx.admin()))
                 .doesNotThrowAnyException();
+    }
+
+    // ---------------------------------------------------------------- 콘텐츠당 비종료 run 1개(RV-B-01)
+    private static final String INSERT_RUN = """
+            INSERT INTO content_run (content_id, content_revision_id, run_no, pipeline_version, execution_mode, status,
+                   requested_by, created_at)
+            VALUES (?, ?, ?, 'fake-v1', 'FAKE', 'QUEUED', ?, UTC_TIMESTAMP(6))""";
+    private static final String NONTERMINAL = "uk_content_run_nonterminal";
+
+    private static int nonterminalRuns(long contentId) {
+        return jdbc.queryForObject("SELECT COUNT(*) FROM content_run WHERE content_id = ?"
+                + " AND status IN ('QUEUED', 'RUNNING')", Integer.class, contentId);
+    }
+
+    @Test
+    void nonterminalGuardColumnTracksStatus() {
+        String definition = jdbc.queryForObject("""
+                SELECT CONCAT(is_generated, ' ', generation_expression) FROM information_schema.columns
+                 WHERE table_schema = DATABASE() AND table_name = 'content_run'
+                   AND column_name = 'nonterminal_content_id'""", String.class);
+        assertThat(definition).startsWith("ALWAYS").contains("QUEUED").contains("RUNNING").contains("content_id");
+        ContentFixtures.Graph g = fx.graph();
+        long run = fx.run(g.contentId(), g.revisionId(), 1);
+        String guard = "SELECT nonterminal_content_id FROM content_run WHERE id = ?";
+        assertThat(jdbc.queryForObject(guard, Long.class, run)).isEqualTo(g.contentId());
+        jdbc.update("UPDATE content_run SET status = 'RUNNING', started_at = UTC_TIMESTAMP(6) WHERE id = ?", run);
+        assertThat(jdbc.queryForObject(guard, Long.class, run)).isEqualTo(g.contentId());
+        jdbc.update("UPDATE content_run SET status = 'FAILED', finished_at = UTC_TIMESTAMP(6) WHERE id = ?", run);
+        assertThat(jdbc.queryForObject(guard, Long.class, run)).isNull();
+        // 생성 컬럼은 직접 쓸 수 없다
+        rejected("UPDATE content_run SET nonterminal_content_id = NULL WHERE id = ?", "nonterminal_content_id", run);
+    }
+
+    @Test
+    void twoQueuedRunsForTheSameContentAreRejected() {
+        ContentFixtures.Graph g = fx.graph();
+        fx.run(g.contentId(), g.revisionId(), 1);
+        rejected(INSERT_RUN, NONTERMINAL, g.contentId(), g.revisionId(), 2, fx.admin());
+        assertThat(nonterminalRuns(g.contentId())).isEqualTo(1);
+    }
+
+    @Test
+    void queuedAndRunningCannotCoexist() {
+        ContentFixtures.Graph g = fx.graph();
+        long run = fx.run(g.contentId(), g.revisionId(), 1);
+        jdbc.update("UPDATE content_run SET status = 'RUNNING', started_at = UTC_TIMESTAMP(6) WHERE id = ?", run);
+        rejected(INSERT_RUN, NONTERMINAL, g.contentId(), g.revisionId(), 2, fx.admin());
+        assertThat(nonterminalRuns(g.contentId())).isEqualTo(1);
+    }
+
+    @Test
+    void differentContentsMayEachHaveANonterminalRun() {
+        ContentFixtures.Graph a = fx.graph();
+        ContentFixtures.Graph b = fx.graph();
+        assertThatCode(() -> {
+            fx.run(a.contentId(), a.revisionId(), 1);
+            fx.run(b.contentId(), b.revisionId(), 1);
+        }).doesNotThrowAnyException();
+        assertThat(nonterminalRuns(a.contentId()) + nonterminalRuns(b.contentId())).isEqualTo(2);
+    }
+
+    @Test
+    void terminalRunHistoryIsUnlimitedAndANewRunCanFollow() {
+        ContentFixtures.Graph g = fx.graph();
+        String[] outcomes = {"SUCCEEDED", "FAILED", "CANCELLED", "FAILED", "SUCCEEDED"};
+        for (int i = 0; i < outcomes.length; i++) {
+            long run = fx.activate(g.contentId(), g.revisionId(), i + 1);
+            fx.finish(g.contentId(), run, outcomes[i]);
+        }
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM content_run WHERE content_id = ?", Integer.class,
+                g.contentId())).isEqualTo(5);
+        assertThat(nonterminalRuns(g.contentId())).isZero();
+        long next = fx.activate(g.contentId(), g.revisionId(), 6);
+        assertThat(jdbc.queryForObject("SELECT active_run_id FROM content WHERE id = ?", Long.class, g.contentId()))
+                .isEqualTo(next);
+        assertThat(nonterminalRuns(g.contentId())).isEqualTo(1);
+    }
+
+    @Test
+    void activePointerCannotBeSwappedDirectly() {
+        ContentFixtures.Graph g = fx.graph();
+        long first = fx.activate(g.contentId(), g.revisionId(), 1);
+        // 두 번째 비종료 run은 UNIQUE가 막는다
+        rejected(INSERT_RUN, NONTERMINAL, g.contentId(), g.revisionId(), 2, fx.admin());
+        // 같은 콘텐츠의 종료된 run으로 교체 시도(포인터 해제 없이)
+        ContentFixtures.Graph h = fx.graph();
+        long done = fx.activate(h.contentId(), h.revisionId(), 1);
+        fx.finish(h.contentId(), done, "SUCCEEDED");
+        long next = fx.activate(h.contentId(), h.revisionId(), 2);
+        rejected("UPDATE content SET active_run_id = ? WHERE id = ?", "active run pointer cannot be replaced directly",
+                done, h.contentId());
+        assertThat(jdbc.queryForObject("SELECT active_run_id FROM content WHERE id = ?", Long.class, h.contentId()))
+                .isEqualTo(next);
+        // 같은 값으로의 갱신(포인터 유지)은 허용
+        assertThatCode(() -> jdbc.update("UPDATE content SET active_run_id = ?, version = version + 1 WHERE id = ?",
+                first, g.contentId())).doesNotThrowAnyException();
+    }
+
+    @Test
+    void orphanRunBlocksContentArchiveAndRevisionChangeAtTheDatabase() {
+        ContentFixtures.Graph g = fx.graph();
+        long orphan = fx.run(g.contentId(), g.revisionId(), 1); // 포인터 없는 비종료 run
+        assertThat(jdbc.queryForObject("SELECT active_run_id FROM content WHERE id = ?", Long.class, g.contentId()))
+                .isNull();
+        rejected("UPDATE content SET status = 'ARCHIVED', archived_at = UTC_TIMESTAMP(6) WHERE id = ?",
+                "content with a non-terminal run cannot be archived", g.contentId());
+        long rev2 = fx.revision(g.contentId(), g.channelId(), g.configId(), 2, "Title 2");
+        rejected("UPDATE content SET current_revision_id = ?, title = 'Title 2' WHERE id = ?",
+                "current revision cannot change while a run is active", rev2, g.contentId());
+        // 자동 보정 없음: 고아 run은 그대로 남는다
+        assertThat(jdbc.queryForObject("SELECT status FROM content_run WHERE id = ?", String.class, orphan))
+                .isEqualTo("QUEUED");
+    }
+
+    // ---------------------------------------------------------------- Run 생성·종료 TX 계약(DB 계약 테스트, C 서비스와 구분)
+    /** 단일 최상위 READ COMMITTED TX: 작업 중 예외가 나면 전체 롤백한다(C 서비스도 같은 계약을 지켜야 한다). */
+    private static void inTransaction(SqlWork work) throws Exception {
+        try (Connection c = DB.dataSource().getConnection()) {
+            c.setAutoCommit(false);
+            c.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
+            try {
+                work.run(c);
+                c.commit();
+            } catch (Exception e) {
+                c.rollback();
+                throw e;
+            }
+        }
+    }
+
+    @FunctionalInterface
+    interface SqlWork {
+        void run(Connection connection) throws Exception;
+    }
+
+    private static int execute(Connection c, String sql, Object... args) throws SQLException {
+        try (PreparedStatement statement = c.prepareStatement(sql)) {
+            for (int i = 0; i < args.length; i++) {
+                statement.setObject(i + 1, args[i]);
+            }
+            // SELECT ... FOR UPDATE(잠금 취득)는 -1, DML은 변경 행 수
+            return statement.execute() ? -1 : statement.getUpdateCount();
+        }
+    }
+
+    @Test
+    void failedRunCreationTransactionLeavesNoOrphanRun() {
+        ContentFixtures.Graph g = fx.graph();
+        long admin = fx.admin();
+        assertThatThrownBy(() -> inTransaction(c -> {
+            execute(c, "SELECT id FROM content WHERE id = ? FOR UPDATE", g.contentId());
+            execute(c, INSERT_RUN, g.contentId(), g.revisionId(), 1, admin);
+            // 포인터 설정이 version 불일치로 0행 → 호출자가 오류로 전파해야 한다
+            int changed = execute(c, """
+                    UPDATE content SET status = 'PRODUCING', version = version + 1,
+                           active_run_id = (SELECT id FROM content_run WHERE nonterminal_content_id = ?)
+                     WHERE id = ? AND version = 99 AND active_run_id IS NULL""", g.contentId(), g.contentId());
+            if (changed != 1) {
+                throw new IllegalStateException("pointer update affected " + changed + " rows");
+            }
+        })).hasMessageContaining("affected 0 rows");
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM content_run WHERE content_id = ?", Integer.class,
+                g.contentId())).isZero();
+        assertThat(jdbc.queryForMap("SELECT status, active_run_id FROM content WHERE id = ?", g.contentId()))
+                .containsEntry("status", "DRAFT").containsEntry("active_run_id", null);
+    }
+
+    @Test
+    void failedTerminalUpdateAfterPointerReleaseRollsBackEverything() throws Exception {
+        ContentFixtures.Graph g = fx.graph();
+        long run = fx.activate(g.contentId(), g.revisionId(), 1);
+        jdbc.update("UPDATE content_run SET status = 'RUNNING', started_at = UTC_TIMESTAMP(6) WHERE id = ?", run);
+        String release = "UPDATE content SET status = 'DRAFT', active_run_id = NULL, version = version + 1 WHERE id = ?";
+        // (a) 종료 UPDATE가 제약 오류(FAKE manifest)로 실패
+        assertThatThrownBy(() -> inTransaction(c -> {
+            execute(c, "SELECT id FROM content WHERE id = ? FOR UPDATE", g.contentId());
+            execute(c, "SELECT id FROM content_run WHERE id = ? FOR UPDATE", run);
+            execute(c, release, g.contentId());
+            execute(c, "UPDATE content_run SET status = 'SUCCEEDED', finished_at = UTC_TIMESTAMP(6),"
+                    + " output_manifest_hash = ? WHERE id = ?", ContentFixtures.hash("m"), run);
+        })).hasStackTraceContaining("ck_run_fake_manifest");
+        assertRunStillActive(g.contentId(), run);
+        // (b) 종료 UPDATE가 0행(상태·버전 조건 불일치) → 오류로 전파해 전체 롤백
+        assertThatThrownBy(() -> inTransaction(c -> {
+            execute(c, "SELECT id FROM content WHERE id = ? FOR UPDATE", g.contentId());
+            execute(c, release, g.contentId());
+            int finished = execute(c, "UPDATE content_run SET status = 'FAILED', finished_at = UTC_TIMESTAMP(6)"
+                    + " WHERE id = ? AND status = 'RUNNING' AND version = 999", run);
+            if (finished != 1) {
+                throw new IllegalStateException("terminal update affected " + finished + " rows");
+            }
+        })).hasMessageContaining("affected 0 rows");
+        assertRunStillActive(g.contentId(), run);
+        // 정상 경로: content X → 포인터 해제 → run 종료가 한 TX로 커밋
+        inTransaction(c -> {
+            execute(c, "SELECT id FROM content WHERE id = ? FOR UPDATE", g.contentId());
+            execute(c, release, g.contentId());
+            assertThat(execute(c, "UPDATE content_run SET status = 'FAILED', finished_at = UTC_TIMESTAMP(6)"
+                    + " WHERE id = ? AND status = 'RUNNING'", run)).isEqualTo(1);
+        });
+        assertThat(nonterminalRuns(g.contentId())).isZero();
+    }
+
+    private static void assertRunStillActive(long contentId, long runId) {
+        assertThat(jdbc.queryForMap("SELECT status, active_run_id FROM content WHERE id = ?", contentId))
+                .containsEntry("status", "PRODUCING").containsEntry("active_run_id", runId);
+        assertThat(jdbc.queryForObject("SELECT status FROM content_run WHERE id = ?", String.class, runId))
+                .isEqualTo("RUNNING");
     }
 }

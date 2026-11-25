@@ -361,6 +361,10 @@ class ContentConcurrencyIT {
                         }
                         c.rollback();
                         return false;
+                    } catch (SQLException e) {
+                        // 패자: 두 번째 비종료 run INSERT가 uk_content_run_nonterminal에서 대기 후 중복 오류
+                        assertThat(e.getMessage()).contains("uk_content_run_nonterminal");
+                        return false;
                     }
                 }));
             }
@@ -380,26 +384,186 @@ class ContentConcurrencyIT {
         }
     }
 
+    private static final String INSERT_RUN = """
+            INSERT INTO content_run (content_id, content_revision_id, run_no, pipeline_version, execution_mode,
+                   status, requested_by, created_at)
+            VALUES (?, ?, ?, 'fake-v1', 'FAKE', 'QUEUED', ?, UTC_TIMESTAMP(6))""";
+
+    /** RV-B-01: 다른 run_no로 동시 INSERT해도 비종료 guard UNIQUE에서 직렬화되어 승자 1건. */
     @Test
-    void sameRunNumberRaceIsSerializedByTheUniqueKey() throws Exception {
+    void concurrentNonterminalRunInsertsHaveOneWinner() throws Exception {
         ContentService.ContentView view = newContent(channel());
         long contentId = view.content().id();
         long revisionId = view.currentRevision().id();
-        String insert = """
-                INSERT INTO content_run (content_id, content_revision_id, run_no, pipeline_version, execution_mode,
-                       status, requested_by, created_at)
-                VALUES (?, ?, 1, 'fake-v1', 'FAKE', 'QUEUED', ?, UTC_TIMESTAMP(6))""";
         try (Connection a = tx(); Connection b = tx()) {
-            insertKey(a, insert, contentId, revisionId, admin.userId());
+            insertKey(a, INSERT_RUN, contentId, revisionId, 1, admin.userId());
             Future<?> second = executor.submit(() -> {
-                insertKey(b, insert, contentId, revisionId, admin.userId());
+                insertKey(b, INSERT_RUN, contentId, revisionId, 2, admin.userId());
                 return null;
             });
             awaitLockWait(second);
             a.commit();
-            assertThatThrownBy(() -> second.get(30, TimeUnit.SECONDS)).hasStackTraceContaining("uk_content_run_no");
+            assertThatThrownBy(() -> second.get(30, TimeUnit.SECONDS))
+                    .hasStackTraceContaining("uk_content_run_nonterminal");
             b.rollback();
         }
+        assertThat(jdbc.queryForList("SELECT run_no FROM content_run WHERE content_id = ?", Integer.class, contentId))
+                .containsExactly(1);
+    }
+
+    /** 승자 TX가 실패(롤백)하면 대기하던 쪽이 진행한다. 실패한 생성은 고아 run을 남기지 않는다. */
+    @Test
+    void rolledBackRunCreationReleasesTheGuardWithoutLeavingAnOrphan() throws Exception {
+        ContentService.ContentView view = newContent(channel());
+        long contentId = view.content().id();
+        long revisionId = view.currentRevision().id();
+        try (Connection a = tx(); Connection b = tx()) {
+            insertKey(a, INSERT_RUN, contentId, revisionId, 1, admin.userId());
+            Future<?> second = executor.submit(() -> {
+                insertKey(b, INSERT_RUN, contentId, revisionId, 2, admin.userId());
+                return null;
+            });
+            awaitLockWait(second);
+            a.rollback();
+            second.get(30, TimeUnit.SECONDS);
+            b.commit();
+        }
+        assertThat(jdbc.queryForList("SELECT run_no FROM content_run WHERE content_id = ?", Integer.class, contentId))
+                .containsExactly(2);
+    }
+
+    /**
+     * 암묵 잠금 실측: content_run INSERT는 content 행을 잠그지 않는다(FK는 content_revision 행 S만). BEFORE INSERT
+     * 트리거에서 content를 조회하면 INSERT 문 안의 조회가 S 잠금이 되어, run INSERT 뒤 content X로 올리는 경로에서
+     * S→X 변환 교착이 실측됐다 — 그래서 트리거에서 content 조회를 두지 않는다. run 생성은 Q0대로 content X를 먼저 쥔다.
+     */
+    @Test
+    void runInsertDoesNotLockTheContentRow() throws Exception {
+        ContentService.ContentView view = newContent(channel());
+        long contentId = view.content().id();
+        try (Connection a = tx(); Connection b = tx()) {
+            exec(a, "SELECT id FROM content WHERE id = ? FOR UPDATE", contentId);
+            long start = System.nanoTime();
+            insertKey(b, INSERT_RUN, contentId, view.currentRevision().id(), 1, admin.userId());
+            assertThat(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start)).isLessThan(2000);
+            b.rollback();
+            a.rollback();
+        }
+    }
+
+    /**
+     * READ COMMITTED에서 content UPDATE 트리거의 content_run 조회(보관·revision 검사)와 content_run UPDATE 트리거의
+     * content 조회(종료 검사)는 잠금 없이 읽는다. 상대 행을 다른 TX가 X로 쥐고 있어도 대기하지 않는다.
+     */
+    @Test
+    void triggerReadsDoNotLockUnderReadCommitted() throws Exception {
+        ContentService.ContentView view = newContent(channel());
+        long contentId = view.content().id();
+        long other = newContent(channel()).content().id();
+        long runId;
+        try (Connection setup = tx()) {
+            runId = insertKey(setup, INSERT_RUN, contentId, view.currentRevision().id(), 1, admin.userId());
+            update(setup, "UPDATE content_run SET status = 'RUNNING', started_at = UTC_TIMESTAMP(6) WHERE id = ?", runId);
+            setup.commit();
+        }
+        try (Connection holder = tx(); Connection writer = tx()) {
+            update(holder, "UPDATE content_run SET version = version + 1 WHERE id = ?", runId);
+            exec(holder, "SELECT id FROM content WHERE id = ? FOR UPDATE", other);
+            // content 보관 트리거가 content_run(고아 비종료)을 읽고 즉시 거절 — 대기 없음
+            long start = System.nanoTime();
+            assertThatThrownBy(() -> update(writer, "UPDATE content SET status = 'ARCHIVED',"
+                    + " archived_at = UTC_TIMESTAMP(6) WHERE id = ?", contentId))
+                    .hasMessageContaining("content with a non-terminal run cannot be archived");
+            assertThat(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start)).isLessThan(2000);
+            writer.rollback();
+            holder.rollback();
+        }
+        try (Connection holder = tx(); Connection writer = tx()) {
+            exec(holder, "SELECT id FROM content WHERE id = ? FOR UPDATE", contentId);
+            long start = System.nanoTime();
+            // 포인터 없는 run의 종료: 트리거가 content를 잠금 없이 읽으므로 holder를 기다리지 않는다
+            assertThat(update(writer, "UPDATE content_run SET status = 'FAILED', finished_at = UTC_TIMESTAMP(6)"
+                    + " WHERE id = ?", runId)).isEqualTo(1);
+            assertThat(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start)).isLessThan(2000);
+            writer.rollback();
+            holder.rollback();
+        }
+    }
+
+    /**
+     * REPEATABLE READ에서는 같은 트리거 조회가 uk_content_run_nonterminal의 next-key/gap 잠금을 얻어 다른 콘텐츠의 run
+     * INSERT를 막는다. 그래서 콘텐츠·run 쓰기 경로는 READ COMMITTED(LockRetryingTransactions)를 써야 한다 — 그 근거 실측.
+     */
+    @Test
+    void repeatableReadTriggerReadsTakeGapLocksSoWritersMustUseReadCommitted() throws Exception {
+        long archivedTarget = newContent(channel()).content().id();
+        ContentService.ContentView neighbour = newContent(channel());
+        try (Connection holder = DB.dataSource().getConnection(); Connection writer = tx()) {
+            holder.setAutoCommit(false);
+            holder.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
+            update(holder, "UPDATE content SET status = 'ARCHIVED', archived_at = UTC_TIMESTAMP(6) WHERE id = ?",
+                    archivedTarget);
+            Future<?> insert = executor.submit(() -> {
+                insertKey(writer, INSERT_RUN, neighbour.content().id(), neighbour.currentRevision().id(), 1,
+                        admin.userId());
+                return null;
+            });
+            awaitLockWait(insert);
+            holder.rollback();
+            insert.get(30, TimeUnit.SECONDS);
+            writer.rollback();
+        }
+        // 같은 시나리오를 READ COMMITTED로 하면 대기 없이 진행된다
+        try (Connection holder = tx(); Connection writer = tx()) {
+            update(holder, "UPDATE content SET status = 'ARCHIVED', archived_at = UTC_TIMESTAMP(6) WHERE id = ?",
+                    archivedTarget);
+            long start = System.nanoTime();
+            insertKey(writer, INSERT_RUN, neighbour.content().id(), neighbour.currentRevision().id(), 1,
+                    admin.userId());
+            assertThat(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start)).isLessThan(2000);
+            writer.rollback();
+            holder.rollback();
+        }
+    }
+
+    /** R10(포인터 해제 → 종료)과 다음 run 생성(Q0)이 content X로 직렬화되고, 종료 커밋 뒤 새 비종료 run이 허용된다. */
+    @Test
+    void finishingARunAndCreatingTheNextOneSerializeOnTheContentLock() throws Exception {
+        ContentService.ContentView view = newContent(channel());
+        long contentId = view.content().id();
+        long revisionId = view.currentRevision().id();
+        long first;
+        try (Connection setup = tx()) {
+            first = insertKey(setup, INSERT_RUN, contentId, revisionId, 1, admin.userId());
+            update(setup, "UPDATE content SET status = 'PRODUCING', active_run_id = ?, version = version + 1"
+                    + " WHERE id = ?", first, contentId);
+            update(setup, "UPDATE content_run SET status = 'RUNNING', started_at = UTC_TIMESTAMP(6) WHERE id = ?",
+                    first);
+            setup.commit();
+        }
+        try (Connection r10 = tx(); Connection creator = tx()) {
+            exec(r10, "SELECT id FROM content WHERE id = ? FOR UPDATE", contentId);
+            exec(r10, "SELECT id FROM content_run WHERE id = ? FOR UPDATE", first);
+            update(r10, "UPDATE content SET status = 'DRAFT', active_run_id = NULL, version = version + 1 WHERE id = ?",
+                    contentId);
+            assertThat(update(r10, "UPDATE content_run SET status = 'SUCCEEDED', finished_at = UTC_TIMESTAMP(6)"
+                    + " WHERE id = ? AND status = 'RUNNING'", first)).isEqualTo(1);
+            Future<Long> next = executor.submit(() -> {
+                exec(creator, "SELECT id FROM content WHERE id = ? FOR UPDATE", contentId);
+                long id = insertKey(creator, INSERT_RUN, contentId, revisionId, 2, admin.userId());
+                update(creator, "UPDATE content SET status = 'PRODUCING', active_run_id = ?, version = version + 1"
+                        + " WHERE id = ? AND active_run_id IS NULL", id, contentId);
+                creator.commit();
+                return id;
+            });
+            awaitLockWait(next);
+            r10.commit();
+            long second = next.get(30, TimeUnit.SECONDS);
+            assertThat(jdbc.queryForObject("SELECT active_run_id FROM content WHERE id = ?", Long.class, contentId))
+                    .isEqualTo(second);
+        }
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM content_run WHERE content_id = ?", Integer.class,
+                contentId)).isEqualTo(2);
     }
 
     // ---------------------------------------------------------------- 채널 보관 ↔ 콘텐츠 상태 변경(FD-16)
