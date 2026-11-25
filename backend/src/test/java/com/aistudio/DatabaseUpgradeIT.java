@@ -59,8 +59,15 @@ class DatabaseUpgradeIT {
         DatabaseGuardTestAccess.guardedMigrate(flyway(null), DB.name());
         List<String> versions = jdbc.queryForList(
                 "SELECT version FROM flyway_schema_history WHERE success = 1 ORDER BY installed_rank", String.class);
-        assertThat(versions).containsExactly("1", "2", "3", "4", "5");
+        assertThat(versions).containsExactly("1", "2", "3", "4", "5", "6");
         assertThat(databaseCollation(jdbc)).isEqualTo("utf8mb4_unicode_ci");
         assertThat(flyway(null).info().pending()).isEmpty();
+        // V6(T03-B): 기존 channel_config에 소유권 대체 키 추가, 도메인 테이블 생성. T02 데이터 보존은 ContentUpgradeIT
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM information_schema.table_constraints"
+                + " WHERE table_schema = DATABASE() AND table_name = 'channel_config'"
+                + " AND constraint_name = 'uk_channel_config_owner' AND constraint_type = 'UNIQUE'", Integer.class))
+                .isEqualTo(1);
+        assertThat(jdbc.queryForList("SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE()",
+                String.class)).contains("topic", "content", "content_revision", "content_run", "queue_command_log");
     }
 }

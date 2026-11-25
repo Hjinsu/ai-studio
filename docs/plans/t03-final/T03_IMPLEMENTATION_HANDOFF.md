@@ -38,3 +38,32 @@ ChatGPT 최종 검토 APPROVE. 사용자가 T03-A6 최종 명세와 아래 검�
 
 Windows 저장소 루트에서 `gradlew.bat :backend:test`, `gradlew.bat :backend:integrationTest`, `gradlew.bat :backend:bootJar`를 실행한다. Linux는 `./gradlew`를 사용한다. [로컬 테스트 가이드](../../guides/LOCAL_TEST_GUIDE.md)의 Testcontainers 또는 별도 임시 서버만 사용한다. DB의 신규/V5 업그레이드, MigrationConventionTest V1~V5 해시 보존 및 V6 등록, 동일 채널 topic 중복과 교차 소유권 FK, NULL 우회 거절, Revision UPDATE/DELETE 거절, 활성 Run 포인터 원자성·동시성, 채널 보관 차단, 멱등 키 같은 내용 재생/다른 내용 409, 기존 권한/인증 회귀가 합격 조건이다. 필요한 V6 코드·테스트·권한을 완료하고 실제 결과와 미실행 항목을 보고한 뒤 IMPLEMENTED로 제출한다. Codex 독립 리뷰 후 통합 승인 절차를 진행한다.
 
+## T03-B 계약 통합 및 V6 이력
+
+RV-B-01~06 수정 기준은 `b5ffc73d61e100dbf4d9a847360aea404efd8e7d`이다. [초기 리뷰](../../reviews/T03_B_CODEX_REVIEW.md), [표적 재리뷰](../../reviews/T03_B_FIX_CODEX_REVIEW.md), [제품 계약 통합](../../reports/T03_B_INTEGRATION_REPORT.md)을 보존한다. 사용자가 승인한 미출시 V6 일회성 예외의 최종 LF 정규화 SHA-256은 `304900fda20821c83a9f3f3a56c9568f4215544158020569bd6f36e9d2412588`이다. C는 V7, D는 V8부터 새 Migration을 사용한다.
+
+## T03-C 필수 인수 조건
+
+[결함 수정 보고서 §3](../../reports/T03_B_FIX_REPORT.md)의 DB 검증 결과를 실제 C 서비스 완료 조건에 연결한다. C는 별도 승인 전 BLOCKED다.
+
+| 조건 | 완료 기준 |
+|---|---|
+| C-G01 | Q0와 R10은 `LockRetryingTransactions`가 소유하는 최상위 READ COMMITTED 트랜잭션에서 실행한다. Run 쓰기 경로에 REPEATABLE READ를 사용하지 않는다. |
+| C-G02 | Q0는 channel S → queue_control X → content X 순으로 획득한다. 채널·콘텐츠 상태, 고아 Run, 기존 비종료 Run 및 포인터를 content 잠금 아래 재검증한다. |
+| C-G03 | Q0는 content X 획득 후 QUEUED Run을 INSERT하고 `active_run_id IS NULL` 조건으로 활성 포인터를 갱신한다. 행 수 1개를 요구하며 실패 또는 0행이면 Run 생성까지 같은 TX에서 전부 롤백한다. |
+| C-G04 | R10 후보는 비잠금으로 찾는다. content X → content_run X → 후속 job·operation 등 승인된 정순으로 획득하고 동종 행은 PK 순서로 잠근 뒤 후보를 다시 검증한다. |
+| C-G05 | R10은 모든 Job 종료, 미해결 비용·Operation 0 및 필수 P12 반영을 같은 잠금 범위에서 확인한다. |
+| C-G06 | R10은 같은 TX에서 content 포인터 해제, DRAFT 전환 및 version 증가 후 Run을 종료한다. 각 UPDATE 영향 행은 정확히 1개여야 한다. 오류·0행·기대 외 행 수는 예외로 전파하여 전체 롤백한다. |
+| C-G07 | R10의 감사·이벤트·카운터 및 필수 P12 반영을 같은 TX에 포함한다. |
+| C-G08 | 실제 C 서비스에서 Q0 포인터 갱신 실패 및 R10 포인터 해제 직후 실패, 종료 0행, 감사 실패, 커밋 직전 실패를 주입한다. Run·포인터·상태·부수 효과의 전체 롤백을 검증한다. B의 SQL 계약 테스트와 별도로 수행한다. |
+| C-G09 | 기동·Claim·Reconciler에서 `nonterminal_content_id`와 `active_run_id` 불일치를 탐지하고 실행을 차단하며 진단을 기록한다. 자동 수정·삭제는 금지한다. |
+| C-G10 | `nonterminal_content_id` generated UNIQUE를 유지한다. 제거된 Run INSERT 트리거의 content 조회는 복원 금지다. 실제 C 서비스에서 채널 보관·Run 생성 및 Q0/R10 경합과 명시·암묵 잠금 순서를 검증한다. |
+
+## T03-C 착수 배정 준비
+
+- **상태 및 기준** — BLOCKED. 사용자가 별도 착수 승인한 후 Claude Code에 배정한다. 기준은 [PR #3의 실제 병합 SHA](https://github.com/Hjinsu/ai-studio/pull/3)인 `t03/integration`이다. 제안 브랜치는 `t03/c-queue`이며 별도 worktree에서 사용한다.
+- **허용 범위** — T03-C 작업 엔진의 신규 백엔드 큐·Run 실행 패키지, C 전용 작업 엔진 테스트·fixture 및 V7 신규 마이그레이션. 승인된 Run 포인터 갱신을 연결하는 기존 content 계층의 최소 수정은 Q0/R10 경로에 한정한다. 기존 공통 파일에 필요한 변경은 Codex에게 경로와 최소 diff를 인계한다.
+- **공통 경계 및 금지 범위** — V1~V6, 비용·원장 및 D 마이그레이션(V8부터), 프론트엔드, 공통 OpenAPI·생성 타입·빌드·CI 및 승인 설계는 제외한다. Codex가 공통 API와 C/D 인터페이스 통합을 맡는다. C는 큐의 Operation·Attempt·lease·dispatch·증거 및 P12 적용 추적을 책임진다. D는 영속 비용 예약·정산·receipt 및 복구를 책임진다. 공통 operation ID, 정순 잠금, receipt 적용과 불확실 상태의 책임은 승인된 [비용 및 복구](T03_FINAL_COST_RECOVERY.md)와 [잠금·트랜잭션](T03_FINAL_LOCK_TRANSACTION.md)을 따른다. 실제 공급자·업로드·지출 허용·개발 DB 마이그레이션은 금지한다.
+- **마이그레이션** — V7에서 `queue_worker_instance`를 FK를 사용하는 `job_attempt`보다 먼저 생성한다. 빈 DB와 V6 업그레이드, FK/UNIQUE의 암묵 잠금, 불변 트리거와 앱 최소 권한을 검증한다. 운영 binlog ON의 migration 계정 및 DBA 트리거 생성은 배포 게이트다.
+- **필수 테스트** — 격리 DB에서 C-G01~10 전체, Q0/R10 실제 장애 주입, 기동·Claim·Reconciler 고아 Run 차단, 채널 상태와 Q0 경합, lease·취소·지연 증거와 재호출 차단, 미확정 비용으로 인한 종료 차단, receipt당 P12 한 번 및 C/D 경계의 장애 복구를 검증한다. D의 영속 정산 복구는 구현 후 C/D 통합에서 검증하며 C의 대역 테스트로 대체하지 않는다. 테스트 명령은 기존 backend:test, backend:integrationTest, backend:bootJar를 사용한다.
+- **완료 조건** — C 서비스의 Q0/R10 원자성, 불변성, 격리 FAKE 비용 테스트, 기존 회귀, 통합 OpenAPI·생성 타입 검증과 독립 리뷰 및 최신 CI 결과를 보고한다. 사용자 최종 승인 전 IMPLEMENTED 상태를 적용한다. D의 모든 콘텐츠 조회 경로 확인 후에만 budgetSummary를 required로 전환한다.

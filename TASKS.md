@@ -32,8 +32,10 @@
 | T03-A4 | 비용 안전성·영속 복구 설계 수정안 | Codex | 수정안 작성 완료 | [수정안](docs/plans/t03-revision/T03_COST_RECOVERY_REVISION.md) |
 | T03-A5 | 통합 설계 검토 | ChatGPT · Codex | 저장소 검증 완료, FD-01~16 승인 | [통합 리뷰](docs/reviews/T03_INTEGRATED_DESIGN_REVIEW.md) |
 | T03-A6 | 최종 구현 명세 및 착수 준비 | Codex | DONE (ChatGPT APPROVE, 사용자 최종 명세 승인) | [최종 명세](docs/plans/t03-final/README.md) |
-| T03-B | 콘텐츠·도메인 DB | Claude Code | TODO (FV-01~06 조건부 착수 승인) | t03/b-domain, V6 배정. [작업 범위와 검증](docs/plans/t03-final/T03_IMPLEMENTATION_HANDOFF.md) |
-| T03-C | 작업 실행 엔진 | Claude Code | BLOCKED | B 참조 키·D 인터페이스, 착수 승인 |
+| T03-B | 콘텐츠·도메인 DB | Claude Code | DONE (PR #3의 최종 HEAD 전체 CI 성공 및 t03/integration 병합 시 효력; 병합 전 IMPLEMENTED) | V6 및 RV-B-01~06 수정 검증 완료. [제품 보고](docs/reports/T03_B_FIX_REPORT.md), [재리뷰](docs/reviews/T03_B_FIX_CODEX_REVIEW.md) |
+| T03-B-INT | 제품 OpenAPI, 생성 타입 및 인수인계 | Codex | 검증 완료 및 종료 승인 | [통합 보고](docs/reports/T03_B_INTEGRATION_REPORT.md), PR #3 |
+| T03-B-CLOSE | 종료 문서·검증·병합 | Codex | 사용자 승인 | [최종 HEAD 검사 및 병합](https://github.com/Hjinsu/ai-studio/pull/3) |
+| T03-C | 작업 실행 엔진 | Claude Code | BLOCKED | V7, Claude Code, 제안 브랜치 `t03/c-queue` 및 별도 worktree. B 참조 키·D 인터페이스, [C-G01~10](docs/plans/t03-final/T03_IMPLEMENTATION_HANDOFF.md#t03-c-필수-인수-조건), 착수 승인 |
 | T03-D | 비용 안전성·영속 복구 | Codex | BLOCKED | B/C 참조 키와 인터페이스, 착수 승인 |
 | T03-E | 관리자 UI | Claude Code | BLOCKED | OpenAPI 및 타입 계약, 착수 승인 |
 | T03-F | 독립 리뷰·통합 검증 | Codex | BLOCKED | B~E 검증 가능한 HEAD, Codex 구현분은 별도 리뷰 세션 |

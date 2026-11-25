@@ -111,7 +111,10 @@ public class ChannelService {
         return get(id);
     }
 
-    /** ACTIVE → PAUSED. 잠금: budget_control S → channel X (ADR-055), 진행 중 예약과 직렬화. */
+    /**
+     * ACTIVE → PAUSED. 잠금: budget_control X → channel X (T03 LOCK CTRL, FD-02). 진행 중 예약·정산(control S)과
+     * 직렬화된다.
+     */
     @Transactional
     public ChannelView pause(long id, long version, Actor actor) {
         return changeStatus(id, version, Channel.ACTIVE, Channel.PAUSED, "CHANNEL_PAUSE", actor);
@@ -122,12 +125,20 @@ public class ChannelService {
         return changeStatus(id, version, Channel.PAUSED, Channel.ACTIVE, "CHANNEL_RESUME", actor);
     }
 
+    /**
+     * 보관(종료 상태). 잠금: budget_control X → channel X. 활성 run이 있는 채널은 409 INVALID_STATE_TRANSITION(FD-16).
+     * 활성 run 확인은 channel X 획득 뒤의 잠금 없는 읽기로, channel S를 요구하는 run 생성·콘텐츠 작성과 직렬화된다.
+     */
     @Transactional
     public ChannelView archive(long id, long version, Actor actor) {
-        controlLock.shared();
+        controlLock.exclusive();
         Channel channel = mapper.lockById(id);
         requireMutable(channel);
         requireVersion(channel, version);
+        if (mapper.countActiveRuns(id) > 0) {
+            throw new ApiException(ErrorCode.INVALID_STATE_TRANSITION,
+                    "Channels with an active content run cannot be archived.");
+        }
         Instant now = clock.instant();
         mapper.updateStatus(id, version, Channel.ARCHIVED, now, now);
         audit.record(actor, "CHANNEL_ARCHIVE", "CHANNEL", id, Map.of("from", channel.status()));
@@ -135,7 +146,7 @@ public class ChannelService {
     }
 
     private ChannelView changeStatus(long id, long version, String from, String to, String action, Actor actor) {
-        controlLock.shared();
+        controlLock.exclusive();
         Channel channel = mapper.lockById(id);
         requireMutable(channel);
         requireVersion(channel, version);
@@ -215,6 +226,19 @@ public class ChannelService {
             throw new ApiException(ErrorCode.RESOURCE_NOT_FOUND, "Channel not found.");
         }
         return channel;
+    }
+
+    /**
+     * 콘텐츠·revision 작성 TX에서 현재(최신) 설정 revision을 고정한다. 호출자가 먼저 {@link #lockShared}로 channel S를
+     * 잡아 설정 revision 생성(channel X)과 직렬화한다.
+     */
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.MANDATORY)
+    public ChannelConfig latestConfigInTransaction(long channelId) {
+        ChannelConfig config = mapper.latestConfig(channelId);
+        if (config == null) {
+            throw new IllegalStateException("Channel " + channelId + " has no configuration revision.");
+        }
+        return config;
     }
 
     private void insertConfig(long channelId, int revisionNo, ChannelSettings settings, String changeNote, Actor actor,
