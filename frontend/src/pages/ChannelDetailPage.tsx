@@ -1,7 +1,7 @@
 import { useState, type FormEvent, type ReactNode } from 'react'
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
-import { currentSession } from '../api/http'
-import { useSessionMutation } from '../api/useSessionMutation'
+import { assertSession } from '../api/http'
+import { invalidateSessionQueries, useSessionMutation } from '../api/useSessionMutation'
 import { useParams, useSearchParams } from 'react-router'
 import { Archive, Pause, Pencil, Play, Plus } from 'lucide-react'
 import {
@@ -72,12 +72,8 @@ export function ChannelDetailPage() {
 
 function useRefreshChannel(channelId: string) {
   const queryClient = useQueryClient()
-  return async () => {
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ['channel', channelId] }),
-      queryClient.invalidateQueries({ queryKey: ['channels'] }),
-      queryClient.invalidateQueries({ queryKey: ['channel-config', channelId] }),
-    ])
+  return async (generation: AbortSignal) => {
+    await invalidateSessionQueries(queryClient, generation, ['channel', channelId], ['channels'], ['channel-config', channelId])
   }
 }
 
@@ -87,10 +83,11 @@ function StatusActions({ channel }: { channel: Channel }) {
   const [pending, setPending] = useState<StatusAction | null>(null)
   const change = useSessionMutation({
     mutationFn: (action: StatusAction) => changeChannelStatus(channel.id, action, channel.version),
-    onSuccess: async (_result, action) => {
+    onSuccess: async (_result, action, generation) => {
+      assertSession(generation)
       setPending(null)
-      toast.success(`채널을 ${ACTION[action].label}했습니다.`)
-      await refresh()
+      toast.success(`채널을 ${ACTION[action].label}했습니다.`, generation)
+      await refresh(generation)
     },
   })
   if (channel.status === 'ARCHIVED') {
@@ -183,9 +180,10 @@ function EditChannelDialog({ channel, onClose }: { channel: Channel; onClose: ()
       return updateChannel(channel.id, body)
     },
     onSuccess: async (_data, _variables, generation) => {
-      toast.success('기본 정보를 저장했습니다.')
-      await refresh()
-      if (generation !== currentSession()) return
+      assertSession(generation)
+      toast.success('기본 정보를 저장했습니다.', generation)
+      await refresh(generation)
+      assertSession(generation)
       onClose()
     },
   })
@@ -263,9 +261,10 @@ function RevisionDialog({ channel, base, onClose }: { channel: Channel; base: Ch
     mutationFn: (settings: ReturnType<typeof settingsOf>) =>
       createChannelConfig(channel.id, { baseRevisionNo: base.revisionNo, settings, ...(changeNote.trim() ? { changeNote: changeNote.trim() } : {}) }),
     onSuccess: async (config, _variables, generation) => {
-      toast.success(`설정 r${config.revisionNo}을 저장했습니다.`)
-      await refresh()
-      if (generation !== currentSession()) return
+      assertSession(generation)
+      toast.success(`설정 r${config.revisionNo}을 저장했습니다.`, generation)
+      await refresh(generation)
+      assertSession(generation)
       onClose()
     },
   })

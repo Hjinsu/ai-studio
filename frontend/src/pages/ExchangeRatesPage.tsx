@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
-import { currentSession } from '../api/http'
-import { useSessionMutation } from '../api/useSessionMutation'
+import { assertSession } from '../api/http'
+import { invalidateSessionQueries, useSessionMutation } from '../api/useSessionMutation'
 import { ArrowLeftRight, Plus } from 'lucide-react'
 import { createExchangeRate, listExchangeRates, type ExchangeRate } from '../api/admin'
 import { formatKrw, isDecimal, matchesAmount } from '../lib/decimal'
@@ -145,9 +145,10 @@ function CreateRateDialog({ onClose }: { onClose: () => void }) {
         ...(note.trim() ? { note: note.trim() } : {}),
       }),
     onSuccess: async (created, _variables, generation) => {
-      toast.success(`환율 1 ${created.baseCurrency} = ${formatKrw(created.rate)}을 등록했습니다.`)
-      await queryClient.invalidateQueries({ queryKey: ['exchange-rates'] })
-      if (generation !== currentSession()) return
+      assertSession(generation)
+      toast.success(`환율 1 ${created.baseCurrency} = ${formatKrw(created.rate)}을 등록했습니다.`, generation)
+      await invalidateSessionQueries(queryClient, generation, ['exchange-rates'])
+      assertSession(generation)
       onClose()
     },
   })

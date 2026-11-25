@@ -11,14 +11,24 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const sequence = useRef(0)
   const dismiss = useCallback((id: number) => setMessages((current) => current.filter((m) => m.id !== id)), [])
   const push = useCallback(
-    (tone: ToastMessage['tone'], text: string) => {
+    (tone: ToastMessage['tone'], text: string, generation?: AbortSignal) => {
+      if (generation?.aborted) return
       const id = ++sequence.current
       setMessages((current) => [...current.slice(-2), { id, tone, text }])
-      window.setTimeout(() => dismiss(id), DURATION_MS)
+      const remove = () => {
+        window.clearTimeout(timer)
+        generation?.removeEventListener('abort', remove)
+        dismiss(id)
+      }
+      const timer = window.setTimeout(remove, DURATION_MS)
+      generation?.addEventListener('abort', remove, { once: true })
     },
     [dismiss],
   )
-  const api = useMemo<ToastApi>(() => ({ success: (t) => push('success', t), error: (t) => push('error', t) }), [push])
+  const api = useMemo<ToastApi>(() => ({
+    success: (text, generation) => push('success', text, generation),
+    error: (text, generation) => push('error', text, generation),
+  }), [push])
   return (
     <ToastContext.Provider value={api}>
       {children}

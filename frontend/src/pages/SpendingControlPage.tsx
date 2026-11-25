@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useSessionMutation } from '../api/useSessionMutation'
+import { assertSession } from '../api/http'
+import { invalidateSessionQueries, useSessionMutation } from '../api/useSessionMutation'
 import { Check, ShieldAlert, ShieldCheck, ShieldOff, X } from 'lucide-react'
 import { budgetControl, listPolicies, runConsistencyCheck, setSpending, type Schemas } from '../api/admin'
 import { spendingView } from '../lib/budget'
@@ -31,27 +32,26 @@ export function SpendingControlPage() {
   const [open, setOpen] = useState(false)
   const [reason, setReason] = useState('')
   const [report, setReport] = useState<Schemas['ConsistencyReport'] | null>(null)
-  const refresh = async () => {
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ['budget-control'] }),
-      queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
-    ])
+  const refresh = async (generation: AbortSignal) => {
+    await invalidateSessionQueries(queryClient, generation, ['budget-control'], ['dashboard'])
   }
   const change = useSessionMutation({
     mutationFn: (body: Schemas['SpendingChangeRequest']) => setSpending(body),
-    onSuccess: async (result) => {
+    onSuccess: async (result, _variables, generation) => {
+      assertSession(generation)
       setOpen(false)
       setReason('')
-      toast.success(result.spendingEnabled ? '신규 지출을 허용했습니다.' : '모든 신규 지출을 차단했습니다.')
-      await refresh()
+      toast.success(result.spendingEnabled ? '신규 지출을 허용했습니다.' : '모든 신규 지출을 차단했습니다.', generation)
+      await refresh(generation)
     },
   })
   const check = useSessionMutation({
     mutationFn: runConsistencyCheck,
-    onSuccess: async (result) => {
+    onSuccess: async (result, _variables, generation) => {
+      assertSession(generation)
       setReport(result)
-      toast[result.consistent ? 'success' : 'error'](result.consistent ? '정합성 검사: 정상' : `정합성 검사: 오류 ${result.issues.length}건`)
-      await refresh()
+      toast[result.consistent ? 'success' : 'error'](result.consistent ? '정합성 검사: 정상' : `정합성 검사: 오류 ${result.issues.length}건`, generation)
+      await refresh(generation)
     },
   })
   return (

@@ -7,8 +7,8 @@ export interface ToastMessage {
 }
 
 export interface ToastApi {
-  success: (text: string) => void
-  error: (text: string) => void
+  success: (text: string, generation?: AbortSignal) => void
+  error: (text: string, generation?: AbortSignal) => void
 }
 
 export const ToastContext = createContext<ToastApi>({ success: () => {}, error: () => {} })

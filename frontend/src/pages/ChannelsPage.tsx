@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
-import { currentSession } from '../api/http'
-import { useSessionMutation } from '../api/useSessionMutation'
+import { assertSession } from '../api/http'
+import { invalidateSessionQueries, useSessionMutation } from '../api/useSessionMutation'
 import { Link, useNavigate } from 'react-router'
 import { Plus, Tv } from 'lucide-react'
 import { createChannel, currentChannelConfig, listChannels, type Channel } from '../api/admin'
@@ -136,9 +136,10 @@ function CreateChannelDialog({ open, onOpenChange }: { open: boolean; onOpenChan
   const create = useSessionMutation({
     mutationFn: (body: Parameters<typeof createChannel>[0]) => createChannel(body),
     onSuccess: async (channel, _variables, generation) => {
-      toast.success(`채널 "${channel.name}"을 등록했습니다.`)
-      await queryClient.invalidateQueries({ queryKey: ['channels'] })
-      if (generation !== currentSession()) return
+      assertSession(generation)
+      toast.success(`채널 "${channel.name}"을 등록했습니다.`, generation)
+      await invalidateSessionQueries(queryClient, generation, ['channels'])
+      assertSession(generation)
       onOpenChange(false)
       await navigate(`/channels/${channel.id}`)
     },

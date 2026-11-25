@@ -3,8 +3,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useParams } from 'react-router'
 import { ApiError } from '../api/client'
 import { adjustReservation, getReservation, newIdempotencyKey, resolveReservation, type ReservationDetail, type Schemas } from '../api/admin'
-import { currentSession } from '../api/http'
-import { useSessionMutation } from '../api/useSessionMutation'
+import { assertSession, currentSession, SessionChangedError } from '../api/http'
+import { invalidateSessionQueries, runSessionQuery, useSessionMutation } from '../api/useSessionMutation'
 import { useChannelName } from '../api/useChannels'
 import { formatMoney, matchesAmount } from '../lib/decimal'
 import { fieldErrors } from '../lib/errors'
@@ -129,24 +129,26 @@ function useSettlement<T>(
   const [lost, setLost] = useState<LostCheck>()
   const [checking, setChecking] = useState(false)
 
-  const complete = async (message: string) => {
+  const complete = async (message: string, generation: AbortSignal) => {
+    assertSession(generation)
     setRequest(undefined)
     setLost(undefined)
     onConfirmationChange(false)
-    toast.success(message)
-    await Promise.all([['reservation', id], ['reservations'], ['ledger'], ['dashboard'], ['usage']]
-      .map((queryKey) => queryClient.invalidateQueries({ queryKey })))
+    toast.success(message, generation)
+    await invalidateSessionQueries(queryClient, generation, ['reservation', id], ['reservations'], ['ledger'], ['dashboard'], ['usage'])
   }
   const check = async (pending: Settlement<T>, generation: AbortSignal) => {
+    if (generation !== currentSession()) return
     setChecking(true)
     let result: LostCheck
     try {
-      const fresh = await queryClient.fetchQuery({
-        queryKey: ['reservation-check', pending.id, pending.key],
+      const queryKey = ['reservation-check', pending.id, pending.key]
+      const fresh = await runSessionQuery(queryClient, generation, [queryKey], () => queryClient.fetchQuery({
+        queryKey,
         queryFn: () => getReservation(pending.id),
         retry: false,
         gcTime: 0,
-      })
+      }))
       result = fresh.events.some((event) => event.eventKey === pending.key) ? 'recorded' : 'not-recorded'
     } catch {
       result = 'unknown'
@@ -154,14 +156,14 @@ function useSettlement<T>(
     if (generation !== currentSession()) return
     setChecking(false)
     if (result === 'recorded') {
-      await complete('응답은 받지 못했지만 원장에 이미 기록된 것을 확인했습니다. 다시 기록하지 마세요.')
+      await complete('응답은 받지 못했지만 원장에 이미 기록된 것을 확인했습니다. 다시 기록하지 마세요.', generation)
     } else {
       setLost(result)
     }
   }
   const mutation = useSessionMutation({
     mutationFn: (pending: Settlement<T>) => send(pending.id, pending.key, pending.body),
-    onSuccess: (_result, pending) => complete(successMessage(pending.body)),
+    onSuccess: (_result, pending, generation) => complete(successMessage(pending.body), generation),
     onError: (error, pending, generation) => {
       if (!(error instanceof ApiError) || error.status >= 500) return check(pending, generation)
     },
@@ -188,7 +190,11 @@ function useSettlement<T>(
       if (request && !busy && request.generation === currentSession()) mutation.mutate(request)
     },
     check: () => {
-      if (request && !busy && request.generation === currentSession()) void check(request, request.generation)
+      if (request && !busy && request.generation === currentSession()) {
+        void check(request, request.generation).catch((error: unknown) => {
+          if (!(error instanceof SessionChangedError)) throw error
+        })
+      }
     },
   }
 }

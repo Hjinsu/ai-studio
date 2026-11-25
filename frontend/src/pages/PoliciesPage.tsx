@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
-import { currentSession } from '../api/http'
-import { useSessionMutation } from '../api/useSessionMutation'
+import { assertSession } from '../api/http'
+import { invalidateSessionQueries, useSessionMutation } from '../api/useSessionMutation'
 import { Link, useNavigate } from 'react-router'
 import { Plus, WalletCards } from 'lucide-react'
 import { createPolicy, listPolicies, type BudgetPolicy, type Schemas } from '../api/admin'
@@ -136,12 +136,10 @@ function CreatePolicyDialog({ onClose }: { onClose: () => void }) {
   const create = useSessionMutation({
     mutationFn: (body: Schemas['BudgetPolicyCreateRequest']) => createPolicy(body),
     onSuccess: async (policy, _variables, generation) => {
-      toast.success('예산 정책을 만들었습니다.')
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['policies'] }),
-        queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
-      ])
-      if (generation !== currentSession()) return
+      assertSession(generation)
+      toast.success('예산 정책을 만들었습니다.', generation)
+      await invalidateSessionQueries(queryClient, generation, ['policies'], ['dashboard'])
+      assertSession(generation)
       onClose()
       await navigate(`/budget/policies/${policy.id}`)
     },

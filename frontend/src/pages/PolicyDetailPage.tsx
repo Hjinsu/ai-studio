@@ -1,6 +1,7 @@
 import { useState, type FormEvent, type ReactNode } from 'react'
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useSessionMutation } from '../api/useSessionMutation'
+import { assertSession } from '../api/http'
+import { invalidateSessionQueries, useSessionMutation } from '../api/useSessionMutation'
 import { useParams, useSearchParams } from 'react-router'
 import { getPolicy, listBuckets, listPolicyRevisions, revisePolicy, setPolicyEnabled, type BudgetBucket, type BudgetPolicy } from '../api/admin'
 import { formatKrw, matchesAmount, sign, trimDecimal } from '../lib/decimal'
@@ -56,8 +57,8 @@ export function PolicyDetailPage() {
 
 function useRefreshPolicy(policyId: string) {
   const queryClient = useQueryClient()
-  return async () => {
-    await Promise.all([['policy', policyId], ['policy-revisions', policyId], ['policy-buckets', policyId], ['policies'], ['dashboard'], ['usage']].map((queryKey) => queryClient.invalidateQueries({ queryKey })))
+  return async (generation: AbortSignal) => {
+    await invalidateSessionQueries(queryClient, generation, ['policy', policyId], ['policy-revisions', policyId], ['policy-buckets', policyId], ['policies'], ['dashboard'], ['usage'])
   }
 }
 
@@ -68,10 +69,11 @@ function StatusToggle({ policy }: { policy: BudgetPolicy }) {
   const enable = policy.status !== 'ACTIVE'
   const toggle = useSessionMutation({
     mutationFn: () => setPolicyEnabled(policy.id, enable, policy.version),
-    onSuccess: async () => {
+    onSuccess: async (_data, _variables, generation) => {
+      assertSession(generation)
       setOpen(false)
-      toast.success(enable ? '정책을 활성화했습니다.' : '정책을 비활성화했습니다.')
-      await refresh()
+      toast.success(enable ? '정책을 활성화했습니다.' : '정책을 비활성화했습니다.', generation)
+      await refresh(generation)
     },
   })
   return (
@@ -116,9 +118,10 @@ function ReviseForm({ policy }: { policy: BudgetPolicy }) {
         timezone: timezone.trim(),
         ...(changeNote.trim() ? { changeNote: changeNote.trim() } : {}),
       }),
-    onSuccess: async (updated) => {
-      toast.success(`정책 r${updated.currentRevision.revisionNo}을 저장했습니다.`)
-      await refresh()
+    onSuccess: async (updated, _variables, generation) => {
+      assertSession(generation)
+      toast.success(`정책 r${updated.currentRevision.revisionNo}을 저장했습니다.`, generation)
+      await refresh(generation)
     },
   })
   const errors = fieldErrors(revise.error)

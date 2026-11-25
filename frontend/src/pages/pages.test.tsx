@@ -1,6 +1,8 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import { logout } from '../api/admin'
+import { ME_KEY } from '../queryClient'
 import { channels, csrf, error, health, me, mockApi, on, page, renderApp } from '../test/mockApi'
 
 const channel = channels[0]
@@ -70,6 +72,58 @@ describe('Channels', () => {
     expect(calls.find((c) => c.url.endsWith('/archive'))?.body).toEqual({ version: 3 })
     await user.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
+  })
+
+  it('RVX-02-CB keeps the channel list after a held creation callback and re-login', async () => {
+    let signedIn = true
+    const created = { ...channel, id: '9', name: 'new' }
+    const calls = mockApi(csrf, health, allChannels, (call) => {
+      if (call.url === '/api/v1/auth/me') {
+        return signedIn ? me(call) : { status: 401, body: error('UNAUTHORIZED', 'signed out') }
+      }
+      if (call.url === '/api/v1/auth/logout') {
+        signedIn = false
+        return { status: 200 }
+      }
+      if (call.url === '/api/v1/auth/login') {
+        signedIn = true
+        return me({ ...call, method: 'GET', url: '/api/v1/auth/me' })
+      }
+    }, on('POST', '/api/v1/channels', 201, created),
+    on('GET', '/api/v1/channels/9', 200, created),
+    on('GET', /^\/api\/v1\/channels\/\d+\/config$/, 200, config))
+    const { client, router } = renderApp('/channels')
+    const invalidate = client.invalidateQueries.bind(client)
+    let release!: () => void
+    let started!: () => void
+    const sent = new Promise<void>((resolve) => { started = resolve })
+    const held = new Promise<void>((resolve) => { release = resolve })
+    vi.spyOn(client, 'invalidateQueries').mockImplementationOnce(async (filters, options) => {
+      await invalidate(filters, options)
+      started()
+      await held
+    })
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: '채널 등록' }))
+    const dialog = within(await screen.findByRole('dialog', { name: '채널 등록' }))
+    await user.type(dialog.getByLabelText('채널명'), 'new')
+    await user.click(dialog.getByRole('button', { name: '채널 등록' }))
+    await sent
+    const oldMutation = client.getMutationCache().getAll()[0]
+    expect(oldMutation.state.status).toBe('pending')
+    await act(async () => {
+      await logout()
+      await client.resetQueries({ queryKey: ME_KEY })
+    })
+    await user.type(await screen.findByLabelText('아이디'), 'admin')
+    await user.type(screen.getByLabelText('비밀번호'), 'fixture-password')
+    await user.click(screen.getByRole('button', { name: '로그인' }))
+    await screen.findByRole('table', { name: '채널 목록' })
+    await act(async () => release())
+    await waitFor(() => expect(oldMutation.state.status).toBe('success'))
+    expect(router.state.location.pathname).toBe('/channels')
+    expect(screen.queryByText('채널 "new"을 등록했습니다.')).not.toBeInTheDocument()
+    expect(calls.some((call) => call.url === '/api/v1/channels/9')).toBe(false)
   })
 
   it('shows revision history with changes and saves a new revision from the current one', async () => {
@@ -157,6 +211,60 @@ describe('Spending control and consistency', () => {
   const control = (enabled: boolean, version: number) => ({
     spendingEnabled: enabled, spendingChangedAt: null, spendingChangedBy: null, spendingChangeReason: null,
     consistency: { status: 'UNKNOWN', checkedAt: null, issueCount: 0 }, version, updatedAt: '2026-11-25T00:00:00Z',
+  })
+
+  it('RVX-02-CB cancels the started refresh and removes the old notification on re-login', async () => {
+    let signedIn = true
+    let version = 1
+    const calls = mockApi(csrf, health, (call) => {
+      if (call.url === '/api/v1/auth/me') {
+        return signedIn ? me(call) : { status: 401, body: error('UNAUTHORIZED', 'signed out') }
+      }
+      if (call.url === '/api/v1/auth/logout') {
+        signedIn = false
+        return { status: 200 }
+      }
+      if (call.url === '/api/v1/auth/login') {
+        signedIn = true
+        version = 2
+        return me({ ...call, method: 'GET', url: '/api/v1/auth/me' })
+      }
+      if (call.url === '/api/v1/budget/control') return { status: 200, body: control(false, version) }
+    }, on('GET', '/api/v1/budget-policies', 200, page([])),
+    on('POST', '/api/v1/budget/consistency-checks', 200, { consistent: true, issues: [] }))
+    const routedFetch = globalThis.fetch
+    let reads = 0
+    let release!: (response: Response) => void
+    let started!: () => void
+    const sent = new Promise<void>((resolve) => { started = resolve })
+    const held = new Promise<Response>((resolve) => { release = resolve })
+    vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) => {
+      if (input === '/api/v1/budget/control' && ++reads === 2) {
+        started()
+        return held
+      }
+      return routedFetch(input, init)
+    })
+    const { client, router } = renderApp('/budget/control')
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: '지금 검사' }))
+    await sent
+    expect(await screen.findByText('정합성 검사: 정상')).toBeInTheDocument()
+    const oldQuery = client.getQueryCache().find({ queryKey: ['budget-control'] })!
+    expect(oldQuery.state.fetchStatus).toBe('fetching')
+    await user.click(screen.getByRole('button', { name: '로그아웃' }))
+    await user.type(await screen.findByLabelText('아이디'), 'admin')
+    await user.type(screen.getByLabelText('비밀번호'), 'fixture-password')
+    await user.click(screen.getByRole('button', { name: '로그인' }))
+    await screen.findByRole('button', { name: '지금 검사' })
+    await waitFor(() => expect(client.getQueryData(['budget-control'])).toEqual(control(false, 2)))
+    await act(async () => release(Response.json(control(true, 99))))
+    expect(oldQuery.state.fetchStatus).toBe('idle')
+    expect(client.getQueryData(['budget-control'])).toEqual(control(false, 2))
+    expect(client.getQueryState(['budget-control'])?.isInvalidated).toBe(false)
+    expect(screen.queryByText('정합성 검사: 정상')).not.toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/budget/control')
+    expect(calls.filter((call) => call.url === '/api/v1/budget/consistency-checks')).toHaveLength(1)
   })
 
   it('allowing spending is a risk action that needs a reason and sends the control version', async () => {
@@ -353,6 +461,67 @@ describe('Reservations and settlement', () => {
 })
 
 describe('Ledger order and lost settlement responses', () => {
+  it('RVX-02-CB cancels the failure callback lookup before its recorded result can affect re-login', async () => {
+    let signedIn = true
+    const detail = '/api/v1/budget-reservations/11'
+    const settled = { ...reservation, status: 'SETTLED' }
+    const calls = mockApi(csrf, health, allChannels, (call) => {
+      if (call.url === '/api/v1/auth/me') {
+        return signedIn ? me(call) : { status: 401, body: error('UNAUTHORIZED', 'signed out') }
+      }
+      if (call.url === '/api/v1/auth/logout') {
+        signedIn = false
+        return { status: 200 }
+      }
+      if (call.url === '/api/v1/auth/login') {
+        signedIn = true
+        return me({ ...call, method: 'GET', url: '/api/v1/auth/me' })
+      }
+    }, on('GET', detail, 200, settled),
+    on('POST', `${detail}/adjustments`, 502, error('INTERNAL_SERVER_ERROR', 'lost')))
+    const routedFetch = globalThis.fetch
+    let reads = 0
+    let release!: (response: Response) => void
+    let started!: () => void
+    const sent = new Promise<void>((resolve) => { started = resolve })
+    const held = new Promise<Response>((resolve) => { release = resolve })
+    vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) => {
+      if (input === detail && ++reads === 2) {
+        started()
+        return held
+      }
+      return routedFetch(input, init)
+    })
+    const { client, router } = renderApp('/budget/reservations/11')
+    const user = userEvent.setup()
+    await user.type(await screen.findByLabelText('금액(USD)'), '0.1')
+    await user.type(screen.getByLabelText('메모(필수, 감사 기록)'), 'fixture')
+    await user.click(screen.getByRole('button', { name: '기록 전 확인' }))
+    await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: '원장에 기록' }))
+    await sent
+    const post = calls.find((call) => call.url.endsWith('/adjustments'))!
+    const lookup = client.getQueryCache().find({ queryKey: ['reservation-check', '11', post.headers['Idempotency-Key']] })!
+    expect(lookup.state.fetchStatus).toBe('fetching')
+    // The modal traps focus. Run the same logout and auth refresh without bypassing the UI focus trap.
+    await act(async () => {
+      await logout()
+      await client.resetQueries({ queryKey: ME_KEY })
+    })
+    await user.type(await screen.findByLabelText('아이디'), 'admin')
+    await user.type(screen.getByLabelText('비밀번호'), 'fixture-password')
+    await user.click(screen.getByRole('button', { name: '로그인' }))
+    await screen.findByLabelText('금액(USD)')
+    await act(async () => release(Response.json({
+      ...settled, events: [{ ...reservation.events[0], eventKey: post.headers['Idempotency-Key'] }],
+    })))
+    expect(lookup.state.fetchStatus).toBe('idle')
+    expect(client.getQueryData(['reservation', '11'])).toEqual(settled)
+    expect(client.getQueryState(['reservation', '11'])?.isInvalidated).toBe(false)
+    expect(screen.queryByText(/원장에 이미 기록된 것을 확인/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/budget/reservations/11')
+    expect(calls.filter((call) => call.url.endsWith('/adjustments'))).toHaveLength(1)
+  })
   it('keeps the server ledger order and BIGINT ids exactly (UI-RV-05)', async () => {
     const base = reservation.events[0]
     const events = [
