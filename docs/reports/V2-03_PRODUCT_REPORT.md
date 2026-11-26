@@ -81,6 +81,7 @@
 | frontend `npx playwright test` (설치된 Edge, Mock API) | 14건 통과(기존 13 + 신규 1) |
 | 비밀정보 패턴·`git diff --check` | 발견 없음(정규식 상수 오탐 1건만 확인) |
 
+- 예비 결합 확인(커밋·푸시하지 않음): 임시 detached worktree에서 제품 `f0efa1c`에 안전성 `4299c69`를 cherry-pick(충돌 없음)했다. 계약 대역과 그 IT를 빼고 임시 IT를 더해 `:backend:test :backend:integrationTest`를 실행했고 성공했다(안전성 `ProductionPortsIT`와 V2-01·V2-02 회귀 포함). 임시 IT는 실제 `PlanningExecutionService`와 실행기를 결합했다. AUTO 6건은 fixture 없는 소재가 선택되어 모두 RESEARCH `CORE_EVIDENCE_INSUFFICIENT`로 차단되었고, 차단 결과 저장과 영수증 적용도 확인했다. MANUAL로 fixture 소재를 고른 5건은 11단계를 모두 마쳐 SUCCEEDED가 되었고, 결과 API는 계약대로 3단계 결과를 반환했다. 임시 검증이므로 정식 결합 검증을 대신하지 않는다.
 - OpenAPI·생성 타입·migration은 변경하지 않았으므로 OpenAPI lint와 타입 재생성은 다시 실행하지 않았다.
 - 실제 백엔드에 연결한 브라우저 E2E는 실행하지 않았다(포트 구현이 없는 제품 브랜치에서는 planning 요청이 실행되지 않음). 결합 검증 항목이다.
 - DB: 사용자 DB 미접속. 격리 인스턴스에 V1~V12만 적용, migration 변경 없음. 실제 유료 API·YouTube 미사용.
