@@ -14,7 +14,18 @@ import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.aistudio.production.contract.DiscoveryEvaluator.CatalogEntry;
+import com.aistudio.production.contract.DiscoveryExecutionPort.SelectionBatch;
 import com.aistudio.production.contract.EffectKey;
+import com.aistudio.production.contract.ProductionDiscovery.EvaluatedCandidate;
+import com.aistudio.production.contract.ProductionDiscovery.Input;
+import com.aistudio.production.contract.ProductionDiscovery.Mode;
+import com.aistudio.production.contract.ProductionDiscovery.Response;
+import com.aistudio.production.contract.ProductionStage;
+import com.aistudio.production.discovery.DiscoveryInputs;
+import com.aistudio.production.discovery.DiscoveryResponseException;
+import com.aistudio.production.discovery.DiscoveryResponseValidator;
+import com.aistudio.production.discovery.DiscoverySelections;
 import com.aistudio.production.contract.ProductionCostPort;
 import com.aistudio.production.contract.ProductionCostPort.CostState;
 import com.aistudio.production.contract.ProductionCostPort.EffectResult;
@@ -64,11 +75,20 @@ public class ProductionExecutor implements AutoCloseable {
     private final StageWork work;
     private final ExecutionProperties properties;
     private final ScheduledExecutorService heartbeats;
+    private final DiscoveryFlow discovery;
 
     public ProductionExecutor(ExecutionMapper mapper, BudgetControlLock control, LockRetryingTransactions transactions,
             ProductionCostPort cost, ProductionSelectionPort selection, StageWork work,
             ExecutionProperties properties) {
+        this(mapper, control, transactions, cost, selection, work, properties, null);
+    }
+
+    /** @param discovery V2-02 discovery flow; {@code null} keeps the executor on {@code v2-fixed-1} requests only */
+    public ProductionExecutor(ExecutionMapper mapper, BudgetControlLock control, LockRetryingTransactions transactions,
+            ProductionCostPort cost, ProductionSelectionPort selection, StageWork work,
+            ExecutionProperties properties, DiscoveryFlow discovery) {
         StageWork.validate(work);
+        this.discovery = discovery;
         this.mapper = mapper;
         this.control = control;
         this.transactions = transactions;
@@ -113,7 +133,7 @@ public class ProductionExecutor implements AutoCloseable {
             if (mapper.countValidLeases() >= properties.maxLeases()) {
                 return Optional.<Lease>empty();
             }
-            Long id = mapper.nextClaimable();
+            Long id = mapper.nextClaimable(discovery != null);
             if (id == null || mapper.claim(id, owner, leaseMicros()) != 1) {
                 return Optional.<Lease>empty();
             }
@@ -123,15 +143,25 @@ public class ProductionExecutor implements AutoCloseable {
 
     void drive(Lease lease) {
         for (int i = 0; i < MAX_ACTIONS_PER_CLAIM; i++) {
-            Snapshot snapshot = fenced(lease, request -> new Snapshot(request, mapper.steps(request.id())));
+            Snapshot snapshot = fenced(lease, request -> new Snapshot(request, mapper.steps(request.id()),
+                    request.discovery() && mapper.awaitingManualChoice(request.id())));
             if (isTerminal(snapshot.request().status())) {
                 return;
             }
+            if (snapshot.request().discovery() && discovery == null) {
+                log.error("Production request {} needs the discovery flow, which is not wired; releasing",
+                        lease.requestId());
+                release(lease);
+                return;
+            }
             StepPlanner.Action action = StepPlanner.next(snapshot.steps(), snapshot.request().cancelRequested(),
-                    work::kind);
+                    snapshot.awaitingChoice(), work::kind);
             switch (action) {
                 case StepPlanner.Recover recover -> {
-                    if (!presentEffect(lease, snapshot.request(), recover.step(), 0)) {
+                    boolean more = isDiscover(snapshot.request(), recover.step())
+                            ? runDiscover(lease, snapshot.request(), recover.step(), 0)
+                            : presentEffect(lease, snapshot.request(), recover.step(), 0);
+                    if (!more) {
                         return;
                     }
                 }
@@ -159,6 +189,12 @@ public class ProductionExecutor implements AutoCloseable {
 
     /** @return true to continue driving the request in this claim */
     private boolean execute(Lease lease, RequestRow request, StepRow step) {
+        if (request.discovery() && step.stage() == ProductionStage.DISCOVER) {
+            return runDiscover(lease, request, step, 1);
+        }
+        if (request.discovery() && step.stage() == ProductionStage.SELECT) {
+            return runDiscoverySelect(lease, request, step);
+        }
         return switch (work.kind(step.stage())) {
             case EFFECT -> presentEffect(lease, request, step, 1);
             case LOCAL -> runLocal(lease, request, step);
@@ -255,10 +291,16 @@ public class ProductionExecutor implements AutoCloseable {
             }
             return localFailure(lease, step, attempt, e); // nothing was presented to the port yet
         }
+        return dispatch(lease, step, () -> cost.executeEffect(lease.stepOwner(step.id()), effectKey, requestHash,
+                priced), receipt -> applyReceipt(lease, step, receipt));
+    }
+
+    /** Presents an effect through a cost-guarded call and settles its disposition. */
+    private boolean dispatch(Lease lease, StepRow step, Supplier<EffectResult> effect,
+            Function<Receipt, Boolean> onReceipt) {
         EffectResult result;
         try {
-            result = withHeartbeat(lease, () -> cost.executeEffect(lease.stepOwner(step.id()), effectKey, requestHash,
-                    priced));
+            result = withHeartbeat(lease, effect);
         } catch (RuntimeException e) {
             log.warn("Production step {} {} effect outcome unknown", step.id(), step.stage(), e);
             result = null;
@@ -269,7 +311,7 @@ public class ProductionExecutor implements AutoCloseable {
         }
         switch (result.disposition()) {
             case RECEIPT -> {
-                return applyReceipt(lease, step, result.receipt());
+                return onReceipt.apply(result.receipt());
             }
             case REJECTED -> {
                 fenced(lease, locked -> {
@@ -332,6 +374,209 @@ public class ProductionExecutor implements AutoCloseable {
     private void resumeRequest(RequestRow locked) {
         mapper.moveRequest(locked.id(), ProductionStatus.RECOVERY_REQUIRED, ProductionStatus.RUNNING);
     }
+
+    // ------------------------------------------------------------------ V2-02 discovery
+
+    private static boolean isDiscover(RequestRow request, StepRow step) {
+        return request.discovery() && step.stage() == ProductionStage.DISCOVER;
+    }
+
+    /**
+     * DISCOVER of a discovery request: the snapshot input is presented through the discovery port, which owns
+     * reservation, the single dispatch and the receipt. A recovery presentation re-presents the same input and does
+     * not count an attempt. On an adopted receipt the stored response is verified, evaluated against the catalog
+     * and committed together with the receipt and the step result.
+     */
+    private boolean runDiscover(Lease lease, RequestRow request, StepRow step, int attemptIncrement) {
+        int attempt = start(lease, step, attemptIncrement);
+        StepOwner owner = lease.stepOwner(step.id());
+        Input input;
+        try {
+            input = discovery.port().input(request.id());
+            DiscoveryInputs.validate(input);
+        } catch (RuntimeException e) {
+            if (attemptIncrement == 0) {
+                log.warn("Production step {} discovery input unavailable for recovery", step.id(), e);
+                park(lease, step, "EFFECT_PRICE_UNAVAILABLE");
+                return false;
+            }
+            return localFailure(lease, step, attempt, e); // nothing was presented yet
+        }
+        return dispatch(lease, step, () -> discovery.port().discover(owner, input),
+                receipt -> applyDiscovery(lease, step, input, receipt));
+    }
+
+    private boolean applyDiscovery(Lease lease, StepRow step, Input input, Receipt receipt) {
+        if (receipt == null || receipt.outcome() == null) {
+            park(lease, step, "RECEIPT_INVALID");
+            return false;
+        }
+        if (receipt.outcome() != ProductionCostPort.Outcome.RESULT_ADOPTED) {
+            return applyReceipt(lease, step, receipt); // executed-failed or not executed: no candidates to keep
+        }
+        StepOwner owner = lease.stepOwner(step.id());
+        Response response;
+        try {
+            response = discovery.port().response(owner, receipt);
+            DiscoveryResponseValidator.validate(input, response);
+        } catch (DiscoveryResponseException invalid) {
+            // The cost is confirmed; a response outside the contract is never kept as a discovery result.
+            log.warn("Production step {} discovery response rejected: {}", step.id(), invalid.field());
+            return failWithReceipt(lease, step, receipt, DiscoveryResponseException.CODE);
+        } catch (LeaseLostException lost) {
+            throw lost;
+        } catch (RuntimeException e) {
+            log.warn("Production step {} discovery response unavailable", step.id(), e);
+            park(lease, step, "DISCOVERY_RESPONSE_UNAVAILABLE");
+            return false;
+        }
+        List<EvaluatedCandidate> evaluations;
+        try {
+            List<CatalogEntry> catalog = discovery.port().catalog(lease.requestId(), response.candidates());
+            evaluations = discovery.evaluator().evaluate(input, response, catalog);
+        } catch (RuntimeException e) {
+            log.warn("Production step {} discovery evaluation failed", step.id(), e);
+            park(lease, step, "DISCOVERY_EVALUATION_FAILED");
+            return false;
+        }
+        try {
+            fenced(lease, locked -> {
+                boolean manual = discovery.port().manualMode(owner.requestId());
+                boolean eligible = evaluations.stream().anyMatch(candidate ->
+                        manual ? candidate.manuallySelectable() : candidate.eligible());
+                discovery.port().applyEvaluation(owner, receipt, evaluations);
+                resumeRequest(locked);
+                // R03: no eligible candidate fails DISCOVER; no further discovery or regeneration is attempted
+                return eligible ? mapper.succeedStep(locked.id(), step.id(), "discovery:" + locked.id())
+                        : mapper.endStep(locked.id(), step.id(), StepStatus.FAILED, NO_ELIGIBLE);
+            });
+            return true;
+        } catch (LeaseLostException lost) {
+            throw lost;
+        } catch (RuntimeException e) {
+            log.warn("Production step {} discovery evaluation not applied; recheck later", step.id(), e);
+            park(lease, step, "RECEIPT_APPLY_FAILED");
+            return false;
+        }
+    }
+
+    private boolean failWithReceipt(Lease lease, StepRow step, Receipt receipt, String code) {
+        try {
+            fenced(lease, locked -> {
+                cost.markReceiptApplied(lease.stepOwner(step.id()), receipt.operationId());
+                resumeRequest(locked);
+                return mapper.endStep(locked.id(), step.id(), StepStatus.FAILED, code);
+            });
+            return true;
+        } catch (LeaseLostException lost) {
+            throw lost;
+        } catch (RuntimeException e) {
+            log.warn("Production step {} receipt {} not applied; recheck later", step.id(), receipt.operationId(), e);
+            park(lease, step, "RECEIPT_APPLY_FAILED");
+            return false;
+        }
+    }
+
+    enum SelectOutcome { LINKED, WAITING, FAILED, CANCELLED }
+
+    /**
+     * SELECT of a discovery request (R04, R07), in one fenced transaction: request lock, then the discovery port's
+     * channel lock, re-evaluation against the latest catalog, then either the link with the selection record and
+     * SELECT completion, or (MANUAL) recording the invalidated choice and waiting again. The re-check runs before
+     * the attempt is counted, so a choice invalidated by a catalog change does not use up an attempt. Any failure
+     * rolls the whole transaction back and is then counted as one local attempt.
+     */
+    private boolean runDiscoverySelect(Lease lease, RequestRow request, StepRow step) {
+        StepOwner owner = lease.stepOwner(step.id());
+        SelectOutcome outcome;
+        try {
+            Input input = discovery.port().input(request.id());
+            DiscoveryInputs.validate(input);
+            outcome = fenced(lease, locked -> selectInTransaction(owner, locked, step, input));
+        } catch (LeaseLostException lost) {
+            throw lost;
+        } catch (RuntimeException e) {
+            int attempt = start(lease, step, 1);
+            return localFailure(lease, step, attempt, e);
+        }
+        log.info("Production request {} discovery SELECT: {}", request.id(), outcome);
+        return true; // the planner decides next from the committed state (finish, wait or cancel)
+    }
+
+    private SelectOutcome selectInTransaction(StepOwner owner, RequestRow locked, StepRow step, Input input) {
+        if (locked.cancelRequested()) {
+            return SelectOutcome.CANCELLED; // never link after cancel; the planner cancels the request
+        }
+        SelectionBatch batch = discovery.port().lockForSelection(owner);
+        if (batch == null || batch.candidates() == null || batch.candidates().isEmpty()) {
+            throw new IllegalStateException("No evaluated discovery batch for request " + locked.id());
+        }
+        // The stored batch is rebuilt for evaluation only; the fingerprint uses the hash the adapter verified
+        // against the applied receipt.
+        Response response = DiscoverySelections.response(batch.candidates());
+        if (batch.responseHash() == null || batch.responseHash().isBlank()) {
+            throw new IllegalStateException("No verified discovery response hash for request " + locked.id());
+        }
+        List<CatalogEntry> catalog = discovery.port().catalog(locked.id(), response.candidates());
+        List<EvaluatedCandidate> fresh = DiscoverySelections.merge(batch.candidates(),
+                discovery.evaluator().evaluate(input, response, catalog));
+        List<EvaluatedCandidate> ranked = DiscoverySelections.ranked(fresh);
+        EvaluatedCandidate chosen;
+        if (batch.mode() == Mode.MANUAL) {
+            if (batch.chosenCandidateId() == null) {
+                awaitChoice(locked, step);
+                return SelectOutcome.WAITING;
+            }
+            chosen = fresh.stream().filter(c -> c.candidateId() == batch.chosenCandidateId())
+                    .filter(c -> batch.permitsManualChoice(c)).findFirst().orElse(null);
+            if (chosen == null) {
+                discovery.port().invalidateManualChoice(owner, batch.version(), fresh);
+                if (fresh.stream().anyMatch(EvaluatedCandidate::manuallySelectable)) {
+                    awaitChoice(locked, step); // remaining eligible candidates: the requester chooses again
+                    return SelectOutcome.WAITING;
+                }
+                startCounted(locked, step);
+                mapper.endStep(locked.id(), step.id(), StepStatus.FAILED, NO_ELIGIBLE);
+                return SelectOutcome.FAILED;
+            }
+        } else {
+            if (ranked.isEmpty()) {
+                // keep the latest catalog reasons next to the first evaluation before failing
+                discovery.port().recordExhaustedSelection(owner, batch.version(), fresh);
+                startCounted(locked, step);
+                mapper.endStep(locked.id(), step.id(), StepStatus.FAILED, NO_ELIGIBLE);
+                return SelectOutcome.FAILED;
+            }
+            chosen = ranked.get(0);
+        }
+        startCounted(locked, step);
+        ProductionSelectionPort.Selection value = DiscoverySelections.selection(input, chosen, batch.responseHash());
+        ProductionSelectionPort.Selected selected = selection.link(owner, value);
+        discovery.port().recordSelection(owner, batch.version(), chosen.candidateId(),
+                DiscoverySelections.rationale(batch.mode(), chosen, ranked.size()), fresh);
+        mapper.startRun(selected.contentId(), selected.runId());
+        if (mapper.succeedStep(locked.id(), step.id(), "run:" + selected.runId()) != 1) {
+            throw new IllegalStateException("SELECT step " + step.id() + " could not complete");
+        }
+        return SelectOutcome.LINKED;
+    }
+
+    /**
+     * A MANUAL request waits for the requester with SELECT PENDING, the condition the claim query, the planner and
+     * the API use. A SELECT waiting for a local retry goes back to PENDING without a retry time; its attempts are
+     * kept, so the next attempt after a new choice counts on top of them.
+     */
+    private void awaitChoice(RequestRow locked, StepRow step) {
+        mapper.awaitChoice(locked.id(), step.id());
+    }
+
+    private void startCounted(RequestRow locked, StepRow step) {
+        if (mapper.startStep(locked.id(), step.id(), 1) != 1) {
+            throw new IllegalStateException("Step " + step.id() + " cannot start");
+        }
+    }
+
+    static final String NO_ELIGIBLE = "DISCOVERY_NO_ELIGIBLE_CANDIDATE";
 
     // ------------------------------------------------------------------ finish
 
@@ -498,7 +743,7 @@ public class ProductionExecutor implements AutoCloseable {
     }
 
     /** Package-private so a test can act between the planning snapshot and the completion transaction. */
-    record Snapshot(RequestRow request, List<StepRow> steps) {}
+    record Snapshot(RequestRow request, List<StepRow> steps, boolean awaitingChoice) {}
 
     @Override
     public void close() {

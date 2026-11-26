@@ -25,3 +25,4 @@ GRANT SELECT, INSERT ON @DB@.queue_command_log TO '@APP_USER@'@'@APP_HOST@';
 GRANT SELECT, INSERT, UPDATE ON @DB@.production_request TO '@APP_USER@'@'@APP_HOST@';
 GRANT SELECT, INSERT, UPDATE ON @DB@.production_step TO '@APP_USER@'@'@APP_HOST@';
 GRANT SELECT, INSERT, UPDATE ON @DB@.provider_operation TO '@APP_USER@'@'@APP_HOST@';
+GRANT SELECT, INSERT, UPDATE ON @DB@.production_discovery TO '@APP_USER@'@'@APP_HOST@';

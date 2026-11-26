@@ -1172,6 +1172,27 @@ paths:
       tags: ["contents"]
 
   /api/v1/production-requests:
+    get:
+      tags: [Production]
+      operationId: listProductionRequests
+      summary: List production requests owned by the current user
+      description: Returns the newest requests first and reads the selected title from the linked run revision.
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 0, default: 0 }
+        - name: size
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        '200':
+          description: Page of production requests.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProductionRequestPage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
     post:
       operationId: createProductionRequest
       summary: 소재 선정 전 제작 요청 생성
@@ -1191,6 +1212,8 @@ paths:
               properties:
                 channelId: { $ref: '#/components/schemas/Id' }
                 contentType: { type: string, enum: [SHORTS, LONGFORM] }
+                selectionMode: { type: string, enum: [AUTO, MANUAL], default: AUTO, description: 'SHORTS 소재 설정' }
+                candidateCount: { type: integer, minimum: 5, maximum: 10, default: 8, description: 'SHORTS 소재 후보 수' }
       responses:
         '200':
           description: 기존 요청 재생
@@ -1239,6 +1262,54 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/production-requests/{id}/discovery:
+    parameters:
+      - $ref: '#/components/parameters/ProductionRequestId'
+    get:
+      operationId: getProductionDiscovery
+      summary: 소재 후보와 평가 및 선정 결과 조회
+      tags: [Production]
+      responses:
+        '200': { $ref: '#/components/responses/ProductionDiscoveryDetail' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/production-requests/{id}/selection:
+    parameters:
+      - $ref: '#/components/parameters/ProductionRequestId'
+    post:
+      operationId: chooseProductionCandidate
+      summary: 수동 소재 선택 의도 저장
+      tags: [Production]
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [candidateId, version, batchToken]
+              properties:
+                candidateId: { type: integer, minimum: 1, maximum: 10 }
+                batchToken:
+                  type: string
+                  pattern: '^[0-9a-f]{64}$'
+                  description: Token returned with the discovery version being selected.
+                confirmReview:
+                  type: boolean
+                  description: Required as true when selecting a candidate marked SIMILARITY_UNCERTAIN. Other block codes cannot be overridden.
+                version: { type: integer, minimum: 0 }
+      responses:
+        '200': { $ref: '#/components/responses/ProductionDiscoveryDetail' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
 
 components:
   securitySchemes:
@@ -1298,6 +1369,11 @@ components:
       schema: { $ref: '#/components/schemas/IdempotencyKey' }
 
   responses:
+    ProductionDiscoveryDetail:
+      description: 현재 소재 발굴 및 선정 상태
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ProductionDiscoveryDetail' }
     ProductionRequestDetail:
       description: 제작 요청의 현재 상세 상태
       content:
@@ -1361,6 +1437,114 @@ components:
     ProductionStatus:
       type: string
       enum: [QUEUED, RUNNING, RECOVERY_REQUIRED, SUCCEEDED, FAILED, CANCELLED]
+    ProductionDiscoveryDetail:
+      type: object
+      required: [selectionMode, candidateCount, version, batchToken, awaitingSelection, candidates]
+      properties:
+        selectionMode: { type: string, enum: [AUTO, MANUAL] }
+        candidateCount: { type: integer, minimum: 5, maximum: 10 }
+        version: { type: integer, minimum: 0 }
+        awaitingSelection: { type: boolean }
+        batchToken:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+          description: Binds candidate positions and the version to this production request.
+        chosenCandidateId: { type: [integer, 'null'], minimum: 1, maximum: 10 }
+        selectedCandidateId: { type: [integer, 'null'], minimum: 1, maximum: 10 }
+        selectionReason: { type: [string, 'null'] }
+        candidates:
+          type: array
+          maxItems: 10
+          items: { $ref: '#/components/schemas/EvaluatedDiscoveryCandidate' }
+    DiscoveryScores:
+      type: object
+      required: [interest, channelFit, originality, visualPotential, evidencePotential, costEfficiency]
+      properties:
+        interest: { type: integer, minimum: 0, maximum: 25 }
+        channelFit: { type: integer, minimum: 0, maximum: 20 }
+        originality: { type: integer, minimum: 0, maximum: 20 }
+        visualPotential: { type: integer, minimum: 0, maximum: 15 }
+        evidencePotential: { type: integer, minimum: 0, maximum: 15 }
+        costEfficiency: { type: integer, minimum: 0, maximum: 5 }
+    EvaluatedDiscoveryCandidate:
+      type: object
+      required: [candidateId, candidate, scores, totalScore, blockCodes, comparisons, rationale]
+      properties:
+        candidateId: { type: integer, minimum: 1, maximum: 10 }
+        candidate:
+          type: object
+          required: [coreTopic, centralQuestion, title, angle, outline, evidencePlan, assertions, suggestedScores, rationale]
+          properties:
+            coreTopic: { type: string }
+            centralQuestion: { type: string }
+            title: { type: string, maxLength: 255 }
+            angle: { type: string }
+            outline:
+              type: array
+              minItems: 2
+              maxItems: 5
+              items: { type: string }
+            evidencePlan:
+              type: array
+              items:
+                type: object
+                required: [sourceType, searchQuestion]
+                properties:
+                  sourceType: { type: string }
+                  searchQuestion: { type: string }
+            assertions:
+              type: array
+              items:
+                type: object
+                required: [assertion]
+                properties:
+                  assertion: { type: string }
+                  evidenceId: { type: [string, 'null'] }
+            suggestedScores: { $ref: '#/components/schemas/DiscoveryScores' }
+            rationale: { type: string }
+        scores: { $ref: '#/components/schemas/DiscoveryScores' }
+        totalScore: { type: integer, minimum: 0, maximum: 100 }
+        blockCodes:
+          description: SIMILARITY_UNCERTAIN requires manual review and excludes automatic selection. Other codes block all selection.
+          type: array
+          items: { type: string, enum: [DUPLICATE, SIMILARITY_UNCERTAIN, CHANNEL_PROHIBITED, UNSUPPORTED_ASSERTION] }
+        comparisons:
+          type: array
+          items:
+            type: object
+            required: [reason]
+            properties:
+              topicId: { type: [string, 'null'] }
+              contentId: { type: [string, 'null'] }
+              revisionId: { type: [string, 'null'] }
+              reason: { type: string }
+        rationale: { type: string }
+    ProductionRequestPage:
+      type: object
+      required: [items, page, size, totalElements, totalPages]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/ProductionRequestListItem' }
+        page: { type: integer, minimum: 0 }
+        size: { type: integer, minimum: 1, maximum: 100 }
+        totalElements: { type: integer, minimum: 0 }
+        totalPages: { type: integer, minimum: 0 }
+
+    ProductionRequestListItem:
+      type: object
+      required: [id, channelId, channelName, selectedTitle, status, limitKrw, reservedKrw, recognizedKrw, createdAt]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        channelId: { $ref: '#/components/schemas/Id' }
+        channelName: { type: string }
+        selectedTitle: { type: [string, 'null'] }
+        status: { $ref: '#/components/schemas/ProductionStatus' }
+        limitKrw: { $ref: '#/components/schemas/NonNegativeKrwAmount' }
+        reservedKrw: { $ref: '#/components/schemas/NonNegativeKrwAmount' }
+        recognizedKrw: { $ref: '#/components/schemas/NonNegativeKrwAmount' }
+        createdAt: { type: string, format: date-time }
+
     ProductionRequestSummary:
       type: object
       required: [id, status]
@@ -1385,7 +1569,7 @@ components:
           type: array
           items:
             type: object
-            required: [stage, targetKey, inputGeneration, status, attempts]
+            required: [stage, targetKey, inputGeneration, status, attempts, lastErrorCode]
             properties:
               stage:
                 type: string
@@ -1396,6 +1580,7 @@ components:
                 type: string
                 enum: [PENDING, RUNNING, RETRY_WAIT, RECOVERY_REQUIRED, SUCCEEDED, FAILED, CANCELLED]
               attempts: { type: integer, minimum: 0, maximum: 3 }
+              lastErrorCode: { type: [string, 'null'], maxLength: 64 }
 
     Id:
       type: string

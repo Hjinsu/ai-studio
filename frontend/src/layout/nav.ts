@@ -2,7 +2,9 @@ import {
   Activity,
   ArrowLeftRight,
   BookOpenText,
+  Clapperboard,
   Gauge,
+  History,
   LayoutDashboard,
   Receipt,
   ShieldAlert,
@@ -30,6 +32,13 @@ export const NAV: NavGroup[] = [
   { label: '개요', items: [{ to: '/', label: '대시보드', icon: LayoutDashboard }] },
   { label: '채널 관리', items: [{ to: '/channels', label: '채널 관리', icon: Tv }] },
   {
+    label: '콘텐츠 제작',
+    items: [
+      { to: '/production', label: '제작 시작', icon: Clapperboard },
+      { to: '/production/requests', label: '제작 이력', icon: History },
+    ],
+  },
+  {
     label: '비용·예산',
     items: [
       { to: '/budget/policies', label: '예산 정책', icon: WalletCards },
@@ -42,6 +51,11 @@ export const NAV: NavGroup[] = [
   },
   { label: '시스템', items: [{ to: '/system', label: '서버 상태', icon: Activity }] },
 ]
+
+/** 다른 메뉴가 이 경로 아래에 있으면(예: /production 아래 /production/requests) 정확히 일치할 때만 활성으로 표시한다. */
+export function hasNestedItem(to: string): boolean {
+  return to !== '/' && NAV.some((group) => group.items.some((item) => item.to.startsWith(`${to}/`)))
+}
 
 /** 현재 경로의 메뉴(가장 긴 접두 일치)와 상세 화면 여부. */
 export function locate(pathname: string): { group: NavGroup; item: NavItem; detail: boolean } | null {

@@ -121,10 +121,18 @@ public class TopicService {
 
     @Transactional(propagation = Propagation.MANDATORY)
     public Topic findOrCreateSelected(long channelId, String title, Actor actor) {
+        return findOrCreateSelected(channelId, title, actor, true);
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    public Topic findOrCreateSelected(long channelId, String title, Actor actor, boolean reuseExisting) {
         NormalizedTitle input = normalizeTitle(title);
         String hash = TopicNormalizer.hash(TopicNormalizer.VERSION, input.normalized());
         Topic existing = mapper.findByHash(channelId, hash);
         if (existing != null) {
+            if (!reuseExisting) {
+                throw duplicate(existing.id());
+            }
             return existing;
         }
         TopicMapper.NewTopic row = new TopicMapper.NewTopic(channelId, input.title(), input.normalized(), hash,
@@ -134,6 +142,9 @@ public class TopicService {
         } catch (org.springframework.dao.DuplicateKeyException e) {
             Topic raced = mapper.findByHash(channelId, hash);
             if (raced != null) {
+                if (!reuseExisting) {
+                    throw duplicate(raced.id());
+                }
                 return raced;
             }
             throw e;

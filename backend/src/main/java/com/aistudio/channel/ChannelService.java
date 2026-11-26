@@ -9,6 +9,7 @@ import java.util.regex.Pattern;
 
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.aistudio.audit.AuditService;
@@ -233,6 +234,16 @@ public class ChannelService {
         Channel channel = mapper.lockSharedById(channelId);
         if (channel == null) {
             throw new ApiException(ErrorCode.RESOURCE_NOT_FOUND, "Channel not found.");
+        }
+        return channel;
+    }
+
+    /** Serializes the latest catalog read and production selection with catalog writers. */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public Channel lockForSelection(long channelId) {
+        Channel channel = mapper.lockById(channelId);
+        if (channel == null) {
+            throw new ApiException(ErrorCode.RESOURCE_NOT_FOUND);
         }
         return channel;
     }

@@ -16,6 +16,13 @@
 ## 인수인계 기록
 작업 ID / 상태 / 변경 파일 / 테스트 명령 및 실제 결과 / 미해결 문제 / 다음 작업 / 필요 환경변수. 커밋 해시는 생성된 경우만 기록.
 
+### V2-02-HOLD-FIX — 수동 검수 재확인 경합 검증 (2026-11-26, IMPLEMENTED)
+
+- 기준 `735fb60576fc531e4b4f77fbf210d56abe9e9088`, 대상 Draft PR #5의 `v2/review-v2-02`. 별도 detached worktree에서 회귀 테스트와 로드맵을 변경했으며 제품 코드·API·기존 migration은 변경하지 않았다.
+- `DiscoveryExecutionIT.manualReviewMustBeConfirmedAgainWhenAnotherContentAddsANewUncertainComparison`: 실제 평가기·저장·비용·선정 포트와 격리 MariaDB, 스크립트 FAKE 공급자를 사용한다. 최초 검수 근거 확인 후 다른 콘텐츠와 revision을 별도 서비스 트랜잭션으로 커밋하고 SELECT를 실행하여 새 검수 사유·선택 무효화·재대기·재확인·최종 연결 및 발굴 비용 보존을 확인한다. 실행 순서를 고정한 트랜잭션 경계 검증이며 두 트랜잭션이 동시에 잠금을 경합하는 테스트는 아니다.
+- 신규 테스트는 기존 제품 코드에서 통과했다. `gradlew.bat :backend:test :backend:integrationTest :backend:bootJar --rerun-tasks`는 단위 210건·통합 223건(실패·건너뜀 0) 통과했다. 격리 MariaDB 11.8.2, 127.0.0.1:3397, binlog ON을 사용했으며 기존 수동 선정·동시성 및 V2-01 비용 회귀가 포함된다. 프론트 lint·typecheck·build 및 Vitest 89건 통과. 최신 PR HEAD CI는 푸시 후 확인한다. 기존 FAKE UI 문구 및 사실 주장·의미 중복의 규칙 기반 판단 한계는 `docs/v2/03_ROADMAP.md`에 후속 항목으로 기록했다.
+- DB: 사용자 DB 미접속. 격리 MariaDB에 V1~V11 적용, 기존 migration 수정 없음. 실제 공급자·게시 미사용. 다음 작업은 새 PR HEAD의 CI 확인과 별도 독립 리뷰 세션의 재검토다. 최종 종료 및 병합은 별도 승인 대상이다.
+
 ### T03-B-CLOSE — 종료 및 통합 승인
 
 - ChatGPT 최종 APPROVE 및 사용자 종료·병합 승인. 제품 수정 `b5ffc73`의 RV-B-01~06과 계약 통합 `8cfe8a0`의 OpenAPI A1~A8을 수용했다. 로컬 단위 151건, 격리 MariaDB 통합 153건, 프론트엔드 73건 및 계약 통합 CI 7/7 성공을 확인했다. [검증 CI 45637703367](https://github.com/Hjinsu/ai-studio/actions/runs/45637703367)
@@ -311,3 +318,30 @@ AI_STUDIO_IT_DB_HOST=127.0.0.1 AI_STUDIO_IT_DB_PORT=3307 AI_STUDIO_IT_DB_USER=ro
 - [CI Run 45737242958](https://github.com/Hjinsu/ai-studio/actions/runs/45737242958) 7/7 성공. 격리 전체 백엔드 단위 165건·통합 200건, bootJar, binlog ON 핵심 18건, 실제 비용·선정 포트 FAKE 11단계, 효과 8건·확정 KRW 8 확인. 프론트 단위 73건·Edge E2E 10건, OpenAPI 생성 타입 확인. OpenAPI 경고 2건은 공통 기준부터 유지된 항목이다. [실행기 보고서](docs/reports/V2-01_EXECUTION_REPORT.md) · [비용 검증](docs/v2/V2-01_SAFETY_HANDOFF.md)
 - V9 적용 검증은 격리 DB에서 수행했다. 이번 종료 세션은 Git·문서 검증만 수행했으며 사용자 DB에는 접속하거나 V9을 적용하지 않았다. 실행기 기본값은 비활성이다. 실제 유료 호출과 YouTube 게시는 각각 별도 승인 범위다.
 - 다음 배정은 **V2-02 소재 자동 발굴 및 선정**이다. 기술 선행 조건은 충족했으며 사용자 착수 승인 대기 상태다.
+
+## V2-02 — 설계 및 공통 계약 착수
+
+- ChatGPT APPROVE WITH MINOR FIXES 및 사용자 착수 승인. `91c3e9ad1394b1c9b122231a60b8acc5a8d873b8`에서 `v2/02-common`을 시작했다. [구현 계획과 R01~R07](docs/v2/V2-02_IMPLEMENTATION_PLAN.md)
+- V10은 제작 요청별 소재 묶음 테이블 1개를 추가한다. 신규 SHORTS 요청은 스냅샷을 저장하고 제품 실행기가 준비될 때까지 대기한다. 기존 요청은 이전 경로를 실행한다.
+- 다음 작업은 공통 계약 HEAD에서 `v2/02-product`와 `v2/02-safety`의 담당 구현 및 결합 검증이다.
+
+- 격리 MariaDB 11.8.2에서 `gradlew.bat :backend:test :backend:bootJar :backend:integrationTest --rerun-tasks --no-build-cache`를 실행했다. 단위 165건과 통합 202건이 통과했다. V10 설치·업그레이드, V9 요청 멱등 재생, 기존 실행기의 새 파이프라인 제외, 평가 조회·수동 선택의 차단 및 재생을 확인했다.
+- OpenAPI lint와 생성 타입 일치가 통과했다. 공통 기준부터 존재한 경고 2건을 확인했다. V1~V9 원본은 동일하며 사용자 DB에 V10을 적용하지 않았다.
+- 생성·평가·선정·UI, 응답과 영수증 장애 복구, 실제 동시 SELECT와 잠금 순서의 V2-02 결합 검증은 역할별 구현 후 진행한다.
+
+## V2 콘텐츠 제작·품질 정책 개정 (2026-11-26 KST)
+
+- 정책 문서 반영 완료. 변경 파일은 `docs/v2/`의 `01_PRODUCT.md`, `03_ROADMAP.md`, `05_CONTENT_QUALITY_AND_MONETIZATION.md`, `V2-02_IMPLEMENTATION_PLAN.md` 및 루트 `DECISIONS.md`, `STATE.md`다.
+- 차이 분석 기준은 임시 결합 SHA `463c3c0dd56911b69dfd6e1f475e92726391ff38`이다. 현재 `SIMILARITY_UNCERTAIN`과 `UNSUPPORTED_ASSERTION`은 부적격 처리를 하며 적격 후보가 없으면 추가 발굴 없이 실패한다. 새 검수 분류, 미검증 주장 인계, 최종 점수 구간은 정책에만 반영했다.
+- Claude는 결합 수정 커밋 `a820a42`를 `v2/02-product-fix`에 제출했다. 제품 보고서 기준 백엔드 단위 210건·격리 통합 222건, 프론트 단위 88건이 통과했다. Codex 결합 검증 브랜치는 `463c3c0`이며 수정 커밋의 반영과 독립 검증이 남아 있다.
+- 종료 전 최소 수정 범위는 실질 중복 차단 유지, 독립 가치가 있는 일부 유사 소재 감점, 동일 분야 새 질문·관점 허용, 불확실 후보의 검수 필요 분류 및 자동 선정 제외, UI의 차단·감점·검수 필요와 근거 표시다. 기존 평가 JSON·비교 근거·묶음 버전을 우선 쓰고 기존 결합 검증에 해당 회귀를 추가한다. 이 커밋은 검증 브랜치에 이식할 문서 변경만 담는다.
+- 미검증 주장 인계는 V2-03, 최종 품질 점수 및 부분 개선은 V2-05에 배정한다. 재발굴과 비용·실행 안전성·기존 Migration 변경은 제외한다.
+- 문서 변경 범위와 공백은 `git diff --name-only`, `git diff --check`로 확인했다. 코드 테스트, 사용자 DB 접속, Migration 적용, 실제 유료 API 호출은 수행하지 않았다.
+
+## V2-02 — Final validation candidate
+
+- `v2/review-v2-02` fast-forwarded to Claude's `a820a42` and includes the policy documentation commit as `991aaec`.
+- Existing evaluation JSON stores the comparison reasons. Substantive duplicates remain blocked, independently valuable overlap reduces originality, and uncertain overlap is shown as review required. AUTO excludes uncertain candidates. MANUAL requires confirmation tied to the current batch token and rechecks for new reasons before linking.
+- The isolated MariaDB 11.8.2 instance at loopback 3323 used binlog ON. The complete backend rerun passed 210 unit and 222 integration tests and bootJar after the manual confirmation regression was extended and the mode read was moved inside the fenced transaction.
+- Frontend typecheck, lint, build, The final Vitest run passed 89 tests, including review-only batches and explicit confirmation. The 13-test Edge E2E suite passed on the preceding candidate. Live Edge used actual frontend/backend and FAKE effects against a separate database on the same isolated instance. AUTO 8, MANUAL 5 and 10, reload, history, cancellation, failure, and light/dark/mobile passed. The policy badge and confirmation display case used seeded evaluation fixtures read through the real API.
+- OpenAPI lint and generated type check passed with two pre-existing lint warnings. V1–V11 were applied to isolated databases only and match the safety baseline. The next step is independent review at the final validation commit and final user approval.

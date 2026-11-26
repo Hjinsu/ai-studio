@@ -33,6 +33,15 @@ final class StepPlanner {
     private StepPlanner() {}
 
     static Action next(List<StepRow> steps, boolean cancelRequested, Function<ProductionStage, StageWork.Kind> kinds) {
+        return next(steps, cancelRequested, false, kinds);
+    }
+
+    /**
+     * @param awaitingChoice V2-02 MANUAL discovery request without a recorded choice: a pending SELECT is not
+     *        started and the lease is released. Recovery, an interrupted step and cancel still come first.
+     */
+    static Action next(List<StepRow> steps, boolean cancelRequested, boolean awaitingChoice,
+            Function<ProductionStage, StageWork.Kind> kinds) {
         requireFixedOrder(steps);
         for (StepRow step : steps) {
             if (step.status() == StepStatus.RECOVERY_REQUIRED) {
@@ -63,6 +72,9 @@ final class StepPlanner {
         for (StepRow step : steps) {
             if (step.status() == StepStatus.SUCCEEDED) {
                 continue;
+            }
+            if (awaitingChoice && step.stage() == ProductionStage.SELECT && step.status() == StepStatus.PENDING) {
+                return new Release();
             }
             if (step.status() == StepStatus.RETRY_WAIT && !step.retryDue()) {
                 return new Release();

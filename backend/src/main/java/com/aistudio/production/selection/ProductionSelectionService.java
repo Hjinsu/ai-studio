@@ -13,8 +13,10 @@ import com.aistudio.content.ContentService;
 import com.aistudio.content.command.CanonicalJson;
 import com.aistudio.production.contract.ProductionCostPort.StepOwner;
 import com.aistudio.production.contract.ProductionSelectionPort;
+import com.aistudio.production.contract.ProductionDiscovery;
 import com.aistudio.production.contract.ProductionStage;
 import com.aistudio.production.cost.ProductionCostMapper;
+import com.aistudio.production.discovery.persistence.ProductionDiscoveryMapper;
 import com.aistudio.shared.api.ApiException;
 import com.aistudio.shared.api.ErrorCode;
 import com.aistudio.topic.TopicService;
@@ -26,14 +28,16 @@ class ProductionSelectionService implements ProductionSelectionPort {
     private final ChannelService channels;
     private final TopicService topics;
     private final ContentService contents;
+    private final ProductionDiscoveryMapper discovery;
 
     ProductionSelectionService(ProductionCostMapper requests, ProductionSelectionMapper selections,
-            ChannelService channels, TopicService topics, ContentService contents) {
+            ChannelService channels, TopicService topics, ContentService contents, ProductionDiscoveryMapper discovery) {
         this.requests = requests;
         this.selections = selections;
         this.channels = channels;
         this.topics = topics;
         this.contents = contents;
+        this.discovery = discovery;
     }
 
     @Override
@@ -52,8 +56,18 @@ class ProductionSelectionService implements ProductionSelectionPort {
                 || selection.title() == null || selection.brief() == null) {
             throw ApiException.validation("selection", "a SHA-256 fingerprint, title and brief are required");
         }
-        String hash = CanonicalJson.sha256(Map.of("fingerprint", selection.fingerprint(), "title", selection.title(),
-                "brief", selection.brief(), "duration", selection.targetDurationSeconds()));
+        boolean discovered = ProductionDiscovery.PIPELINE.equals(request.pipelineVersion());
+        var snapshot = discovered ? discovery.snapshot(request.id()) : null;
+        if (discovered && (snapshot == null
+                || (selection.language() != null && !snapshot.language().equals(selection.language())))) {
+            throw new ApiException(ErrorCode.INVALID_STATE_TRANSITION, "SELECT language must match the snapshot.");
+        }
+        var fingerprint = new java.util.HashMap<String, Object>(Map.of("fingerprint", selection.fingerprint(),
+                "title", selection.title(), "brief", selection.brief(), "duration", selection.targetDurationSeconds()));
+        if (discovered) {
+            fingerprint.put("language", snapshot.language());
+        }
+        String hash = CanonicalJson.sha256(fingerprint);
         if (request.selectionHash() != null) {
             if (!hash.equals(request.selectionHash())) {
                 throw new ApiException(ErrorCode.RESOURCE_CONFLICT, "The selected input changed.");
@@ -64,15 +78,17 @@ class ProductionSelectionService implements ProductionSelectionPort {
                 || !"RUNNING".equals(step.status())) {
             throw new ApiException(ErrorCode.INVALID_STATE_TRANSITION, "SELECT cannot link this request.");
         }
-        Channel channel = channels.lockShared(request.channelId());
+        Channel channel = discovered ? channels.lockForSelection(request.channelId())
+                : channels.lockShared(request.channelId());
         if (!Channel.ACTIVE.equals(channel.status())) {
             throw new ApiException(ErrorCode.PREREQUISITE_NOT_MET, "The channel is not active.");
         }
         var config = channels.configSnapshot(request.channelId(), request.channelConfigId());
         Actor actor = Actor.admin(request.requestedBy());
-        var topic = topics.findOrCreateSelected(channel.id(), selection.title(), actor);
+        var topic = topics.findOrCreateSelected(channel.id(), selection.title(), actor, !discovered);
         var content = contents.createSelected(channel.id(), topic.id(), request.contentType(), config,
-                selection.title(), selection.brief(), channel.language(), selection.targetDurationSeconds(), actor);
+                selection.title(), selection.brief(), discovered ? snapshot.language() : channel.language(),
+                selection.targetDurationSeconds(), actor);
         long contentId = content.content().id();
         long revisionId = content.currentRevision().id();
         selections.insertRun(contentId, revisionId, request.pipelineVersion(), request.requestedBy());

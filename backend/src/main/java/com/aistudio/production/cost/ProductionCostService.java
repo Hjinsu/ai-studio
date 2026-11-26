@@ -5,7 +5,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.BiFunction;
 
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Propagation;
@@ -19,7 +21,15 @@ import com.aistudio.budget.BudgetReservationService.ReserveCommand;
 import com.aistudio.budget.Money;
 import com.aistudio.content.command.CanonicalJson;
 import com.aistudio.production.contract.EffectKey;
+import com.aistudio.production.contract.DiscoveryProvider;
 import com.aistudio.production.contract.ProductionCostPort;
+import com.aistudio.production.contract.ProductionDiscovery;
+import com.aistudio.production.contract.ProductionStage;
+import com.aistudio.production.discovery.DiscoveryInputs;
+import com.aistudio.production.discovery.DiscoveryResponseCodec;
+import com.aistudio.production.discovery.DiscoveryResponseException;
+import com.aistudio.production.discovery.DiscoveryResponseValidator;
+import com.aistudio.production.discovery.persistence.ProductionDiscoveryMapper;
 import com.aistudio.production.cost.ProductionCostMapper.Operation;
 import com.aistudio.production.cost.ProductionCostMapper.Request;
 import com.aistudio.production.cost.ProductionCostMapper.Step;
@@ -31,9 +41,10 @@ import com.aistudio.shared.db.LockRetryingTransactions;
 import tools.jackson.databind.json.JsonMapper;
 
 @Service
-class ProductionCostService implements ProductionCostPort {
+public class ProductionCostService implements ProductionCostPort {
     private record Dispatch(EffectResult replay, PricedRequest send) {}
     private record EvidenceRecord(String key, Evidence evidence) {}
+    private record Completion(Evidence evidence, String body) {}
 
     private final ProductionCostMapper mapper;
     private final BudgetReservationService budget;
@@ -41,19 +52,57 @@ class ProductionCostService implements ProductionCostPort {
     private final LockRetryingTransactions transactions;
     private final FakeProvider provider;
     private final JsonMapper json;
+    private final ProductionDiscoveryMapper discovery;
+    private final ObjectProvider<DiscoveryProvider> discoveryProvider;
 
     ProductionCostService(ProductionCostMapper mapper, BudgetReservationService budget, BudgetControlLock control,
-            LockRetryingTransactions transactions, FakeProvider provider, JsonMapper json) {
+            LockRetryingTransactions transactions, FakeProvider provider, JsonMapper json,
+            ProductionDiscoveryMapper discovery, ObjectProvider<DiscoveryProvider> discoveryProvider) {
         this.mapper = mapper;
         this.budget = budget;
         this.control = control;
         this.transactions = transactions;
         this.provider = provider;
         this.json = json;
+        this.discovery = discovery;
+        this.discoveryProvider = discoveryProvider;
     }
 
     @Override
     public EffectResult executeEffect(StepOwner owner, String effectKey, String requestHash, PricedRequest request) {
+        return execute(owner, effectKey, requestHash, request, false,
+                (id, priced) -> new Completion(provider.send(id, priced), null));
+    }
+
+    public EffectResult executeDiscovery(StepOwner owner, ProductionDiscovery.Input input, BigDecimal maximumAmount) {
+        var generator = discoveryProvider.getIfAvailable();
+        if (generator == null) {
+            return result(Disposition.REJECTED);
+        }
+        Step step = mapper.step(owner.requestId(), owner.stepId());
+        if (step == null || step.stage() != ProductionStage.DISCOVER || owner.requestId() != input.requestId()) {
+            throw new ApiException(ErrorCode.INVALID_STATE_TRANSITION);
+        }
+        String key = EffectKey.forInput(owner.requestId(), step.stage(), step.targetKey(), step.inputGeneration());
+        var price = new PricedRequest("KRW", maximumAmount, null);
+        String hash = DiscoveryInputs.sha256(input);
+        return execute(owner, key, hash, price, true, (id, priced) -> {
+            String body;
+            try {
+                var response = generator.generate(input);
+                DiscoveryResponseValidator.validate(input, response);
+                body = DiscoveryResponseCodec.canonicalJson(response);
+            } catch (DiscoveryResponseException | DiscoveryProvider.InvalidResponse e) {
+                return new Completion(new Evidence(Outcome.EXECUTED_FAILED, "fake:" + id, "KRW",
+                        priced.maximumAmount(), null, null, "FAKE discovery response format rejected"), null);
+            }
+            return new Completion(new Evidence(Outcome.RESULT_ADOPTED, "fake:" + id, "KRW", priced.maximumAmount(),
+                    "discovery:" + owner.requestId(), CanonicalJson.sha256Hex(body), "FAKE discovery response"), body);
+        });
+    }
+
+    private EffectResult execute(StepOwner owner, String effectKey, String requestHash, PricedRequest request,
+            boolean discoveryEffect, BiFunction<Long, PricedRequest, Completion> send) {
         if (!hash(requestHash)) {
             throw ApiException.validation("requestHash", "must be a lowercase SHA-256");
         }
@@ -67,7 +116,7 @@ class ProductionCostService implements ProductionCostPort {
                 "fakeScenario", Objects.toString(priced.fakeScenario(), "SUCCESS")));
         Operation operation;
         try {
-            operation = transactions.execute(() -> reserve(owner, effectKey, pricedHash, priced));
+            operation = transactions.execute(() -> reserve(owner, effectKey, pricedHash, priced, discoveryEffect));
         } catch (ApiException e) {
             if (e.errorCode() == ErrorCode.BUDGET_EXCEEDED || e.errorCode() == ErrorCode.POLICY_VIOLATION
                     || e.errorCode() == ErrorCode.PREREQUISITE_NOT_MET) {
@@ -83,24 +132,53 @@ class ProductionCostService implements ProductionCostPort {
         if (dispatch.replay() != null) {
             return dispatch.replay();
         }
-        Evidence evidence;
+        Completion completion;
         try {
-            evidence = provider.send(operation.id(), dispatch.send());
+            completion = send.apply(operation.id(), dispatch.send());
         } catch (RuntimeException e) {
             quarantine(operation);
+            if (discoveryEffect) {
+                return result(Disposition.RECOVERY_REQUIRED);
+            }
             throw e;
         }
-        if (evidence == null) {
+        if (completion.evidence() == null) {
             quarantine(operation);
             return result(Disposition.RECOVERY_REQUIRED);
         }
-        return new EffectResult(Disposition.RECEIPT, reconcile(operation.id(), "fake-response", evidence));
+        return new EffectResult(Disposition.RECEIPT,
+                reconcile(operation.id(), "fake-response", completion.evidence(), completion.body()));
     }
 
-    private Operation reserve(StepOwner owner, String key, String hash, PricedRequest priced) {
+    public boolean ownsDiscoveryReceipt(StepOwner owner, Receipt expected) {
+        Step step = requireStep(owner);
+        Operation operation = mapper.operation(expected.operationId());
+        return step.stage() == ProductionStage.DISCOVER && operation != null
+                && operation.productionRequestId() == owner.requestId() && operation.productionStepId() == step.id()
+                && "SETTLED".equals(operation.status()) && !operation.reservationOpen()
+                && receipt(operation).equals(expected);
+    }
+
+    public boolean appliedDiscoveryReceipt(long requestId, long operationId, String responseHash) {
+        Operation operation = mapper.operation(operationId);
+        if (operation == null || operation.productionRequestId() != requestId || !operation.applied()
+                || !"SETTLED".equals(operation.status()) || operation.reservationOpen()) {
+            return false;
+        }
+        Step step = mapper.step(requestId, operation.productionStepId());
+        var receipt = receipt(operation);
+        return step != null && step.stage() == ProductionStage.DISCOVER && receipt.outcome() == Outcome.RESULT_ADOPTED
+                && ("discovery:" + requestId).equals(receipt.resultRef()) && responseHash.equals(receipt.resultHash());
+    }
+
+    private Operation reserve(StepOwner owner, String key, String hash, PricedRequest priced, boolean discoveryEffect) {
         control.shared();
         Request request = requireRequest(owner.requestId());
         Step step = requireStep(owner);
+        if (discoveryEffect != (ProductionDiscovery.PIPELINE.equals(request.pipelineVersion())
+                && step.stage() == ProductionStage.DISCOVER)) {
+            throw new ApiException(ErrorCode.INVALID_STATE_TRANSITION);
+        }
         if (!EffectKey.forInput(request.id(), step.stage(), step.targetKey(), step.inputGeneration()).equals(key)) {
             throw ApiException.validation("effectKey", "does not identify the owned step input");
         }
@@ -112,7 +190,7 @@ class ProductionCostService implements ProductionCostPort {
             }
             return previous;
         }
-        if (request.cancelled() || request.spendingBlocked()
+        if ((discoveryEffect && step.inputGeneration() != 1) || request.cancelled() || request.spendingBlocked()
                 || !"RUNNING".equals(step.status()) || !mapper.outstanding(request.id()).isEmpty()) {
             return null;
         }
@@ -204,18 +282,38 @@ class ProductionCostService implements ProductionCostPort {
 
     @Override
     public Receipt reconcile(long operationId, String evidenceKey, Evidence evidence) {
+        return reconcile(operationId, evidenceKey, evidence, null);
+    }
+
+    private Receipt reconcile(long operationId, String evidenceKey, Evidence evidence, String body) {
         Long requestId = mapper.requestId(operationId);
         if (requestId == null) {
             throw new ApiException(ErrorCode.RESOURCE_NOT_FOUND);
         }
         boolean accepted = transactions.execute(() -> {
             control.shared();
-            requireRequest(requestId);
+            Request request = requireRequest(requestId);
             Operation operation = mapper.operation(operationId);
             Evidence normalized = normalize(operation, evidenceKey, evidence);
             if (operation.evidenceHash() != null && !operation.evidenceHash().equals(evidenceHash(normalized))) {
                 mapper.blockSpending(requestId);
                 return false;
+            }
+            Step step = mapper.step(requestId, operation.productionStepId());
+            if (ProductionDiscovery.PIPELINE.equals(request.pipelineVersion()) && step.stage() == ProductionStage.DISCOVER
+                    && normalized.outcome() == Outcome.RESULT_ADOPTED) {
+                if (operation.evidenceHash() == null) {
+                    if (body == null || discovery.saveResponse(requestId, operationId, body, normalized.resultHash()) != 1) {
+                        throw new ApiException(ErrorCode.INVALID_STATE_TRANSITION, "Discovery response is required.");
+                    }
+                }
+                var stored = discovery.generated(requestId);
+                if (stored == null || stored.operationId() != operationId
+                        || !normalized.resultHash().equals(stored.responseHash())
+                        || !normalized.resultHash().equals(CanonicalJson.sha256Hex(stored.responseJson()))
+                        || !("discovery:" + requestId).equals(normalized.resultRef())) {
+                    throw new ApiException(ErrorCode.INVALID_STATE_TRANSITION, "Discovery evidence does not match.");
+                }
             }
             if (operation.evidenceHash() == null) {
                 save(operation, evidenceKey, normalized);

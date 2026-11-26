@@ -22,7 +22,7 @@ import { useTheme } from '../lib/theme'
 import { Button, IconButton } from '../ui/Button'
 import { Tooltip, TooltipProvider } from '../ui/Overlay'
 import { useToast } from '../ui/toast-context'
-import { NAV, locate } from './nav'
+import { NAV, hasNestedItem, locate } from './nav'
 
 const COLLAPSE_KEY = 'ai-studio.sidebar-collapsed'
 
@@ -150,7 +150,7 @@ function Sidebar({
                 const link = (
                   <NavLink
                     to={item.to}
-                    end={item.to === '/'}
+                    end={item.to === '/' || hasNestedItem(item.to)}
                     onClick={onClose}
                     aria-label={collapsed ? item.label : undefined}
                     className={({ isActive }) =>
