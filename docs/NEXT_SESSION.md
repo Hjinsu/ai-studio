@@ -1,10 +1,10 @@
 # 회사 PC 다음 세션 — AI Studio v2
 
-2026-11-26 KST · V2-01 DONE · V2-02 사용자 착수 승인 및 공통 계약 준비.
+2026-11-26 KST · V2-01·V2-02 DONE · V2-03 설계 방향 승인 및 구현 착수 승인 대기.
 
 ## 기준과 보존
 
-- 재개 기준은 최신 `origin/v2/integration`이다. V2-01 제품 병합 커밋은 `37308fbd65d7f3a4a3bf61b454faea629f53f1ca`이며 검증 SHA와 제품 코드가 일치한다.
+- 재개 기준은 이 종료 기록이 반영된 최신 `origin/v2/integration`이다. V2-02 제품 병합 기준은 `8ca054dc489d55e763a0f91790366df282550b27`이며 승인 SHA `9acab98483539402ee61e9695a3d3ccf10b66f00`과 전체 Git 트리가 일치한다.
 - 기존 원격 `main` `47ef69731a599c570846c1482dcabf8ead8fe2e4`, `t03/integration` `dab7013c4557ba87d4440dfc86417344bb2c4e1d`, C `1e888767a61407a7e9176df0e362df9d6143f1b2`, D `3a976e1fbb1a5c8fbda50257b12643ff6cfbca3a`를 보존한다. C/D 병합이나 공통 계약 cherry-pick은 v2 선행 작업이 아니다.
 - 집 PC의 기존 D 미커밋 MVP 문서와 로컬 integration의 미추적 리뷰는 원래 worktree에 별도 보존되어 있다. v2 문서는 새 브랜치에서 가져온다.
 - [승인된 기획](v2/README.md) · [품질·수익화 요구사항](v2/05_CONTENT_QUALITY_AND_MONETIZATION.md) · [현재 배정](../TASKS.md) · [기존 코드 검토](v2/V2-00_REPOSITORY_REVIEW.md)
@@ -31,10 +31,16 @@ git -C ../ai-studio-v2 status --short --branch
 
 ## 다음 작업
 
-**V2-02 소재 자동 발굴 및 선정**은 착수가 승인되었다. `origin/v2/02-common`의 완성 커밋에서 나뉜 `v2/02-product`와 `v2/02-safety` worktree를 사용한다. [담당 경로 및 착수 지시](v2/V2-02_IMPLEMENTATION_PLAN.md#claude-착수-지시) 소재 발굴 전에 제작 요청을 영속화하고 선정 이후까지 동일 요청의 비용 한도를 사용한다. [로드맵](v2/03_ROADMAP.md) · [V2-01 종료 기록](../STATE.md#v2-01--최종-승인-및-종료)
+**V2-03 자료 조사·대본·장면 구성** 설계 방향은 ChatGPT의 조건부 승인을 받았고 R01~R07이 반영됐다. 설계는 로컬 `v2/03-design` worktree의 `docs/v2/V2-03_IMPLEMENTATION_PLAN.md`에 있으며, 기준 HEAD `735fb60576fc531e4b4f77fbf210d56abe9e9088` 위의 미추적 파일이다. 해당 worktree를 보존한다. 아래 명령으로 설계 기준 이후 통합 변경을 확인하고, 설계 문서의 참조와 계약을 대조한다. 제품 구현은 별도 사용자 착수 승인 후 배정한다. [로드맵](v2/03_ROADMAP.md)
+
+```powershell
+git diff --stat 735fb60576fc531e4b4f77fbf210d56abe9e9088 origin/v2/integration
+git -C ../ai-studio-v2-03-design status --short --branch
+```
 
 ## 환경 및 검증 상태
 
 - Gradle 캐시의 JDK 21.0.13을 사용한다. 회사 PC의 Node 24.21.0과 MariaDB 11.8.2 서비스는 확인했다. FFmpeg·FFprobe 준비는 V2-04에서 수행한다. 회사 정책이 허용하는 환경에서 환경변수는 `.env.example`로 재설정한다. 비밀값·DB 덤프·미디어는 Git에 넣지 않는다.
 - V1~V6는 기준 커밋 원본이다. C V7은 보고상 격리 DB에만 적용됐고 D V8은 초안이다. 집·회사 사용자 DB의 실제 이력 및 기존 백업 여부는 미확인이다. 이번에 DB 접근이나 백업을 수행하지 않았다.
 - V2-01 백엔드 단위 165건·격리 통합 200건, FAKE 11단계와 [GitHub CI 7/7](https://github.com/Hjinsu/ai-studio/actions/runs/45737242958)을 확인했다. V9 사용자 DB 적용과 실제 유료 호출·YouTube 게시는 별도 승인 대상이며 실행기 기본값은 비활성이다.
+- V2-02 [CI 7/7](https://github.com/Hjinsu/ai-studio/actions/runs/45758360558) 및 격리 MariaDB 독립 회귀 17건 통과. HOLD 해소와 후속 개선은 [종료 기록](../STATE.md#v2-02--최종-승인-및-종료-2026-11-26-kst-done)을 참조한다.

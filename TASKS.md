@@ -12,7 +12,8 @@
 |---|---|---|---|
 | V2-00 | Codex | DONE · 사용자 승인 | v2 문서 전용 기준선. 분기 원점 `dab7013c4557ba87d4440dfc86417344bb2c4e1d`. [검토](docs/v2/V2-00_REPOSITORY_REVIEW.md) |
 | V2-01 | Claude Code 실행 / Codex 비용·공통 계약 | DONE · 사용자 최종 승인 | FAKE 11단계와 비용 안전성 검증, 설계·실행기·비용 독립 리뷰 완료. [PR #4](https://github.com/Hjinsu/ai-studio/pull/4)로 v2/integration 병합. [종료 기록](STATE.md#v2-01--최종-승인-및-종료) |
-| V2-02 | Claude Code 생성·평가·선정·UI / Codex 저장·계약·비용·검증 | IN_PROGRESS · 사용자 착수 승인 | 공통 계약 검증 후 동일 SHA에서 담당 구현 착수. [계획 및 착수 지시](docs/v2/V2-02_IMPLEMENTATION_PLAN.md) |
+| V2-02 | Claude Code 생성·평가·선정·UI / Codex 저장·계약·비용·검증 | DONE · 사용자 최종 승인 | 독립 재검토 APPROVE 및 HOLD 해소. [PR #5](https://github.com/Hjinsu/ai-studio/pull/5)로 v2/integration 병합. [종료 기록](STATE.md#v2-02--최종-승인-및-종료-2026-11-26-kst-done) |
+| V2-03 | 사용자 착수 승인 후 배정 | TODO · 설계 방향 승인 및 R01~R07 반영 | 최신 통합 기준과 설계 대조 후 구현 착수 승인 대기. [인계](docs/NEXT_SESSION.md#다음-작업) |
 
 [품질·수익화 요구사항](docs/v2/05_CONTENT_QUALITY_AND_MONETIZATION.md)은 V2-02~08의 단계별 인수 기준에 적용한다. V2-01은 검수·재생성까지 동일 제작 요청 비용 경계를 제공한다. FFmpeg·FFprobe 준비는 V2-04에 포함한다.
 

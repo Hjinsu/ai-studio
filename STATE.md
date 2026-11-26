@@ -16,7 +16,15 @@
 ## 인수인계 기록
 작업 ID / 상태 / 변경 파일 / 테스트 명령 및 실제 결과 / 미해결 문제 / 다음 작업 / 필요 환경변수. 커밋 해시는 생성된 경우만 기록.
 
-### V2-02-HOLD-FIX — 수동 검수 재확인 경합 검증 (2026-11-26, IMPLEMENTED)
+### V2-02 — 최종 승인 및 종료 (2026-11-26 KST, DONE)
+
+- ChatGPT 설계·구현 검토와 별도 Codex 독립 재검토 APPROVE, P0/P1 없음, 사용자 최종 종료·병합 승인. 검증 SHA `9acab98483539402ee61e9695a3d3ccf10b66f00`의 [CI 45758360558](https://github.com/Hjinsu/ai-studio/actions/runs/45758360558) 7/7 통과.
+- [PR #5](https://github.com/Hjinsu/ai-studio/pull/5)를 Ready로 전환하고 `v2/integration`에 merge commit `8ca054dc489d55e763a0f91790366df282550b27`으로 병합했다. 병합 Git 트리 전체가 승인 SHA와 일치한다.
+- HOLD 해소: 최초 수동 확인 뒤 별도 트랜잭션에서 추가된 검수 근거로 선택을 무효화했다. 링크 없이 SELECT 재대기 및 lease 반납, 최초·최신 평가 보존, 오래된 토큰 거부, 명시적 재확인 후 단일 링크, 발굴 재호출·추가 비용 없음이 검증됐다. 기존 동시 SELECT 락 경합 회귀도 통과했다.
+- 별도 독립 실행 `gradlew.bat :backend:integrationTest --tests '*DiscoveryExecutionIT' --rerun-tasks`는 격리 MariaDB 11.8.2에서 17건 통과, 실패·오류·건너뜀 0건. 구현 세션의 전체 테스트 결과와 격리 DB migration 이력은 아래 기록을 참조한다. 종료 작업은 문서 변경으로 제품 테스트를 재실행하지 않았다.
+- P2 규칙 기반 사실 주장 탐지·의미상 중복 판정 한계, P3 FAKE 완료 문구는 [로드맵](docs/v2/03_ROADMAP.md)의 비차단 후속 항목이다. 다음 작업은 별도 사용자 착수 승인 후 V2-03 설계를 최신 `origin/v2/integration`과 대조하는 것이다.
+
+### V2-02-HOLD-FIX — 수동 검수 재확인 경합 검증 (2026-11-26, 구현 인수인계)
 
 - 기준 `735fb60576fc531e4b4f77fbf210d56abe9e9088`, 대상 Draft PR #5의 `v2/review-v2-02`. 별도 detached worktree에서 회귀 테스트와 로드맵을 변경했으며 제품 코드·API·기존 migration은 변경하지 않았다.
 - `DiscoveryExecutionIT.manualReviewMustBeConfirmedAgainWhenAnotherContentAddsANewUncertainComparison`: 실제 평가기·저장·비용·선정 포트와 격리 MariaDB, 스크립트 FAKE 공급자를 사용한다. 최초 검수 근거 확인 후 다른 콘텐츠와 revision을 별도 서비스 트랜잭션으로 커밋하고 SELECT를 실행하여 새 검수 사유·선택 무효화·재대기·재확인·최종 연결 및 발굴 비용 보존을 확인한다. 실행 순서를 고정한 트랜잭션 경계 검증이며 두 트랜잭션이 동시에 잠금을 경합하는 테스트는 아니다.
