@@ -159,6 +159,65 @@ class ScenesReviewTest {
         assertThat(recommendations(validation)).containsExactly("SCENE_TRANSITION_MISSING");
     }
 
+    private Validation prompt(int index, String imagePrompt) {
+        return review(with(list -> {
+            Scene s = list.get(index);
+            list.set(index, new Scene(s.id(), s.order(), s.segmentIds(), s.estimatedDurationMs(), s.narration(),
+                    s.visualDescription(), imagePrompt, s.direction(), s.transition(), s.subtitleText()));
+            return list;
+        }));
+    }
+
+    private static List<String> newFacts(Validation validation) {
+        return validation.findings().stream().filter(f -> f.code().equals("SCENE_NEW_FACT"))
+                .flatMap(f -> f.references().stream()).toList();
+    }
+
+    @Test
+    void theVerticalFrameTokenInAFramingClauseIsNotAFact() {
+        for (String framing : List.of("Flat infographic of Venus, vertical 9:16, large labels",
+                "Flat infographic of Venus in a 9:16 composition", "Flat infographic of Venus, aspect ratio 9:16",
+                "Flat infographic of Venus, 9:16 vertical frame", "Flat infographic of Venus, portrait 9 : 16")) {
+            assertThat(prompt(0, framing).findings()).as(framing).isEmpty();
+        }
+    }
+
+    @Test
+    void ordinaryNinesAndSixteensAreStillComparedWithTheNarration() {
+        assertThat(newFacts(prompt(0, "Venus has 16 moons, vertical frame"))).containsExactly("16");
+        assertThat(newFacts(prompt(0, "Label reading 9 hours on the dial, vertical framing"))).containsExactly("9");
+        assertThat(newFacts(prompt(0, "Sixteen craters shown, caption reading 16 craters"))).containsExactly("16");
+        assertThat(newFacts(prompt(0, "Nine moons orbit Venus, vertical"))).containsExactly("9");
+        // a 9:16 outside a framing clause, or inside a longer number, is two numbers, not a frame
+        assertThat(newFacts(prompt(0, "Clock on the wall reading 9:16"))).containsExactly("9", "16");
+        assertThat(newFacts(prompt(0, "Vertical scale reading 19:16"))).containsExactly("19", "16");
+    }
+
+    @Test
+    void numbersTheNarrationUsesStayAllowed() {
+        // scene 1 narrates "about 243 Earth days ... only about 225"
+        assertThat(prompt(0, "Dial labelled 243 days beside an orbit labelled 225 days, vertical 9:16").findings())
+                .isEmpty();
+    }
+
+    @Test
+    void theFrameTokenDoesNotHideANewFactBesideIt() {
+        assertThat(newFacts(prompt(0, "Vertical 9:16 infographic, caption reading Venus has 16 moons")))
+                .containsExactly("16");
+        assertThat(newFacts(prompt(0, "Vertical 9:16, 9 moons around Venus"))).containsExactly("9");
+        assertThat(newFacts(prompt(0, "9:16 composition with 16 moons and 243 days"))).containsExactly("16");
+        assertThat(blocks(prompt(0, "Vertical 9:16, 16 moons"))).containsExactly("SCENE_NEW_FACT");
+    }
+
+    @Test
+    void visualNumbersKeepsEverythingButTheFramedToken() {
+        assertThat(ScenesReview.visualNumbers("vertical 9:16, 16 moons")).containsExactly("16");
+        assertThat(ScenesReview.visualNumbers("aspect 9:16.5")).containsExactly("9", "16.5");
+        assertThat(ScenesReview.visualNumbers("vertical 9:160")).containsExactly("9", "160");
+        assertThat(ScenesReview.visualNumbers("vertical 9:16:2")).containsExactly("9", "16", "2");
+        assertThat(ScenesReview.visualNumbers(null)).isEmpty();
+    }
+
     @Test
     void missingChannelStyleOrVerticalFramingIsARecommendation() {
         Validation validation = review(new Scenes("Bold flat infographic", base.scenes()));

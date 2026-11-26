@@ -955,6 +955,7 @@ class PlanningExecutionIT {
         drain();
         assertStatus(fixed, "SUCCEEDED");
         assertThat(step(fixed, ProductionStage.DISCOVER).get("result_ref").toString()).startsWith("fake:");
+        assertThat(selectedSeconds(fixed)).isEqualTo(45); // the earlier FAKE length, inside the default 40-60 s
         long discovery = shorts(NEUTRON);
         jdbc.update("UPDATE production_request SET pipeline_version = 'v2-discovery-1' WHERE id = ?", discovery);
         drain();
@@ -965,15 +966,85 @@ class PlanningExecutionIT {
         assertThat(step(discovery, ProductionStage.RESEARCH).get("result_ref").toString()).doesNotStartWith("planning:");
     }
 
-    @Test
-    void legacyLongformStillRejectsTheFixedFakeSelectionDuration() throws Exception {
+    // ------------------------------------------------------------------ fixed FAKE SELECT length (F06)
+
+    /** The target length the SELECT step wrote into the content revision it created. */
+    int selectedSeconds(long id) {
+        return jdbc.queryForObject("""
+                SELECT cr.target_duration_seconds FROM production_request r
+                JOIN content_revision cr ON cr.content_id = r.content_id
+                WHERE r.id = ? ORDER BY cr.revision_no LIMIT 1
+                """, Integer.class, id);
+    }
+
+    long longform() throws Exception {
         policies.create("CONTENT_TYPE", channel, "LONGFORM", "LIFETIME", new BigDecimal("100"), "UTC",
                 null, Actor.admin(admin.id()));
-        long id = create("LONGFORM", "");
+        return create("LONGFORM", "");
+    }
+
+    void lengths(int shortsMin, int shortsMax, int longMin, int longMax) {
+        int base = channels.currentConfig(channel).revisionNo();
+        channels.createConfigRevision(channel, base, new ChannelSettings("SHORTS", shortsMin, shortsMax, longMin,
+                longMax, DiscoveryFixtures.STRATEGY, DiscoveryFixtures.AUDIENCE, "Energetic and clear",
+                "Clean infographic", true, null), "length change", Actor.admin(admin.id()));
+    }
+
+    /** The V2-01 FAKE path after SELECT: every later stage still runs, with FAKE results and no planning. */
+    void assertFakePipelineCompleted(long id) throws Exception {
+        assertStatus(id, "SUCCEEDED");
+        assertThat(step(id, ProductionStage.SELECT).get("status")).isEqualTo("SUCCEEDED");
+        assertThat(operations(id, ProductionStage.RESEARCH)).isPositive();
+        assertThat(step(id, ProductionStage.RESEARCH).get("result_ref").toString()).doesNotStartWith("planning:");
+        assertThat(step(id, ProductionStage.RENDER).get("result_ref").toString()).startsWith("fake:render:");
+        assertThat(planning(id).path("results")).isEmpty();
+    }
+
+    @Test
+    void legacyLongformSelectsInsideTheDefaultFrozenRange() throws Exception {
+        long id = longform();
         drain();
-        assertStatus(id, "FAILED");
-        assertThat(step(id, ProductionStage.SELECT).get("last_error_code")).isEqualTo("VALIDATION_FAILED");
-        assertThat(operations(id, ProductionStage.RESEARCH)).isZero();
+        assertFakePipelineCompleted(id);
+        assertThat(selectedSeconds(id)).isEqualTo(600); // midpoint of the default 480-720 s
+        verify(provider, never()).research(any());
+    }
+
+    @Test
+    void fixedFakeSelectionUsesACustomValidRangeForEitherContentType() throws Exception {
+        lengths(20, 30, 900, 1000);
+        long longform = longform();
+        long shorts = queued(TARDIGRADE);
+        jdbc.update("UPDATE production_request SET pipeline_version = 'v2-fixed-1' WHERE id = ?", shorts);
+        drain();
+        assertFakePipelineCompleted(longform);
+        assertFakePipelineCompleted(shorts);
+        assertThat(selectedSeconds(longform)).isEqualTo(950);
+        assertThat(selectedSeconds(shorts)).isEqualTo(25);
+    }
+
+    @Test
+    void fixedFakeSelectionKeepsTheRequestsFrozenRangeAfterTheChannelChanges() throws Exception {
+        long frozen = longform();
+        long sameConfig = create("LONGFORM", "");
+        lengths(40, 60, 2000, 3000); // after both requests were created
+        long later = create("LONGFORM", "");
+        drain();
+        for (long id : List.of(frozen, sameConfig, later)) {
+            assertFakePipelineCompleted(id);
+        }
+        assertThat(selectedSeconds(frozen)).isEqualTo(600);
+        assertThat(selectedSeconds(sameConfig)).isEqualTo(600);
+        assertThat(selectedSeconds(later)).isEqualTo(2500);
+        Long config = jdbc.queryForObject("SELECT channel_config_id FROM production_request WHERE id = ?",
+                Long.class, frozen);
+        assertThat(jdbc.queryForObject("SELECT channel_config_id FROM production_request WHERE id = ?", Long.class,
+                sameConfig)).isEqualTo(config);
+        // replaying SELECT of a linked request reads the same frozen revision and rebuilds the same selection
+        var replay = new StageWork.StepContext(frozen, 1, ProductionStage.SELECT, "video", 1, 2, channel, "LONGFORM",
+                null, null);
+        FakeStageWork work = new FakeStageWork(BigDecimal.ONE, FakeStageWork.frozenRanges(jdbc));
+        assertThat(work.select(replay)).isEqualTo(work.select(replay));
+        assertThat(work.select(replay).targetDurationSeconds()).isEqualTo(600);
     }
 
     @Test
