@@ -1270,9 +1270,13 @@ paths:
           application/json:
             schema:
               type: object
-              required: [candidateId, version]
+              required: [candidateId, version, batchToken]
               properties:
                 candidateId: { type: integer, minimum: 1, maximum: 10 }
+                batchToken:
+                  type: string
+                  pattern: '^[0-9a-f]{64}$'
+                  description: Token returned with the discovery version being selected.
                 version: { type: integer, minimum: 0 }
       responses:
         '200': { $ref: '#/components/responses/ProductionDiscoveryDetail' }
@@ -1411,12 +1415,16 @@ components:
       enum: [QUEUED, RUNNING, RECOVERY_REQUIRED, SUCCEEDED, FAILED, CANCELLED]
     ProductionDiscoveryDetail:
       type: object
-      required: [selectionMode, candidateCount, version, awaitingSelection, candidates]
+      required: [selectionMode, candidateCount, version, batchToken, awaitingSelection, candidates]
       properties:
         selectionMode: { type: string, enum: [AUTO, MANUAL] }
         candidateCount: { type: integer, minimum: 5, maximum: 10 }
         version: { type: integer, minimum: 0 }
         awaitingSelection: { type: boolean }
+        batchToken:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+          description: Binds candidate positions and the version to this production request.
         chosenCandidateId: { type: [integer, 'null'], minimum: 1, maximum: 10 }
         selectedCandidateId: { type: [integer, 'null'], minimum: 1, maximum: 10 }
         selectionReason: { type: [string, 'null'] }

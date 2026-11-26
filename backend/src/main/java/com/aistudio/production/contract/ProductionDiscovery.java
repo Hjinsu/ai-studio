@@ -5,6 +5,7 @@ import java.util.List;
 /** Data shared by the discovery evaluator, persistence, and the production API. */
 public final class ProductionDiscovery {
     public static final String PIPELINE = "v2-discovery-1";
+    public static final String PROMPT_VERSION = "v2-discovery-prompt-1";
     public static final int MIN_CANDIDATES = 5;
     public static final int DEFAULT_CANDIDATES = 8;
     public static final int MAX_CANDIDATES = 10;

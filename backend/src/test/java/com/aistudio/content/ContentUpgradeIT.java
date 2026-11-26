@@ -171,9 +171,10 @@ class ContentUpgradeIT {
         Flyway.configure().dataSource(DB.dataSource()).locations("classpath:db/migration").cleanDisabled(true).load()
                 .migrate();
         List<String> v9History = history();
-        assertThat(v9History).hasSize(8).startsWith(historyAfter.toArray(String[]::new));
+        assertThat(v9History).hasSize(9).startsWith(historyAfter.toArray(String[]::new));
         assertThat(v9History.get(6)).startsWith("9:");
-        assertThat(v9History.getLast()).startsWith("10:");
+        assertThat(v9History.get(7)).startsWith("10:");
+        assertThat(v9History.getLast()).startsWith("11:");
         assertThat(checksums()).isEqualTo(beforeV9);
         assertThat(contents.get(view.content().id()).currentRevision()).isEqualTo(view.currentRevision());
         assertThat(jdbc.queryForList("""

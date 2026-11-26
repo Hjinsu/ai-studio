@@ -10,6 +10,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -21,6 +24,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.aistudio.ApiTestSupport;
@@ -30,15 +34,15 @@ import com.aistudio.budget.BudgetControlService;
 import com.aistudio.budget.BudgetPolicyService;
 import com.aistudio.channel.ChannelService;
 import com.aistudio.content.command.CanonicalJson;
-import com.aistudio.production.contract.EffectKey;
-import com.aistudio.production.contract.ProductionCostPort;
-import com.aistudio.production.contract.ProductionCostPort.PricedRequest;
+import com.aistudio.production.contract.DiscoveryExecutionPort;
+import com.aistudio.production.contract.DiscoveryProvider;
 import com.aistudio.production.contract.ProductionCostPort.StepOwner;
+import com.aistudio.production.contract.ProductionDiscovery.Response;
 import com.aistudio.production.contract.ProductionDiscovery.Candidate;
+import com.aistudio.production.contract.ProductionDiscovery.Block;
 import com.aistudio.production.contract.ProductionDiscovery.EvaluatedCandidate;
 import com.aistudio.production.contract.ProductionDiscovery.EvidencePlan;
 import com.aistudio.production.contract.ProductionDiscovery.Scores;
-import com.aistudio.production.contract.ProductionStage;
 import com.aistudio.production.execution.ProductionExecutor;
 import com.aistudio.security.AdminAccountService;
 import com.aistudio.shared.db.LockRetryingTransactions;
@@ -67,7 +71,8 @@ class ProductionRequestApiIT {
     @Autowired BudgetPolicyService policies;
     @Autowired JdbcTemplate jdbc;
     @Autowired BudgetControlService control;
-    @Autowired ProductionCostPort costs;
+    @Autowired DiscoveryExecutionPort discovery;
+    @MockitoBean DiscoveryProvider provider;
     @Autowired ProductionExecutor executor;
     @Autowired LockRetryingTransactions transactions;
     @Autowired JsonMapper json;
@@ -178,40 +183,87 @@ class ProductionRequestApiIT {
                 SELECT id FROM production_step WHERE production_request_id = ? AND stage = 'DISCOVER'
                 """, Long.class, id);
         jdbc.update("UPDATE production_step SET status = 'RUNNING' WHERE id = ?", step);
-        var effect = costs.executeEffect(new StepOwner(id, step, "fixture", 1),
-                EffectKey.forInput(id, ProductionStage.DISCOVER, "video", 1), "a".repeat(64),
-                new PricedRequest("KRW", BigDecimal.ONE, "SUCCESS"));
         var scores = new Scores(25, 20, 20, 15, 15, 5);
         var candidate = new Candidate("Gravity", "How can gravity change paths?", "Gravity and paths",
                 "Orbital diagram", List.of("Hook", "Comparison"),
                 List.of(new EvidencePlan("textbook", "orbital examples")), List.of(), scores, "Clear outline");
-        var eligible = new EvaluatedCandidate(1, candidate, scores, 100, List.of(), List.of(), "Passes evaluation");
-        var blocked = new EvaluatedCandidate(2, candidate, scores, 100,
-                List.of(com.aistudio.production.contract.ProductionDiscovery.Block.DUPLICATE), List.of(), "Duplicate");
-        String candidates = json.writeValueAsString(List.of(eligible, blocked, blocked, blocked, blocked));
+        var assessments = java.util.stream.IntStream.rangeClosed(1, 5)
+                .mapToObj(position -> new EvaluatedCandidate(position, candidate, scores, 100,
+                        position == 1 || position == 3 ? List.of() : List.of(Block.DUPLICATE),
+                        List.of(), "Fixture evaluation")).toList();
+        var input = discovery.input(id);
+        org.mockito.Mockito.when(provider.generate(input)).thenReturn(new Response(1, java.util.Collections.nCopies(5, candidate)));
+        var owner = new StepOwner(id, step, "fixture", 1);
+        var receipt = discovery.discover(owner, input).receipt();
         transactions.run(() -> {
-            jdbc.update("""
-                UPDATE production_discovery SET provider_operation_id = ?, response_json = '{}', response_hash = ?,
-                    generated_at = UTC_TIMESTAMP(6), evaluation_json = ?, evaluated_at = UTC_TIMESTAMP(6),
-                    version = 1 WHERE production_request_id = ?
-                """, effect.receipt().operationId(), "a".repeat(64), candidates, id);
-            costs.markReceiptApplied(new StepOwner(id, step, "fixture", 1), effect.receipt().operationId());
+            discovery.applyEvaluation(owner, receipt, assessments);
             jdbc.update("UPDATE production_step SET status = 'SUCCEEDED' WHERE id = ?", step);
             jdbc.update("UPDATE production_request SET lease_owner = NULL, lease_until = NULL WHERE id = ?", id);
         });
-        mvc.perform(get(detail + "/discovery").with(ApiTestSupport.as(admin)))
+        String batchJson = mvc.perform(get(detail + "/discovery").with(ApiTestSupport.as(admin)))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.awaitingSelection").value(true))
-                .andExpect(ApiTestSupport.matchesContract());
+                .andExpect(ApiTestSupport.matchesContract()).andReturn().getResponse().getContentAsString();
+        String token = json.readTree(batchJson).path("batchToken").asString();
+        String foreignToken = CanonicalJson.sha256(List.of("discovery-batch", id + 1, 1));
         mvc.perform(post(detail + "/selection").with(ApiTestSupport.as(admin)).contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"candidateId\":2,\"version\":1}")).andExpect(status().is(422));
+                        .content(choice(1, 1, foreignToken))).andExpect(status().isConflict());
+        mvc.perform(post(detail + "/selection").with(ApiTestSupport.as(admin)).contentType(MediaType.APPLICATION_JSON)
+                        .content(choice(2, 1, token))).andExpect(status().is(422));
         for (int attempt = 0; attempt < 2; attempt++) {
             mvc.perform(post(detail + "/selection").with(ApiTestSupport.as(admin)).contentType(MediaType.APPLICATION_JSON)
-                            .content("{\"candidateId\":1,\"version\":1}"))
+                            .content(choice(1, 1, token)))
                     .andExpect(status().isOk()).andExpect(jsonPath("$.chosenCandidateId").value(1))
                     .andExpect(jsonPath("$.version").value(2)).andExpect(ApiTestSupport.matchesContract());
         }
         mvc.perform(post(detail + "/selection").with(ApiTestSupport.as(admin)).contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"candidateId\":2,\"version\":1}")).andExpect(status().isConflict());
+                        .content(choice(2, 1, token))).andExpect(status().isConflict());
+
+        long selectStep = jdbc.queryForObject("""
+                SELECT id FROM production_step WHERE production_request_id = ? AND stage = 'SELECT'
+                """, Long.class, id);
+        var rechecked = assessments.stream().map(item -> item.candidateId() == 1
+                ? new EvaluatedCandidate(1, candidate, scores, 100, List.of(Block.DUPLICATE), List.of(), "New match")
+                : item).toList();
+        transactions.run(() -> {
+            jdbc.update("""
+                    UPDATE production_request SET lease_owner = 'selection', lease_epoch = 2,
+                        lease_until = UTC_TIMESTAMP(6) + INTERVAL 1 MINUTE WHERE id = ?
+                    """, id);
+            discovery.invalidateManualChoice(new StepOwner(id, selectStep, "selection", 2), 2, rechecked);
+            jdbc.update("UPDATE production_request SET lease_owner = NULL, lease_until = NULL WHERE id = ?", id);
+        });
+        mvc.perform(post(detail + "/selection").with(ApiTestSupport.as(admin)).contentType(MediaType.APPLICATION_JSON)
+                        .content(choice(1, 1, token))).andExpect(status().isConflict());
+        String recheckedJson = mvc.perform(get(detail + "/discovery").with(ApiTestSupport.as(admin)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.awaitingSelection").value(true))
+                .andExpect(jsonPath("$.version").value(3)).andReturn().getResponse().getContentAsString();
+        String newToken = json.readTree(recheckedJson).path("batchToken").asString();
+        var gate = new CountDownLatch(1);
+        try (var workers = Executors.newFixedThreadPool(2)) {
+            var choose = workers.submit(() -> {
+                assertThat(gate.await(5, TimeUnit.SECONDS)).isTrue();
+                return mvc.perform(post(detail + "/selection").with(ApiTestSupport.as(admin))
+                                .contentType(MediaType.APPLICATION_JSON).content(choice(3, 3, newToken)))
+                        .andReturn().getResponse().getStatus();
+            });
+            var cancel = workers.submit(() -> {
+                assertThat(gate.await(5, TimeUnit.SECONDS)).isTrue();
+                mvc.perform(post(detail + "/cancel").with(ApiTestSupport.as(admin))).andExpect(status().isOk());
+                return null;
+            });
+            gate.countDown();
+            int status = choose.get(10, TimeUnit.SECONDS);
+            cancel.get(10, TimeUnit.SECONDS);
+            assertThat(status).isIn(200, 409);
+            assertThat(jdbc.queryForObject("SELECT chosen_candidate_id FROM production_discovery WHERE production_request_id = ?",
+                    Integer.class, id)).isEqualTo(status == 200 ? 3 : null);
+        }
+        mvc.perform(get(detail + "/discovery").with(ApiTestSupport.as(admin))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.awaitingSelection").value(false));
+    }
+
+    private static String choice(int candidateId, int version, String token) {
+        return "{\"candidateId\":%d,\"version\":%d,\"batchToken\":\"%s\"}".formatted(candidateId, version, token);
     }
 
     private long channel(long adminId) {

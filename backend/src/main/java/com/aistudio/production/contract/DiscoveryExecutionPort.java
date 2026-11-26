@@ -36,6 +36,17 @@ public interface DiscoveryExecutionPort {
     /** Persists the selection in the same fenced transaction as the link and SELECT completion. */
     void recordSelection(StepOwner owner, int version, int candidateId, String rationale);
 
+    /** Also preserves the current catalog evaluation that justifies the link. */
+    default void recordSelection(StepOwner owner, int version, int candidateId, String rationale,
+            List<EvaluatedCandidate> rechecked) {
+        recordSelection(owner, version, candidateId, rationale);
+    }
+
     /** Records re-evaluation and clears a stale manual choice under the same selection lock. */
     void invalidateManualChoice(StepOwner owner, int version, List<EvaluatedCandidate> evaluations);
+
+    /** Preserves the latest catalog reasons when AUTO has no eligible candidate. */
+    default void recordExhaustedSelection(StepOwner owner, int version, List<EvaluatedCandidate> evaluations) {
+        throw new UnsupportedOperationException("Discovery recheck persistence is required.");
+    }
 }

@@ -20,6 +20,7 @@ import com.aistudio.production.contract.ProductionDiscovery.Mode;
 import com.aistudio.production.contract.ProductionStage;
 import com.aistudio.production.discovery.persistence.ProductionDiscoveryMapper;
 import com.aistudio.production.discovery.persistence.ProductionDiscoveryMapper.Batch;
+import com.aistudio.content.command.CanonicalJson;
 import com.aistudio.production.contract.ProductionStatus;
 import com.aistudio.shared.api.ApiException;
 import com.aistudio.shared.api.ErrorCode;
@@ -121,10 +122,13 @@ class ProductionRequestService {
         return discoveryView(request, batch);
     }
 
-    ProductionRequestController.Discovery choose(long actorId, long id, int candidateId, int version) {
+    ProductionRequestController.Discovery choose(long actorId, long id, int candidateId, int version, String token) {
         return transactions.execute(() -> {
             var request = requireOwner(mapper.lock(id), actorId);
             var batch = requireBatch(id);
+            if (!batchToken(id, version).equals(token)) {
+                throw new ApiException(ErrorCode.RESOURCE_CONFLICT);
+            }
             if (Objects.equals(batch.chosenCandidateId(), candidateId) && Objects.equals(batch.choiceVersion(), version)) {
                 return discoveryView(request, batch);
             }
@@ -162,8 +166,12 @@ class ProductionRequestService {
 
     private ProductionRequestController.Discovery discoveryView(ProductionRequestMapper.Request request, Batch batch) {
         return new ProductionRequestController.Discovery(batch.selectionMode(), batch.candidateCount(), batch.version(),
-                awaitingSelection(request, batch), evaluations(batch), batch.chosenCandidateId(),
+                batchToken(request.id(), batch.version()), awaitingSelection(request, batch), evaluations(batch), batch.chosenCandidateId(),
                 batch.selectedCandidateId(), batch.selectionReason());
+    }
+
+    private static String batchToken(long requestId, int version) {
+        return CanonicalJson.sha256(List.of("discovery-batch", requestId, version));
     }
 
     private List<EvaluatedCandidate> evaluations(Batch batch) {

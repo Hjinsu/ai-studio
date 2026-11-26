@@ -835,6 +835,8 @@ export interface components {
             candidateCount: number;
             version: number;
             awaitingSelection: boolean;
+            /** @description Binds candidate positions and the version to this production request. */
+            batchToken: string;
             chosenCandidateId?: number | null;
             selectedCandidateId?: number | null;
             selectionReason?: string | null;
@@ -3085,6 +3087,8 @@ export interface operations {
             content: {
                 "application/json": {
                     candidateId: number;
+                    /** @description Token returned with the discovery version being selected. */
+                    batchToken: string;
                     version: number;
                 };
             };

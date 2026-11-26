@@ -13,12 +13,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.math.BigDecimal;
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -33,6 +35,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.aistudio.ApiTestSupport;
@@ -41,9 +44,21 @@ import com.aistudio.audit.AuditService.Actor;
 import com.aistudio.budget.BudgetControlService;
 import com.aistudio.budget.BudgetPolicyService;
 import com.aistudio.channel.ChannelService;
+import com.aistudio.channel.ChannelSettings;
+import com.aistudio.production.contract.DiscoveryExecutionPort;
+import com.aistudio.production.contract.DiscoveryProvider;
+import com.aistudio.production.contract.ProductionDiscovery.Candidate;
+import com.aistudio.production.contract.ProductionDiscovery.Block;
+import com.aistudio.production.contract.ProductionDiscovery.EvaluatedCandidate;
+import com.aistudio.production.contract.ProductionDiscovery.EvidencePlan;
+import com.aistudio.production.contract.ProductionDiscovery.Input;
+import com.aistudio.production.contract.ProductionDiscovery.Response;
+import com.aistudio.production.contract.ProductionDiscovery.Scores;
+import com.aistudio.production.contract.ProductionSelectionPort;
 import com.aistudio.production.contract.ProductionCostPort;
 import com.aistudio.production.contract.ProductionCostPort.Evidence;
 import com.aistudio.production.contract.ProductionCostPort.Outcome;
+import com.aistudio.production.contract.ProductionCostPort.StepOwner;
 import com.aistudio.production.contract.ProductionStage;
 import com.aistudio.production.execution.ProductionExecutor;
 import com.aistudio.security.AdminAccountService;
@@ -76,7 +91,10 @@ class ProductionPortsIT {
     @Autowired ProductionExecutor executor;
     @Autowired ProductionCostPort costs;
     @Autowired LockRetryingTransactions transactions;
+    @Autowired DiscoveryExecutionPort discovery;
+    @Autowired ProductionSelectionPort selection;
     @MockitoSpyBean FakeProvider provider;
+    @MockitoBean DiscoveryProvider discoveryProvider;
 
     @BeforeAll
     void enableIsolatedBudgets() {
@@ -84,6 +102,215 @@ class ProductionPortsIT {
         policies.create("SYSTEM", null, null, "DAY", new BigDecimal("1000"), "UTC", null, actor);
         policies.create("SYSTEM", null, null, "MONTH", new BigDecimal("1000"), "UTC", null, actor);
         control.setSpending(true, "isolated port integration", control.get().version(), actor);
+    }
+
+    @AfterEach
+    void releaseDiscoveryFixtureLeases() {
+        jdbc.update("UPDATE production_request SET lease_owner = NULL, lease_until = NULL WHERE lease_owner = 'discovery-test'");
+    }
+
+    @Test
+    void replaysDiscoveryAfterEvidenceCommitAndLinksUsingTheSnapshot() throws Exception {
+        long request = newDiscoveryRequest();
+        StepOwner owner = own(request, "DISCOVER", 1);
+        var input = discovery.input(request);
+        var response = sampleResponse(input);
+        long channel = jdbc.queryForObject("SELECT channel_id FROM production_request WHERE id = ?", Long.class, request);
+        Actor actor = Actor.admin(ApiTestSupport.admin(accounts, jdbc).id());
+        channels.update(channel, channels.get(channel).channel().version(), null, "ko", null, actor);
+        channels.createConfigRevision(channel, 1, new ChannelSettings("SHORTS", 55, 62, 480, 720,
+                "Updated strategy", null, null, null, true,
+                Map.of("discovery", Map.of("prohibitedTopics", List.of("lenses")))), "New discovery settings", actor);
+        assertThat(discovery.input(request)).isEqualTo(input);
+        doAnswer(call -> response).when(discoveryProvider).generate(input);
+        jdbc.execute("""
+                CREATE TRIGGER it_interrupt_discovery_settle BEFORE UPDATE ON provider_operation FOR EACH ROW
+                BEGIN
+                  IF NEW.status = 'SETTLED' AND NEW.production_request_id = %d THEN
+                    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'discovery settlement interrupted';
+                  END IF;
+                END
+                """.formatted(request));
+        try {
+            assertThatThrownBy(() -> discovery.discover(owner, input)).isInstanceOf(DataAccessException.class);
+            assertThat(jdbc.queryForObject("""
+                    SELECT COUNT(*) FROM production_discovery d JOIN provider_operation o ON o.id = d.provider_operation_id
+                    WHERE d.production_request_id = ? AND d.response_json IS NOT NULL AND o.evidence_hash IS NOT NULL
+                    """, Integer.class, request)).isEqualTo(1);
+            assertThat(costs.readCostState(request).unresolved()).isTrue();
+        } finally {
+            jdbc.execute("DROP TRIGGER it_interrupt_discovery_settle");
+        }
+        StepOwner restarted = own(request, "DISCOVER", 2);
+        var receipt = discovery.discover(restarted, input).receipt();
+        assertThat(discovery.discover(restarted, input).receipt()).isEqualTo(receipt);
+        assertThat(discovery.response(restarted, receipt)).isEqualTo(response);
+        assertThatThrownBy(() -> discovery.response(owner, receipt)).isInstanceOf(ApiException.class);
+        verify(discoveryProvider).generate(input);
+        var assessments = sampleAssessments(response);
+        transactions.run(() -> {
+            discovery.applyEvaluation(restarted, receipt, assessments);
+            jdbc.update("UPDATE production_step SET status = 'SUCCEEDED' WHERE id = ?", restarted.stepId());
+        });
+        assertThat(costs.readCostState(request).unappliedReceipts()).isEmpty();
+        StepOwner selecting = own(request, "SELECT", 3);
+        var candidate = response.candidates().getFirst();
+        var link = new ProductionSelectionPort.Selection(receipt.resultHash(), candidate.title(),
+                candidate.centralQuestion(), 45, input.language());
+        assertThatThrownBy(() -> transactions.run(() -> {
+            var batch = discovery.lockForSelection(selecting);
+            assertThat(discovery.catalog(request, response.candidates())).isEmpty();
+            selection.link(selecting, link);
+            discovery.recordSelection(selecting, batch.version(), 1, "First ranked", assessments);
+            throw new IllegalStateException("select completion interrupted");
+        })).hasMessage("select completion interrupted");
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM content WHERE channel_id = ?", Integer.class, channel))
+                .isZero();
+        transactions.run(() -> {
+            var batch = discovery.lockForSelection(selecting);
+            var selected = selection.link(selecting, link);
+            assertThat(selection.link(selecting, link)).isEqualTo(selected);
+            discovery.recordSelection(selecting, batch.version(), 1, "First ranked", assessments);
+            assertThat(discovery.catalog(request, response.candidates())).anyMatch(row ->
+                    Long.toString(selected.contentId()).equals(row.contentId()));
+        });
+        assertThat(jdbc.queryForObject("""
+                SELECT r.language FROM production_request p JOIN content c ON c.id = p.content_id
+                JOIN content_revision r ON r.id = c.current_revision_id WHERE p.id = ?
+                """, String.class, request)).isEqualTo("en");
+    }
+
+    @Test
+    void recordsFailedResponseCostAndQuarantinesUnknownDiscoveryWithoutResending() throws Exception {
+        long malformed = newDiscoveryRequest();
+        var malformedInput = discovery.input(malformed);
+        var malformedOwner = own(malformed, "DISCOVER", 1);
+        doAnswer(call -> new Response(1, List.of())).when(discoveryProvider).generate(malformedInput);
+        var failed = discovery.discover(malformedOwner, malformedInput).receipt();
+        assertThat(failed.outcome()).isEqualTo(Outcome.EXECUTED_FAILED);
+        assertThat(discovery.discover(malformedOwner, malformedInput).receipt()).isEqualTo(failed);
+        assertThat(jdbc.queryForObject("""
+                SELECT b.recognized_cost_krw FROM provider_operation o
+                JOIN budget_reservation b ON b.id = o.reservation_id WHERE o.id = ?
+                """, BigDecimal.class, failed.operationId())).isEqualByComparingTo("1");
+        assertThat(jdbc.queryForObject("SELECT response_json FROM production_discovery WHERE production_request_id = ?",
+                String.class, malformed)).isNull();
+        verify(discoveryProvider).generate(malformedInput);
+
+        long unknown = newDiscoveryRequest();
+        var unknownInput = discovery.input(unknown);
+        var unknownOwner = own(unknown, "DISCOVER", 1);
+        doAnswer(call -> { throw new IllegalStateException("FAKE result unavailable"); })
+                .when(discoveryProvider).generate(unknownInput);
+        assertThat(discovery.discover(unknownOwner, unknownInput).disposition())
+                .isEqualTo(ProductionCostPort.Disposition.RECOVERY_REQUIRED);
+        assertThat(discovery.discover(own(unknown, "DISCOVER", 2), unknownInput).disposition())
+                .isEqualTo(ProductionCostPort.Disposition.RECOVERY_REQUIRED);
+        assertThat(costs.readCostState(unknown).unresolved()).isTrue();
+        verify(discoveryProvider).generate(unknownInput);
+    }
+
+    @Test
+    void concurrentSelectionReadsTheWinnerBeforeLinkingOnTheSameChannel() throws Exception {
+        var admin = ApiTestSupport.admin(accounts, jdbc);
+        Actor actor = Actor.admin(admin.id());
+        long channel = channels.create(ApiTestSupport.uniqueKey("selection-race"), "en", "UTC", null, actor)
+                .channel().id();
+        policies.create("CONTENT_TYPE", channel, "SHORTS", "LIFETIME", BigDecimal.TEN, "UTC", null, actor);
+        long first = postDiscoveryRequest(admin, channel);
+        long second = postDiscoveryRequest(admin, channel);
+        var firstOwner = prepareSelection(first);
+        var secondOwner = prepareSelection(second);
+        var winnerLinked = new CountDownLatch(1);
+        var releaseWinner = new CountDownLatch(1);
+        var contenderStarted = new CountDownLatch(1);
+        try (var threads = Executors.newFixedThreadPool(2)) {
+            var winner = threads.submit(() -> transactions.run(() -> {
+                var batch = discovery.lockForSelection(firstOwner);
+                var candidate = batch.candidates().getFirst().candidate();
+                assertThat(discovery.catalog(first, List.of(candidate))).isEmpty();
+                selection.link(firstOwner, new ProductionSelectionPort.Selection(
+                        "f".repeat(64), candidate.title(), candidate.centralQuestion(), 45));
+                discovery.recordSelection(firstOwner, batch.version(), 1, "Winner", batch.candidates());
+                winnerLinked.countDown();
+                await(releaseWinner);
+            }));
+            try {
+                await(winnerLinked);
+                var contender = threads.submit(() -> transactions.run(() -> {
+                    contenderStarted.countDown();
+                    var batch = discovery.lockForSelection(secondOwner);
+                    var candidate = batch.candidates().getFirst().candidate();
+                    assertThat(discovery.catalog(second, List.of(candidate)))
+                            .anyMatch(entry -> entry.contentId() != null && candidate.title().equals(entry.title()));
+                    selection.link(secondOwner, new ProductionSelectionPort.Selection(
+                            "f".repeat(64), candidate.title(), candidate.centralQuestion(), 45));
+                }));
+                await(contenderStarted);
+                assertThatThrownBy(() -> contender.get(250, TimeUnit.MILLISECONDS)).isInstanceOf(TimeoutException.class);
+                releaseWinner.countDown();
+                winner.get(10, TimeUnit.SECONDS);
+                assertThatThrownBy(() -> contender.get(10, TimeUnit.SECONDS))
+                        .hasCauseInstanceOf(ApiException.class);
+            } finally {
+                releaseWinner.countDown();
+            }
+        }
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM content WHERE channel_id = ?", Integer.class, channel))
+                .isEqualTo(1);
+        transactions.run(() -> {
+            var batch = discovery.lockForSelection(secondOwner);
+            var blocked = batch.candidates().stream()
+                    .map(item -> new EvaluatedCandidate(item.candidateId(), item.candidate(), item.scores(), item.totalScore(),
+                            List.of(Block.DUPLICATE), List.of(), "Matched the committed catalog"))
+                    .toList();
+            discovery.recordExhaustedSelection(secondOwner, batch.version(), blocked);
+            assertThat(discovery.lockForSelection(secondOwner).candidates()).isEqualTo(blocked);
+        });
+        assertThat(jdbc.queryForObject("""
+                SELECT evaluation_json <> recheck_json FROM production_discovery WHERE production_request_id = ?
+                """, Boolean.class, second)).isTrue();
+    }
+
+    private StepOwner prepareSelection(long request) {
+        var input = discovery.input(request);
+        var response = sampleResponse(input);
+        org.mockito.Mockito.when(discoveryProvider.generate(input)).thenReturn(response);
+        var owner = own(request, "DISCOVER", 1);
+        var receipt = discovery.discover(owner, input).receipt();
+        var assessments = sampleAssessments(response);
+        transactions.run(() -> {
+            discovery.applyEvaluation(owner, receipt, assessments);
+            jdbc.update("UPDATE production_step SET status = 'SUCCEEDED' WHERE id = ?", owner.stepId());
+        });
+        return own(request, "SELECT", 2);
+    }
+
+    private static List<EvaluatedCandidate> sampleAssessments(Response response) {
+        return java.util.stream.IntStream.range(0, response.candidates().size())
+                .mapToObj(i -> new EvaluatedCandidate(i + 1, response.candidates().get(i),
+                        response.candidates().get(i).suggestedScores(), 52, List.of(), List.of(), "Test assessment"))
+                .toList();
+    }
+
+    private static Response sampleResponse(Input input) {
+        return new Response(input.rulesVersion(), java.util.stream.IntStream.rangeClosed(1, input.candidateCount())
+                .mapToObj(i -> new Candidate("Light " + i, "Why does light bend?", "Light and lenses " + i,
+                        "Compare lenses " + i, List.of("Show a lens", "Trace the rays"),
+                        List.of(new EvidencePlan("Physics textbook", "Refraction diagram")), List.of(),
+                        new Scores(15, 10, 10, 7, 7, 3), "Visual explanation")).toList());
+    }
+
+    private StepOwner own(long request, String stage, long epoch) {
+        jdbc.update("""
+                UPDATE production_request SET status = 'RUNNING', lease_owner = 'discovery-test',
+                    lease_epoch = ?, lease_until = UTC_TIMESTAMP(6) + INTERVAL 1 MINUTE WHERE id = ?
+                """, epoch, request);
+        jdbc.update("UPDATE production_step SET status = 'RUNNING' WHERE production_request_id = ? AND stage = ?",
+                request, stage);
+        long step = jdbc.queryForObject("SELECT id FROM production_step WHERE production_request_id = ? AND stage = ?",
+                Long.class, request, stage);
+        return new StepOwner(request, step, "discovery-test", epoch);
     }
 
     @Test
@@ -332,20 +559,28 @@ class ProductionPortsIT {
     }
 
     private long newRequest() throws Exception {
+        long id = newDiscoveryRequest();
+        // This suite exercises persisted V2-01 requests while the V2-02 executor is pending.
+        jdbc.update("DELETE FROM production_discovery WHERE production_request_id = ?", id);
+        jdbc.update("UPDATE production_request SET pipeline_version = 'v2-fixed-1' WHERE id = ?", id);
+        return id;
+    }
+
+    private long newDiscoveryRequest() throws Exception {
         var admin = ApiTestSupport.admin(accounts, jdbc);
         Actor actor = Actor.admin(admin.id());
         long channel = channels.create(ApiTestSupport.uniqueKey("ports-channel"), "en", "UTC", null, actor).channel().id();
         policies.create("CONTENT_TYPE", channel, "SHORTS", "LIFETIME", BigDecimal.TEN, "UTC", null, actor);
+        return postDiscoveryRequest(admin, channel);
+    }
+
+    private long postDiscoveryRequest(com.aistudio.security.AdminPrincipal admin, long channel) throws Exception {
         String key = ApiTestSupport.uniqueKey("ports-request");
         mvc.perform(post("/api/v1/production-requests").with(ApiTestSupport.as(admin))
                         .header("Idempotency-Key", key).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"channelId\":\"" + channel + "\",\"contentType\":\"SHORTS\"}"))
                 .andExpect(status().isCreated());
-        long id = jdbc.queryForObject("SELECT id FROM production_request WHERE request_key = ?", Long.class, key);
-        // This suite exercises persisted V2-01 requests while the V2-02 executor is pending.
-        jdbc.update("DELETE FROM production_discovery WHERE production_request_id = ?", id);
-        jdbc.update("UPDATE production_request SET pipeline_version = 'v2-fixed-1' WHERE id = ?", id);
-        return id;
+        return jdbc.queryForObject("SELECT id FROM production_request WHERE request_key = ?", Long.class, key);
     }
 
     private void run(String owner) {

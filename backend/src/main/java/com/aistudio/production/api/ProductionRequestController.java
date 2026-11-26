@@ -33,9 +33,10 @@ class ProductionRequestController {
             @NotNull @Pattern(regexp = "SHORTS|LONGFORM") String contentType,
             Mode selectionMode, @Min(5) @Max(10) Integer candidateCount) {}
 
-    record Choose(@NotNull @Min(1) @Max(10) Integer candidateId, @NotNull @Min(0) Integer version) {}
+    record Choose(@NotNull @Min(1) @Max(10) Integer candidateId, @NotNull @Min(0) Integer version,
+            @NotNull @Pattern(regexp = "[0-9a-f]{64}") String batchToken) {}
 
-    record Discovery(Mode selectionMode, int candidateCount, int version, boolean awaitingSelection,
+    record Discovery(Mode selectionMode, int candidateCount, int version, String batchToken, boolean awaitingSelection,
             List<EvaluatedCandidate> candidates, Integer chosenCandidateId, Integer selectedCandidateId,
             String selectionReason) {}
 
@@ -81,6 +82,6 @@ class ProductionRequestController {
     @PostMapping("/{id}/selection")
     Discovery choose(@PathVariable @Pattern(regexp = ApiId.PATTERN) String id, @Valid @RequestBody Choose choice) {
         return service.choose(CurrentActor.principal().id(), ApiId.parse("id", id), choice.candidateId(),
-                choice.version());
+                choice.version(), choice.batchToken());
     }
 }
