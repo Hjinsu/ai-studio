@@ -51,12 +51,9 @@ public class TopicService {
 
     public TopicResult create(CreateTopic command, Actor actor) {
         // 길이는 코드포인트 기준(OpenAPI maxLength, utf8mb4 VARCHAR와 같은 단위). 지문 계산 전에 유니코드를 검사한다
-        String title = command.title() == null ? "" : command.title().strip();
-        Texts.requireLength("title", title, 1, TITLE_MAX);
-        String normalized = TopicNormalizer.normalize(title);
-        if (normalized.isEmpty() || Texts.length(normalized) > TITLE_MAX) {
-            throw ApiException.validation("title", "normalized title must be 1 to 255 characters");
-        }
+        NormalizedTitle input = normalizeTitle(command.title());
+        String title = input.title();
+        String normalized = input.normalized();
         if (command.note() != null) {
             Texts.requireLength("note", command.note(), 1, NOTE_MAX);
         }
@@ -120,6 +117,41 @@ public class TopicService {
     @Transactional(propagation = Propagation.MANDATORY)
     public Topic findInChannel(long topicId, long channelId) {
         return mapper.findInChannel(topicId, channelId);
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    public Topic findOrCreateSelected(long channelId, String title, Actor actor) {
+        NormalizedTitle input = normalizeTitle(title);
+        String hash = TopicNormalizer.hash(TopicNormalizer.VERSION, input.normalized());
+        Topic existing = mapper.findByHash(channelId, hash);
+        if (existing != null) {
+            return existing;
+        }
+        TopicMapper.NewTopic row = new TopicMapper.NewTopic(channelId, input.title(), input.normalized(), hash,
+                TopicNormalizer.VERSION, null, actor.userId());
+        try {
+            mapper.insert(row);
+        } catch (org.springframework.dao.DuplicateKeyException e) {
+            Topic raced = mapper.findByHash(channelId, hash);
+            if (raced != null) {
+                return raced;
+            }
+            throw e;
+        }
+        audit.record(actor, "TOPIC_CREATE", "TOPIC", row.id, Map.of("channelId", channelId));
+        return mapper.findById(row.id);
+    }
+
+    private record NormalizedTitle(String title, String normalized) {}
+
+    private static NormalizedTitle normalizeTitle(String input) {
+        String title = input == null ? "" : input.strip();
+        Texts.requireLength("title", title, 1, TITLE_MAX);
+        String normalized = TopicNormalizer.normalize(title);
+        if (normalized.isEmpty() || Texts.length(normalized) > TITLE_MAX) {
+            throw ApiException.validation("title", "normalized title must be 1 to 255 characters");
+        }
+        return new NormalizedTitle(title, normalized);
     }
 
     private static ApiException duplicate(long existingId) {

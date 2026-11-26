@@ -730,10 +730,97 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/production-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 소재 선정 전 제작 요청 생성 */
+        post: operations["createProductionRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/production-requests/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ProductionRequestId"];
+            };
+            cookie?: never;
+        };
+        /** 제작 요청과 단계 및 비용 상태 조회 */
+        get: operations["getProductionRequest"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/production-requests/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ProductionRequestId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 취소 의도 기록 및 현재 상태 반환 */
+        post: operations["cancelProductionRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @enum {string} */
+        ProductionStatus: "QUEUED" | "RUNNING" | "RECOVERY_REQUIRED" | "SUCCEEDED" | "FAILED" | "CANCELLED";
+        ProductionRequestSummary: {
+            id: components["schemas"]["Id"];
+            status: components["schemas"]["ProductionStatus"];
+        };
+        ProductionRequestDetail: {
+            id: components["schemas"]["Id"];
+            channelId: components["schemas"]["Id"];
+            /** @enum {string} */
+            contentType: "SHORTS" | "LONGFORM";
+            status: components["schemas"]["ProductionStatus"];
+            contentId?: string | null;
+            runId?: string | null;
+            /** Format: date-time */
+            cancelRequestedAt?: string | null;
+            /** @description 제작 요청 상한 KRW */
+            limitKrw: string;
+            /** @description 남은 예약액 KRW */
+            reservedKrw: string;
+            /** @description 인식 비용 합계 KRW */
+            recognizedKrw: string;
+            steps: {
+                /** @enum {string} */
+                stage: "DISCOVER" | "SELECT" | "RESEARCH" | "SCRIPT" | "SCENES" | "IMAGE" | "TTS" | "SUBTITLE" | "RENDER" | "METADATA" | "QC";
+                targetKey: string;
+                inputGeneration: number;
+                /** @enum {string} */
+                status: "PENDING" | "RUNNING" | "RETRY_WAIT" | "RECOVERY_REQUIRED" | "SUCCEEDED" | "FAILED" | "CANCELLED";
+                attempts: number;
+            }[];
+        };
         /** @description 양의 signed BIGINT 식별자 문자열 (1~9223372036854775807) */
         Id: string;
         /** @description KRW 금액, 소수 최대 6자리(부호 허용은 원장 delta에 한함) */
@@ -1286,6 +1373,15 @@ export interface components {
         };
     };
     responses: {
+        /** @description 제작 요청의 현재 상세 상태 */
+        ProductionRequestDetail: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ProductionRequestDetail"];
+            };
+        };
         /** @description INVALID_REQUEST, VALIDATION_FAILED, PAYLOAD_TOO_LARGE 등 입력 오류 */
         BadRequest: {
             headers: {
@@ -1386,6 +1482,7 @@ export interface components {
         ReservationId: components["schemas"]["Id"];
         /** @description 원장 event_key로 사용. 같은 키·같은 내용은 같은 결과, 다른 내용은 409 RESOURCE_CONFLICT. */
         IdempotencyKey: components["schemas"]["IdempotencyKey"];
+        ProductionRequestId: components["schemas"]["Id"];
         /** @description Topic 또는 콘텐츠 생성 명령의 영속 재생 키. */
         ContentCommandKey: components["schemas"]["IdempotencyKey"];
     };
@@ -2767,6 +2864,88 @@ export interface operations {
                 };
             };
             500: components["responses"]["InternalError"];
+        };
+    };
+    createProductionRequest: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Topic 또는 콘텐츠 생성 명령의 영속 재생 키. */
+                "Idempotency-Key": components["parameters"]["ContentCommandKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    channelId: components["schemas"]["Id"];
+                    /** @enum {string} */
+                    contentType: "SHORTS" | "LONGFORM";
+                };
+            };
+        };
+        responses: {
+            /** @description 기존 요청 재생 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductionRequestSummary"];
+                };
+            };
+            /** @description 요청 및 초기 단계 생성 */
+            201: {
+                headers: {
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductionRequestSummary"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+        };
+    };
+    getProductionRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ProductionRequestId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["ProductionRequestDetail"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    cancelProductionRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ProductionRequestId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["ProductionRequestDetail"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
 }

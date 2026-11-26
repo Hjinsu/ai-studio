@@ -46,6 +46,8 @@ tags:
   - name: contents
     description: 콘텐츠 및 불변 Revision
 
+  - name: Production
+    description: V2 제작 요청
 paths:
   /api/v1/auth/csrf:
     get:
@@ -1169,6 +1171,75 @@ paths:
       parameters: [{"name":"contentId","in":"path","required":true,"schema":{"$ref":"#/components/schemas/Id"}},{"name":"revisionNo","in":"path","required":true,"schema":{"type":"integer","minimum":1}}]
       tags: ["contents"]
 
+  /api/v1/production-requests:
+    post:
+      operationId: createProductionRequest
+      summary: 소재 선정 전 제작 요청 생성
+      tags: [Production]
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      parameters:
+        - $ref: '#/components/parameters/ContentCommandKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [channelId, contentType]
+              properties:
+                channelId: { $ref: '#/components/schemas/Id' }
+                contentType: { type: string, enum: [SHORTS, LONGFORM] }
+      responses:
+        '200':
+          description: 기존 요청 재생
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProductionRequestSummary' }
+        '201':
+          description: 요청 및 초기 단계 생성
+          headers:
+            Location:
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProductionRequestSummary' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+  /api/v1/production-requests/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ProductionRequestId'
+    get:
+      operationId: getProductionRequest
+      summary: 제작 요청과 단계 및 비용 상태 조회
+      tags: [Production]
+      responses:
+        '200': { $ref: '#/components/responses/ProductionRequestDetail' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/production-requests/{id}/cancel:
+    parameters:
+      - $ref: '#/components/parameters/ProductionRequestId'
+    post:
+      operationId: cancelProductionRequest
+      summary: 취소 의도 기록 및 현재 상태 반환
+      tags: [Production]
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      responses:
+        '200': { $ref: '#/components/responses/ProductionRequestDetail' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
 components:
   securitySchemes:
     sessionCookie:
@@ -1213,6 +1284,12 @@ components:
       description: 원장 event_key로 사용. 같은 키·같은 내용은 같은 결과, 다른 내용은 409 RESOURCE_CONFLICT.
       schema: { $ref: '#/components/schemas/IdempotencyKey' }
 
+    ProductionRequestId:
+      name: id
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Id' }
+
     ContentCommandKey:
       name: Idempotency-Key
       in: header
@@ -1221,6 +1298,11 @@ components:
       schema: { $ref: '#/components/schemas/IdempotencyKey' }
 
   responses:
+    ProductionRequestDetail:
+      description: 제작 요청의 현재 상세 상태
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ProductionRequestDetail' }
     BadRequest:
       description: INVALID_REQUEST, VALIDATION_FAILED, PAYLOAD_TOO_LARGE 등 입력 오류
       content:
@@ -1276,6 +1358,45 @@ components:
           schema: { $ref: '#/components/schemas/BudgetPolicy' }
 
   schemas:
+    ProductionStatus:
+      type: string
+      enum: [QUEUED, RUNNING, RECOVERY_REQUIRED, SUCCEEDED, FAILED, CANCELLED]
+    ProductionRequestSummary:
+      type: object
+      required: [id, status]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        status: { $ref: '#/components/schemas/ProductionStatus' }
+    ProductionRequestDetail:
+      type: object
+      required: [id, channelId, contentType, status, limitKrw, reservedKrw, recognizedKrw, steps]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        channelId: { $ref: '#/components/schemas/Id' }
+        contentType: { type: string, enum: [SHORTS, LONGFORM] }
+        status: { $ref: '#/components/schemas/ProductionStatus' }
+        contentId: { type: [string, 'null'] }
+        runId: { type: [string, 'null'] }
+        cancelRequestedAt: { type: [string, 'null'], format: date-time }
+        limitKrw: { type: string, description: 제작 요청 상한 KRW }
+        reservedKrw: { type: string, description: 남은 예약액 KRW }
+        recognizedKrw: { type: string, description: 인식 비용 합계 KRW }
+        steps:
+          type: array
+          items:
+            type: object
+            required: [stage, targetKey, inputGeneration, status, attempts]
+            properties:
+              stage:
+                type: string
+                enum: [DISCOVER, SELECT, RESEARCH, SCRIPT, SCENES, IMAGE, TTS, SUBTITLE, RENDER, METADATA, QC]
+              targetKey: { type: string }
+              inputGeneration: { type: integer, minimum: 1 }
+              status:
+                type: string
+                enum: [PENDING, RUNNING, RETRY_WAIT, RECOVERY_REQUIRED, SUCCEEDED, FAILED, CANCELLED]
+              attempts: { type: integer, minimum: 0, maximum: 3 }
+
     Id:
       type: string
       description: 양의 signed BIGINT 식별자 문자열 (1~9223372036854775807)
