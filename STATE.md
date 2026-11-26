@@ -16,6 +16,14 @@
 ## 인수인계 기록
 작업 ID / 상태 / 변경 파일 / 테스트 명령 및 실제 결과 / 미해결 문제 / 다음 작업 / 필요 환경변수. 커밋 해시는 생성된 경우만 기록.
 
+### V2-04-DESIGN — 최종 설계 및 V2-05 요구사항 (2026-11-26 KST)
+
+- Codex, `v2/04-design`, 기준 `80b9fa596e3bd9bfc316892181a04342cfd70cc1`. `git fetch origin`과 `git ls-remote`, GitHub PR API에서 PR #6 열린 Draft, HEAD `42cbbcfd2762306e3cd6ec7dced8c6b864325cda`, 원격 통합 `c4832b7eca2cbf89893bce92fa2b980263cf695e`를 확인했다. V2-03 종료 승인 대기다.
+- 변경은 [V2-04 상세 설계](docs/v2/V2-04_IMPLEMENTATION_PLAN.md), [공통 계약](docs/v2/V2-04_COMMON_CONTRACT.md), [Claude 지시서](docs/v2/V2-04_CLAUDE_HANDOFF.md), [V2-05 요구사항](docs/v2/V2-05_IFNOVA_CONTENT.md), v2 README·로드맵과 DECISIONS/TASKS/STATE다.
+- 문서 검증은 D01~D10·R01~R07 추적과 로컬 링크, `git diff --cached --check`, staged Gitleaks를 적용했다. `Get-FileHash -Algorithm SHA256`으로 스파이크 MP4가 기록된 `f025ca40753efc18819a682acd31148e0428ee87251b6cc1323c4fec9d1661a4`와 일치함을 확인했다. 전체 스파이크·제품 테스트·렌더는 재실행하지 않았다.
+- 사용자 DB 접속 및 migration 적용 없음. 관측 PR #6 트리는 V12까지이며 다음 기준선에서 번호를 재확인한다. JNA ABI·Windows 생성/종료·Linux CI·권리 확인된 낭독/폰트로 제작한 서로 다른 두 편은 구현 인수에서 확인한다.
+- 다음 작업은 V2-03 DONE 후 승인된 통합 SHA 대조다. 별도 사용자 승인 후 공통 계약을 구현하고 고정 SHA에서 Codex/Claude 분리 worktree를 만든다. 설계 푸시 브랜치는 `origin/v2/04-design`이다.
+
 ### V2-03 — 독립 리뷰 HOLD 수정 (2026-11-26 KST)
 
 - 독립 리뷰 기준 `54ffea3c09246b61a057c427e6210591af20cccb`, 수정 브랜치 `v2/review-v2-03`, [Draft PR #6](https://github.com/Hjinsu/ai-studio/pull/6). 사용자가 HOLD를 수용했다. 별도 독립 리뷰 APPROVE와 사용자 승인 전까지 병합·DONE을 보류한다.
