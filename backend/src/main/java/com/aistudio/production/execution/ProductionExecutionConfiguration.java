@@ -7,6 +7,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 import com.aistudio.production.contract.DiscoveryEvaluator;
 import com.aistudio.production.contract.DiscoveryExecutionPort;
@@ -34,7 +35,7 @@ class ProductionExecutionConfiguration {
             ObjectProvider<StageWork> work, ExecutionProperties properties,
             ObjectProvider<DiscoveryExecutionPort> discoveryPort, ObjectProvider<DiscoveryEvaluator> evaluator,
             ObjectProvider<PlanningExecutionPort> planningPort, ObjectProvider<PlanningReview> review,
-            @Value("${ai-studio.production.planning-enabled:false}") boolean planningEnabled) {
+            @Value("${ai-studio.production.planning-enabled:false}") boolean planningEnabled, JdbcTemplate jdbc) {
         DiscoveryExecutionPort port = discoveryPort.getIfAvailable();
         // V2-02: discovery requests are claimed only when the discovery persistence/cost adapter is present
         DiscoveryFlow flow = port == null ? null
@@ -45,7 +46,8 @@ class ProductionExecutionConfiguration {
         PlanningFlow planningFlow = planning == null || planningReview == null ? null
                 : new PlanningFlow(planning, planningReview, properties.fakeEffectMaxKrw());
         return new ProductionExecutor(mapper, control, transactions, cost, selection,
-                work.getIfAvailable(() -> new FakeStageWork(properties.fakeEffectMaxKrw())), properties, flow,
+                work.getIfAvailable(() -> new FakeStageWork(properties.fakeEffectMaxKrw(),
+                        FakeStageWork.frozenRanges(jdbc))), properties, flow,
                 planningFlow);
     }
 
