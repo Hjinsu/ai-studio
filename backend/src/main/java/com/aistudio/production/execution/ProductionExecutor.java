@@ -335,45 +335,66 @@ public class ProductionExecutor implements AutoCloseable {
 
     // ------------------------------------------------------------------ finish
 
+    /**
+     * The cost check and every completion write share one transaction that holds the request lock. Settlement
+     * and evidence writers lock the request first, so the cost state cannot change between check and completion.
+     * The cost port's reads join this transaction (READ COMMITTED, non-locking, no budget_control). Any failure
+     * rolls the whole completion back and the request waits for a recheck.
+     */
     private void finish(Lease lease, List<StepRow> steps, ProductionStatus target) {
+        long anchor = anchorStep(steps);
+        boolean[] costRead = { false };
         String blocked;
         try {
-            CostState state = cost.readCostState(lease.requestId());
-            blocked = state == null ? "COST_STATE_UNAVAILABLE"
-                    : state.unresolved() ? "COST_UNRESOLVED"
-                    : !state.unappliedReceipts().isEmpty() ? "RECEIPT_UNAPPLIED"
-                    : state.spendingBlocked() && target == ProductionStatus.SUCCEEDED ? "SPENDING_BLOCKED"
-                    : null;
+            blocked = fenced(lease, locked -> {
+                costRead[0] = false; // a lock-conflict retry repeats the whole transaction
+                CostState state = cost.readCostState(locked.id());
+                costRead[0] = true;
+                String reason = blockReason(state, target);
+                if (reason != null) {
+                    postpone(lease, locked, anchor);
+                    return reason;
+                }
+                if (target == ProductionStatus.CANCELLED) {
+                    mapper.cancelOpenSteps(locked.id());
+                }
+                mapper.clearRechecks(locked.id());
+                if (locked.runId() != null) {
+                    mapper.releaseActiveRun(locked.contentId(), locked.runId());
+                    mapper.finishRun(locked.contentId(), locked.runId(), target.name());
+                }
+                if (mapper.finishRequest(locked.id(), target) != 1) {
+                    throw new IllegalStateException("Production request " + locked.id() + " could not finish");
+                }
+                return null;
+            });
+        } catch (LeaseLostException lost) {
+            throw lost;
         } catch (RuntimeException e) {
-            log.warn("Production request {} cost state unavailable", lease.requestId(), e);
-            blocked = "COST_STATE_UNAVAILABLE";
+            blocked = costRead[0] ? "FINISH_FAILED" : "COST_STATE_UNAVAILABLE";
+            log.warn("Production request {} completion rolled back: {}", lease.requestId(), blocked, e);
+            fenced(lease, locked -> postpone(lease, locked, anchor));
         }
         if (blocked != null) {
-            String reason = blocked;
-            long anchor = anchorStep(steps);
-            log.warn("Production request {} cannot finish as {}: {}", lease.requestId(), target, reason);
-            fenced(lease, locked -> {
-                mapper.scheduleRecheck(locked.id(), anchor, recheckMicros());
-                mapper.moveRequest(locked.id(), ProductionStatus.RUNNING, ProductionStatus.RECOVERY_REQUIRED);
-                return mapper.release(locked.id(), lease.owner(), lease.epoch());
-            });
+            log.warn("Production request {} cannot finish as {}: {}", lease.requestId(), target, blocked);
             return;
         }
-        fenced(lease, locked -> {
-            if (target == ProductionStatus.CANCELLED) {
-                mapper.cancelOpenSteps(locked.id());
-            }
-            mapper.clearRechecks(locked.id());
-            if (locked.runId() != null) {
-                mapper.releaseActiveRun(locked.contentId(), locked.runId());
-                mapper.finishRun(locked.contentId(), locked.runId(), target.name());
-            }
-            if (mapper.finishRequest(locked.id(), target) != 1) {
-                throw new IllegalStateException("Production request " + locked.id() + " could not finish");
-            }
-            return null;
-        });
         log.info("Production request {} finished as {}", lease.requestId(), target);
+    }
+
+    private static String blockReason(CostState state, ProductionStatus target) {
+        return state == null ? "COST_STATE_UNAVAILABLE"
+                : state.unresolved() ? "COST_UNRESOLVED"
+                : !state.unappliedReceipts().isEmpty() ? "RECEIPT_UNAPPLIED"
+                : state.spendingBlocked() && target == ProductionStatus.SUCCEEDED ? "SPENDING_BLOCKED"
+                : null;
+    }
+
+    /** Keeps the request and its run open, schedules a recheck and releases the lease. */
+    private int postpone(Lease lease, RequestRow locked, long anchor) {
+        mapper.scheduleRecheck(locked.id(), anchor, recheckMicros());
+        mapper.moveRequest(locked.id(), ProductionStatus.RUNNING, ProductionStatus.RECOVERY_REQUIRED);
+        return mapper.release(locked.id(), lease.owner(), lease.epoch());
     }
 
     /** The last step that ran; it carries the recheck time of a request blocked on cost state. */

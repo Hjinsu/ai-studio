@@ -72,6 +72,8 @@ final class ExecutionFakes {
         volatile boolean unresolvedOverride;
         volatile boolean spendingBlocked;
         volatile RuntimeException readFailure;
+        volatile Consumer<Long> duringRead = id -> {};
+        volatile boolean readInTransaction;
 
         FakeCost(JdbcTemplate jdbc) {
             this.jdbc = jdbc;
@@ -88,6 +90,8 @@ final class ExecutionFakes {
             unresolvedOverride = false;
             spendingBlocked = false;
             readFailure = null;
+            duringRead = id -> {};
+            readInTransaction = false;
         }
 
         @Override
@@ -157,6 +161,8 @@ final class ExecutionFakes {
 
         @Override
         public CostState readCostState(long requestId) {
+            readInTransaction = TransactionSynchronizationManager.isActualTransactionActive();
+            duringRead.accept(requestId);
             if (readFailure != null) {
                 throw readFailure;
             }

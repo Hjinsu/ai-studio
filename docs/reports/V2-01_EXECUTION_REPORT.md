@@ -33,7 +33,7 @@
   - `REJECTED`: 발송 없음, 단계 실패(취소 의도 시 취소).
   - `WAITING`·`RECOVERY_REQUIRED`·예외·null: 결과 불명. 단계·요청 `RECOVERY_REQUIRED`, `retry_at = 현재 + 복구 재확인`, lease 해제. 재확인 때 **같은 키·해시를 다시 제시**하며 시도로 세지 않는다. 새 효과를 만들지 않는다.
   - 영수증 적용 트랜잭션 실패 시 롤백하고 복구 대기로 전환한다. 재제시하면 포트가 저장된 영수증을 돌려주어 재적용한다.
-- **종료**: `readCostState`가 미해결·미적용 영수증·조회 실패(성공은 지출 차단 포함) 중 하나라도 보고하면 종료하지 않는다. 요청을 `RECOVERY_REQUIRED`로 두고 마지막 실행 단계의 `retry_at`으로 재확인을 예약하며 Run은 열린 상태로 유지한다. 종료 가능하면 한 트랜잭션에서 미완료 단계를 취소(취소 시)하고, active Run 포인터를 해제(content DRAFT)한 뒤 Run과 요청을 종료하고 lease를 해제한다.
+- **종료**(종료 경합 수정 반영): 요청 행을 잠그고 fencing을 확인한 **하나의 트랜잭션** 안에서 `readCostState`를 호출하고, 그 결과에 따라 보류 또는 종료 쓰기를 같은 트랜잭션에서 수행한다. 정산·증거 기록자는 요청을 먼저 잠그므로 확인과 종료 사이에 비용 상태가 바뀌지 않는다. 비용 포트의 읽기는 이 트랜잭션(READ COMMITTED, 비잠금, budget_control 미획득)에 참여한다. 조회 실패나 종료 쓰기 오류는 Run·포인터·요청 변경을 모두 롤백한 뒤 별도 fenced 트랜잭션에서 복구 대기로 둔다(`COST_STATE_UNAVAILABLE`/`FINISH_FAILED`). `readCostState`가 미해결·미적용 영수증·조회 실패(성공은 지출 차단 포함) 중 하나라도 보고하면 종료하지 않는다. 요청을 `RECOVERY_REQUIRED`로 두고 마지막 실행 단계의 `retry_at`으로 재확인을 예약하며 Run은 열린 상태로 유지한다. 종료 가능하면 한 트랜잭션에서 미완료 단계를 취소(취소 시)하고, active Run 포인터를 해제(content DRAFT)한 뒤 Run과 요청을 종료하고 lease를 해제한다.
 - **취소**: 미발송 단계는 시작하지 않고 `CANCELLED`로 둔다. 실행 중인 로컬 단계의 실제 결과는 보존한다. 불명 효과가 있으면 정산 후에 취소를 마친다.
 - **잠금 순서**: claim은 budget_control(X) → 요청이다. 단계와 종료는 요청 → (선정 포트) → content → content_run 순서다. 요청 락 보유 중에 budget_control을 잡지 않는다. 비용 상태 조회는 트랜잭션 밖에서 수행한다.
 
@@ -46,7 +46,8 @@ $env:AI_STUDIO_IT_DB_HOST='127.0.0.1'; $env:AI_STUDIO_IT_DB_PORT='3307'; $env:AI
 .\gradlew.bat :backend:test :backend:integrationTest :backend:bootJar --rerun-tasks --no-build-cache
 ```
 
-- 단위 **164/164**(기준 151 + 신규 13). 격리 통합 **178/178**(기준 154 + 신규 24). bootJar 성공.
+- 단위 **164/164**(기준 151 + 신규 13). 격리 통합 **181/181**(기준 154 + 신규 27, 종료 경합 수정 3건 포함). bootJar 성공.
+- 종료 경합 수정 검증: 비용 확인 시 요청 행이 잠겨 있음(다른 연결 `FOR UPDATE NOWAIT` 실패), 확인 직후 들어온 정산 기록자가 종료 커밋 후에야 락을 얻음(종료 상태 관측), 종료 중 오류 시 Run·content 포인터·요청 전체 롤백 후 재확인으로 완료. 세 테스트는 수정 전 `finish`에서 모두 실패함을 확인했다.
 - 통합 검증 사례: 11단계 순서와 Run 종료, 백그라운드 worker, 3개 동시 claim 중 유효 lease 2개, 한 요청 단일 lease, 만료/교체 worker 쓰기·heartbeat 거부, 단계 수행 중 lease 상실 후 결과 기록 거부, 로컬 재시도 backoff·성공·3회 한도·재시도 불가, SELECT 연결 실패 롤백·재시도, 시작 전·재시도 대기·로컬 단계 중·선정 직전 취소, 불명 효과 격리·재제시 시 재발송 없음, 발송 후 예외, 불명 효과 중 취소, 실행 실패·거부, 발송 직후 재시작 복구, 영수증 커밋 전 재시작 시 재적용 1회, 로컬 단계 중 재시작과 반복 재시작 3회 한도, 비용 미해결·조회 실패·지출 차단 시 완료 보류 및 지출 차단 상태의 실패 종료.
 - 변형 확인: lease 상한 검사를 3으로 바꾸면 동시 claim 테스트가 실패한다. 만료 검사를 제거해도 fenced 트랜잭션의 갱신 조건(`lease_until > 현재`)이 쓰기를 막는다. 이는 의도한 이중 방어다.
 - 비밀정보: diff 패턴 검사와 임시 비밀번호 미포함을 확인했다. 로컬에는 gitleaks가 없어 CI의 gitleaks job에서 확인한다.
@@ -64,7 +65,7 @@ $env:AI_STUDIO_IT_DB_HOST='127.0.0.1'; $env:AI_STUDIO_IT_DB_PORT='3307'; $env:AI
 2. **`REJECTED` 의미**: 실행기는 발송이 없었고 같은 키로 재시도해도 결과가 같다고 보고 단계를 실패시킨다. 발송 후 거부가 가능하다면 `RECOVERY_REQUIRED`를 사용해야 한다.
 3. **`WAITING`**: 단계 상태 집합에 대기 상태가 없어 `RECOVERY_REQUIRED`로 두고 재확인 주기에 재제시한다. 짧은 polling이 필요하면 상태 또는 주기 분리를 제안한다.
 4. **`markReceiptApplied`**: 실행기의 fenced 트랜잭션에 참여한다. 이 트랜잭션에서는 요청 락을 이미 보유하므로 budget_control을 획득하면 안 된다. 같은 영수증의 중복 호출은 멱등이어야 한다.
-5. **`readCostState`**: 트랜잭션 밖에서 호출한다. 결과 확인 후 종료 커밋 사이에 비용 상태가 악화되지 않는다는 근거는 lease 보유자만 효과를 만들 수 있다는 점이다. 증거 충돌로 해결 상태가 다시 미해결이 될 수 있다면 알려 주면 종료 트랜잭션 안의 재확인으로 바꾼다.
+5. **`readCostState`**(종료 경합 수정 후): 요청 락을 보유한 실행기 종료 트랜잭션(READ COMMITTED) 안에서 호출한다. `v2/safety` `2211cc0` 구현은 비잠금 읽기만 하고 기본 전파로 참여하므로 그대로 호환된다. 이 구현의 `REPEATABLE_READ` 지정은 참여 시 적용되지 않으며, 실행기 트랜잭션은 락 획득 뒤 최신 커밋 상태를 읽는다. 앞으로도 이 메서드에서 budget_control이나 요청 이외의 락을 얻지 않고, 모든 정산·증거 쓰기가 요청을 먼저 잠그는지 결합 검증에서 확인해야 한다.
 6. **`ProductionSelectionPort.link`**: 실행기 트랜잭션(요청 락 보유)에 참여한다. 요청의 content/run/selection_hash 연결, Content PRODUCING·active 포인터 설정은 포트가 담당한다. 실행기는 이후 Run QUEUED→RUNNING과 종료 시 포인터 해제·Run 종료를 담당한다. 동일 fingerprint 재생은 기존 연결, 다른 fingerprint는 `ApiException(RESOURCE_CONFLICT)`이면 재시도 불가로 처리한다.
 7. **FAKE 가격**: `PricedRequest("KRW", fake-effect-max-krw(기본 1), "SUCCESS")`. FAKE 비용 대역의 시나리오 이름과 통화가 다르면 알려 준다.
 8. **설정 제안**: 비용 포트 FAKE 구현이 들어오면 local/test 프로파일에서 `ai-studio.production.executor.enabled=true`를 켜는 설정 변경은 통합 담당자가 결정한다.

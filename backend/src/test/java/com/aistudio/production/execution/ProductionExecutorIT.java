@@ -722,6 +722,92 @@ class ProductionExecutorIT {
     }
 
     @Test
+    void costStateIsReadInsideTheCompletionTransactionHoldingTheRequestLock() {
+        long id = newRequest();
+        JdbcTemplate other = new JdbcTemplate(DB.dataSource());
+        boolean[] lockedElsewhere = { false };
+        cost.duringRead = requestId -> {
+            try {
+                other.queryForList("SELECT id FROM production_request WHERE id = ? FOR UPDATE NOWAIT", requestId);
+            } catch (org.springframework.dao.DataAccessException expected) {
+                lockedElsewhere[0] = true;
+            }
+        };
+
+        drain("w1");
+
+        assertThat(cost.readInTransaction).isTrue();
+        assertThat(lockedElsewhere[0]).as("request row is locked while cost state is checked").isTrue();
+        assertThat(status(id)).isEqualTo("SUCCEEDED");
+    }
+
+    @Test
+    void settlementArrivingAfterTheCheckWaitsUntilCompletionCommits() throws Exception {
+        long id = newRequest();
+        String[] seen = new String[1];
+        Thread[] settler = new Thread[1];
+        CountDownLatch acquired = new CountDownLatch(1);
+        cost.duringRead = requestId -> {
+            // a settlement or evidence writer locks the request first, as the cost port does
+            settler[0] = new Thread(() -> {
+                try (java.sql.Connection connection = DB.dataSource().getConnection()) {
+                    connection.setAutoCommit(false);
+                    try (var statement = connection.prepareStatement(
+                            "SELECT status FROM production_request WHERE id = ? FOR UPDATE")) {
+                        statement.setLong(1, requestId);
+                        try (var rows = statement.executeQuery()) {
+                            rows.next();
+                            seen[0] = rows.getString(1);
+                        }
+                        acquired.countDown();
+                    }
+                    connection.commit();
+                } catch (java.sql.SQLException e) {
+                    throw new IllegalStateException(e);
+                }
+            });
+            settler[0].start();
+            // give the writer every chance to slip in between the check and the completion writes
+            try {
+                acquired.await(1, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        };
+
+        drain("w1");
+        settler[0].join(30_000);
+
+        assertThat(status(id)).isEqualTo("SUCCEEDED");
+        assertThat(seen[0]).as("the writer only got the lock after completion committed").isEqualTo("SUCCEEDED");
+    }
+
+    @Test
+    void failureDuringCompletionRollsBackRunAndRequestTogether() {
+        long id = newRequest();
+        // inside the completion transaction: make the final request update fail after the run writes
+        cost.duringRead = requestId -> jdbc.update("UPDATE production_request SET status = 'QUEUED' WHERE id = ?",
+                requestId);
+
+        drain("w1");
+
+        assertThat(status(id)).isEqualTo("RECOVERY_REQUIRED");
+        assertThat(runStatus(id)).isEqualTo("RUNNING");
+        Map<String, Object> content = content(id);
+        assertThat(content.get("status")).isEqualTo("PRODUCING");
+        assertThat(content.get("active_run_id")).isEqualTo(request(id).get("run_id"));
+        assertThat(stepStatuses(id)).containsOnly("SUCCEEDED");
+        assertLeaseReleased(id);
+        assertThat(executor.runOnce("w1")).as("recheck not due").isFalse();
+
+        cost.duringRead = requestId -> {};
+        makeDue(id);
+        drain("w1");
+        assertThat(status(id)).isEqualTo("SUCCEEDED");
+        assertRunFinished(id, "SUCCEEDED");
+    }
+
+    @Test
     void spendingBlockStillAllowsFailureToClose() {
         long id = newRequest();
         cost.spendingBlocked = true;
