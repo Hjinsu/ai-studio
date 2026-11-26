@@ -1,7 +1,8 @@
-import { screen, within } from '@testing-library/react'
+import { act, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import { channels, csrf, error, health, me, mockApi, on, page, renderApp } from '../test/mockApi'
+import { productionKey } from '../api/production'
 
 const allChannels = on('GET', '/api/v1/channels', 200, { ...page(channels), size: 100 })
 const stages = ['DISCOVER', 'SELECT', 'RESEARCH', 'SCRIPT', 'SCENES', 'IMAGE', 'TTS', 'SUBTITLE', 'RENDER', 'METADATA', 'QC']
@@ -153,6 +154,19 @@ describe('Production planning results (V2-03)', () => {
     expect(findings).toHaveTextContent('확인되지 않은 부가 내용 제외')
     expect(within(section).getByText('필수 차단 0건 · 개선 권고 1건')).toBeInTheDocument()
     expect(within(section).getAllByText('검수 지적 없음')).toHaveLength(2)
+  })
+
+  it('loads the final planning result when the detail becomes terminal between polls', async () => {
+    let calls = 0
+    api(detail('RUNNING', () => 'PENDING'), (call) => {
+      if (call.method === 'GET' && call.url === '/api/v1/production-requests/42/planning') {
+        return { status: 200, body: ++calls === 1 ? planning([]) : done }
+      }
+    })
+    const { client } = renderApp('/production/42')
+    expect(await screen.findByText('자료 조사 전입니다')).toBeInTheDocument()
+    act(() => client.setQueryData(productionKey('42'), detail('SUCCEEDED', () => 'SUCCEEDED')))
+    expect(await screen.findByRole('list', { name: '장면 목록' })).toBeInTheDocument()
   })
 
   it('explains a blocked research step and that later stages did not run', async () => {

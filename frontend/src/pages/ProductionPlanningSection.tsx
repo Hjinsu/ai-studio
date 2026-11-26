@@ -31,10 +31,12 @@ type Stage = (typeof PLANNING_STAGES)[number]
  * 자료는 실제 제작·실제 출처 확인과 구분해 표시하며, 편집·재작성 기능은 두지 않는다.
  */
 export function PlanningSection({ request }: { request: ProductionRequestDetail }) {
+  const terminal = isTerminal(request.status)
   const planning = useQuery({
-    queryKey: planningKey(request.id),
+    // Detail can observe completion before the planning poll sees the last committed results.
+    queryKey: [...planningKey(request.id), terminal],
     queryFn: () => getProductionPlanning(request.id),
-    refetchInterval: () => (isTerminal(request.status) ? false : POLL_MS),
+    refetchInterval: terminal ? false : POLL_MS,
   })
   const title = '자료 조사·대본·장면'
   if (planning.isPending) {

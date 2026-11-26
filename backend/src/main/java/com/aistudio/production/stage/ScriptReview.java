@@ -39,7 +39,7 @@ public final class ScriptReview {
     static final double ESTIMATE_TOLERANCE = 0.10;
     static final int COMPARISON_CHARS = 600;
     private static final Pattern BRANDING = Pattern.compile(
-            "(?i)[^.!?]*\\b(follow|subscribe|like and share|ifnova)\\b[^.!?]*[.!?]?");
+            "(?i)[^.!?]*\\b(follow|subscribe|like and share)\\b[^.!?]*[.!?]?");
 
     public Validation review(ScriptInput input, Script script) {
         Findings findings = new Findings();
