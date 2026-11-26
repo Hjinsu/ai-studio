@@ -785,12 +785,99 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/production-requests/{id}/discovery": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ProductionRequestId"];
+            };
+            cookie?: never;
+        };
+        /** 소재 후보와 평가 및 선정 결과 조회 */
+        get: operations["getProductionDiscovery"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/production-requests/{id}/selection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ProductionRequestId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 수동 소재 선택 의도 저장 */
+        post: operations["chooseProductionCandidate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /** @enum {string} */
         ProductionStatus: "QUEUED" | "RUNNING" | "RECOVERY_REQUIRED" | "SUCCEEDED" | "FAILED" | "CANCELLED";
+        ProductionDiscoveryDetail: {
+            /** @enum {string} */
+            selectionMode: "AUTO" | "MANUAL";
+            candidateCount: number;
+            version: number;
+            awaitingSelection: boolean;
+            chosenCandidateId?: number | null;
+            selectedCandidateId?: number | null;
+            selectionReason?: string | null;
+            candidates: components["schemas"]["EvaluatedDiscoveryCandidate"][];
+        };
+        DiscoveryScores: {
+            interest: number;
+            channelFit: number;
+            originality: number;
+            visualPotential: number;
+            evidencePotential: number;
+            costEfficiency: number;
+        };
+        EvaluatedDiscoveryCandidate: {
+            candidateId: number;
+            candidate: {
+                coreTopic: string;
+                centralQuestion: string;
+                title: string;
+                angle: string;
+                outline: string[];
+                evidencePlan: {
+                    sourceType: string;
+                    searchQuestion: string;
+                }[];
+                assertions: {
+                    assertion: string;
+                    evidenceId?: string | null;
+                }[];
+                suggestedScores: components["schemas"]["DiscoveryScores"];
+                rationale: string;
+            };
+            scores: components["schemas"]["DiscoveryScores"];
+            totalScore: number;
+            blockCodes: ("DUPLICATE" | "SIMILARITY_UNCERTAIN" | "CHANNEL_PROHIBITED" | "UNSUPPORTED_ASSERTION")[];
+            comparisons: {
+                topicId?: string | null;
+                contentId?: string | null;
+                revisionId?: string | null;
+                reason: string;
+            }[];
+            rationale: string;
+        };
         ProductionRequestSummary: {
             id: components["schemas"]["Id"];
             status: components["schemas"]["ProductionStatus"];
@@ -1373,6 +1460,15 @@ export interface components {
         };
     };
     responses: {
+        /** @description 현재 소재 발굴 및 선정 상태 */
+        ProductionDiscoveryDetail: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ProductionDiscoveryDetail"];
+            };
+        };
         /** @description 제작 요청의 현재 상세 상태 */
         ProductionRequestDetail: {
             headers: {
@@ -2882,6 +2978,17 @@ export interface operations {
                     channelId: components["schemas"]["Id"];
                     /** @enum {string} */
                     contentType: "SHORTS" | "LONGFORM";
+                    /**
+                     * @description SHORTS 소재 설정
+                     * @default AUTO
+                     * @enum {string}
+                     */
+                    selectionMode?: "AUTO" | "MANUAL";
+                    /**
+                     * @description SHORTS 소재 후보 수
+                     * @default 8
+                     */
+                    candidateCount?: number;
                 };
             };
         };
@@ -2946,6 +3053,50 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    getProductionDiscovery: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ProductionRequestId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["ProductionDiscoveryDetail"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    chooseProductionCandidate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ProductionRequestId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    candidateId: number;
+                    version: number;
+                };
+            };
+        };
+        responses: {
+            200: components["responses"]["ProductionDiscoveryDetail"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
         };
     };
 }

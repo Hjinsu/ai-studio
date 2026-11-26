@@ -5,6 +5,8 @@ import java.time.Instant;
 import java.util.List;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 
@@ -18,6 +20,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.aistudio.content.command.IdempotentCommands;
+import com.aistudio.production.contract.ProductionDiscovery.EvaluatedCandidate;
+import com.aistudio.production.contract.ProductionDiscovery.Mode;
 import com.aistudio.production.contract.ProductionStatus;
 import com.aistudio.security.CurrentActor;
 import com.aistudio.shared.api.ApiId;
@@ -26,7 +30,14 @@ import com.aistudio.shared.api.ApiId;
 @RequestMapping("/api/v1/production-requests")
 class ProductionRequestController {
     record Create(@NotNull @Pattern(regexp = ApiId.PATTERN) String channelId,
-            @NotNull @Pattern(regexp = "SHORTS|LONGFORM") String contentType) {}
+            @NotNull @Pattern(regexp = "SHORTS|LONGFORM") String contentType,
+            Mode selectionMode, @Min(5) @Max(10) Integer candidateCount) {}
+
+    record Choose(@NotNull @Min(1) @Max(10) Integer candidateId, @NotNull @Min(0) Integer version) {}
+
+    record Discovery(Mode selectionMode, int candidateCount, int version, boolean awaitingSelection,
+            List<EvaluatedCandidate> candidates, Integer chosenCandidateId, Integer selectedCandidateId,
+            String selectionReason) {}
 
     record Summary(String id, ProductionStatus status) {}
 
@@ -45,7 +56,7 @@ class ProductionRequestController {
             @RequestHeader("Idempotency-Key") @Pattern(regexp = IdempotentCommands.KEY_PATTERN) String key,
             @Valid @RequestBody Create body) {
         var result = service.create(CurrentActor.principal().id(), ApiId.parse("channelId", body.channelId()),
-                body.contentType(), key);
+                body.contentType(), key, body.selectionMode(), body.candidateCount());
         String id = Long.toString(result.request().id());
         Summary summary = new Summary(id, result.request().status());
         return result.replayed() ? ResponseEntity.ok(summary)
@@ -60,5 +71,16 @@ class ProductionRequestController {
     @PostMapping("/{id}/cancel")
     Detail cancel(@PathVariable @Pattern(regexp = ApiId.PATTERN) String id) {
         return service.cancel(CurrentActor.principal().id(), ApiId.parse("id", id));
+    }
+
+    @GetMapping("/{id}/discovery")
+    Discovery discovery(@PathVariable @Pattern(regexp = ApiId.PATTERN) String id) {
+        return service.discovery(CurrentActor.principal().id(), ApiId.parse("id", id));
+    }
+
+    @PostMapping("/{id}/selection")
+    Discovery choose(@PathVariable @Pattern(regexp = ApiId.PATTERN) String id, @Valid @RequestBody Choose choice) {
+        return service.choose(CurrentActor.principal().id(), ApiId.parse("id", id), choice.candidateId(),
+                choice.version());
     }
 }

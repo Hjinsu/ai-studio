@@ -311,3 +311,13 @@ AI_STUDIO_IT_DB_HOST=127.0.0.1 AI_STUDIO_IT_DB_PORT=3307 AI_STUDIO_IT_DB_USER=ro
 - [CI Run 45737242958](https://github.com/Hjinsu/ai-studio/actions/runs/45737242958) 7/7 성공. 격리 전체 백엔드 단위 165건·통합 200건, bootJar, binlog ON 핵심 18건, 실제 비용·선정 포트 FAKE 11단계, 효과 8건·확정 KRW 8 확인. 프론트 단위 73건·Edge E2E 10건, OpenAPI 생성 타입 확인. OpenAPI 경고 2건은 공통 기준부터 유지된 항목이다. [실행기 보고서](docs/reports/V2-01_EXECUTION_REPORT.md) · [비용 검증](docs/v2/V2-01_SAFETY_HANDOFF.md)
 - V9 적용 검증은 격리 DB에서 수행했다. 이번 종료 세션은 Git·문서 검증만 수행했으며 사용자 DB에는 접속하거나 V9을 적용하지 않았다. 실행기 기본값은 비활성이다. 실제 유료 호출과 YouTube 게시는 각각 별도 승인 범위다.
 - 다음 배정은 **V2-02 소재 자동 발굴 및 선정**이다. 기술 선행 조건은 충족했으며 사용자 착수 승인 대기 상태다.
+
+## V2-02 — 설계 및 공통 계약 착수
+
+- ChatGPT APPROVE WITH MINOR FIXES 및 사용자 착수 승인. `91c3e9ad1394b1c9b122231a60b8acc5a8d873b8`에서 `v2/02-common`을 시작했다. [구현 계획과 R01~R07](docs/v2/V2-02_IMPLEMENTATION_PLAN.md)
+- V10은 제작 요청별 소재 묶음 테이블 1개를 추가한다. 신규 SHORTS 요청은 스냅샷을 저장하고 제품 실행기가 준비될 때까지 대기한다. 기존 요청은 이전 경로를 실행한다.
+- 다음 작업은 공통 계약 HEAD에서 `v2/02-product`와 `v2/02-safety`의 담당 구현 및 결합 검증이다.
+
+- 격리 MariaDB 11.8.2에서 `gradlew.bat :backend:test :backend:bootJar :backend:integrationTest --rerun-tasks --no-build-cache`를 실행했다. 단위 165건과 통합 202건이 통과했다. V10 설치·업그레이드, V9 요청 멱등 재생, 기존 실행기의 새 파이프라인 제외, 평가 조회·수동 선택의 차단 및 재생을 확인했다.
+- OpenAPI lint와 생성 타입 일치가 통과했다. 공통 기준부터 존재한 경고 2건을 확인했다. V1~V9 원본은 동일하며 사용자 DB에 V10을 적용하지 않았다.
+- 생성·평가·선정·UI, 응답과 영수증 장애 복구, 실제 동시 SELECT와 잠금 순서의 V2-02 결합 검증은 역할별 구현 후 진행한다.

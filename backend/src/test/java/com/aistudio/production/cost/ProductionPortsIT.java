@@ -341,7 +341,11 @@ class ProductionPortsIT {
                         .header("Idempotency-Key", key).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"channelId\":\"" + channel + "\",\"contentType\":\"SHORTS\"}"))
                 .andExpect(status().isCreated());
-        return jdbc.queryForObject("SELECT id FROM production_request WHERE request_key = ?", Long.class, key);
+        long id = jdbc.queryForObject("SELECT id FROM production_request WHERE request_key = ?", Long.class, key);
+        // This suite exercises persisted V2-01 requests while the V2-02 executor is pending.
+        jdbc.update("DELETE FROM production_discovery WHERE production_request_id = ?", id);
+        jdbc.update("UPDATE production_request SET pipeline_version = 'v2-fixed-1' WHERE id = ?", id);
+        return id;
     }
 
     private void run(String owner) {

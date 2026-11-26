@@ -187,3 +187,7 @@ ChatGPT APPROVE WITH MINOR FIXES 및 사용자 승인. [구현 계획](docs/v2/V
 ## V2-01 — 최종 승인 및 v2/integration 병합
 
 2026-11-26 KST · ChatGPT 최종 검토와 별도 Codex 비용 독립 리뷰가 APPROVE로 완료되어 사용자가 종료와 [PR #4](https://github.com/Hjinsu/ai-studio/pull/4) 병합을 승인했다. 승인 SHA `23626c609dd7526666f6d9b0e8c035babbcf433c`의 [CI](https://github.com/Hjinsu/ai-studio/actions/runs/45737242958) 7/7을 재확인하고 merge commit `37308fbd65d7f3a4a3bf61b454faea629f53f1ca`로 통합했다. V2-01은 DONE이며 V2-02는 별도 착수 승인 대상이다. main 병합, 사용자 DB Migration, 실제 유료 호출, 실행기 기본 활성화 및 YouTube 게시는 이번 승인 범위에 포함되지 않는다.
+
+## V2-02 — 설계 및 착수 승인
+
+ChatGPT APPROVE WITH MINOR FIXES 및 사용자 승인. V10의 `production_discovery` 1개, 기본 AUTO와 선택적 MANUAL, 기본 후보 8개(5~10), 결정론적 FAKE와 [R01~R07 및 소유권](docs/v2/V2-02_IMPLEMENTATION_PLAN.md)을 적용한다. 공통 계약의 검증·푸시를 승인했다. 제품과 안전 브랜치는 같은 공통 HEAD를 출발점으로 사용한다. 최종 통합 병합은 별도 승인 대상이다.

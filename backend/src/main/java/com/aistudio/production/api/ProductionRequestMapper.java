@@ -47,10 +47,10 @@ interface ProductionRequestMapper {
             INSERT INTO production_request (channel_id, channel_config_id, requested_by, content_type,
                 pipeline_version, request_key, request_hash, limit_krw, created_at)
             VALUES (#{channelId}, #{configId}, #{actorId}, #{contentType},
-                'v2-fixed-1', #{key}, #{hash}, #{limit}, UTC_TIMESTAMP(6))
+                #{pipeline}, #{key}, #{hash}, #{limit}, UTC_TIMESTAMP(6))
             """)
     void insert(long channelId, long configId, long actorId, String contentType,
-            String key, String hash, BigDecimal limit);
+            String pipeline, String key, String hash, BigDecimal limit);
 
     @Insert("""
             INSERT INTO production_step (production_request_id, stage) VALUES (#{id}, #{stage})

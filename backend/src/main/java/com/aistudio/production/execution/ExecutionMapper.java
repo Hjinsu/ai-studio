@@ -40,7 +40,8 @@ interface ExecutionMapper {
      */
     @Select("""
             SELECT r.id FROM production_request r
-            WHERE r.status IN ('QUEUED', 'RUNNING', 'RECOVERY_REQUIRED')
+            WHERE r.pipeline_version = 'v2-fixed-1'
+              AND r.status IN ('QUEUED', 'RUNNING', 'RECOVERY_REQUIRED')
               AND (r.lease_owner IS NULL OR r.lease_until <= UTC_TIMESTAMP(6))
               AND ((r.cancel_requested_at IS NOT NULL AND r.status <> 'RECOVERY_REQUIRED')
                    OR NOT EXISTS (SELECT 1 FROM production_step s
