@@ -2,6 +2,7 @@ import {
   Activity,
   ArrowLeftRight,
   BookOpenText,
+  Clapperboard,
   Gauge,
   LayoutDashboard,
   Receipt,
@@ -29,6 +30,7 @@ export interface NavGroup {
 export const NAV: NavGroup[] = [
   { label: '개요', items: [{ to: '/', label: '대시보드', icon: LayoutDashboard }] },
   { label: '채널 관리', items: [{ to: '/channels', label: '채널 관리', icon: Tv }] },
+  { label: '콘텐츠 제작', items: [{ to: '/production', label: '제작 시작', icon: Clapperboard }] },
   {
     label: '비용·예산',
     items: [
