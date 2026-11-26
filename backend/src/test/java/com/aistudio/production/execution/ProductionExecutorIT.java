@@ -23,6 +23,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -63,14 +64,20 @@ class ProductionExecutorIT {
         DB.register(registry);
     }
 
+    /**
+     * Port doubles win over the real cost/selection adapters when both are on the context (combined suite);
+     * standalone they are the only candidates. {@code @Primary} keeps both wirings unambiguous.
+     */
     @TestConfiguration
     static class Ports {
         @Bean
+        @Primary
         FakeCost fakeCost(JdbcTemplate jdbc) {
             return new FakeCost(jdbc);
         }
 
         @Bean
+        @Primary
         FakeSelection fakeSelection(JdbcTemplate jdbc) {
             return new FakeSelection(jdbc);
         }
@@ -403,6 +410,27 @@ class ProductionExecutorIT {
         assertThat(render.get("last_error_code")).isEqualTo("LOCAL_ERROR");
         assertThat(work.failures.get(ProductionStage.RENDER)).hasSize(1);
         assertThat(step(id, ProductionStage.METADATA).get("status")).isEqualTo("PENDING");
+        assertRunFinished(id, "FAILED");
+        assertLeaseReleased(id);
+    }
+
+    @Test
+    void zeroPricedEffectIsNeverPresentedToTheCostPort() {
+        long id = newRequest();
+        work.prices = Map.of(ProductionStage.SCRIPT, java.math.BigDecimal.ZERO);
+
+        drain("w1");
+        makeDue(id);
+        drain("w1");
+        makeDue(id);
+        drain("w1");
+
+        assertThat(status(id)).isEqualTo("FAILED");
+        Map<String, Object> script = step(id, ProductionStage.SCRIPT);
+        assertThat(script.get("status")).isEqualTo("FAILED");
+        assertThat(script.get("attempts")).isEqualTo(3);
+        assertThat(script.get("last_error_code")).isEqualTo("LOCAL_ERROR");
+        assertThat(cost.ops.values()).noneMatch(op -> op.requestId == id && op.stage == ProductionStage.SCRIPT);
         assertRunFinished(id, "FAILED");
         assertLeaseReleased(id);
     }
@@ -815,6 +843,119 @@ class ProductionExecutorIT {
         drain("w1");
         assertThat(status(id)).isEqualTo("FAILED");
         assertRunFinished(id, "FAILED");
+    }
+
+    // ------------------------------------------------------------------ cancel committed after the finish plan
+
+    @Autowired ExecutionMapper executionMapper;
+    @Autowired com.aistudio.shared.db.BudgetControlLock budgetControl;
+    @Autowired com.aistudio.shared.db.LockRetryingTransactions itTransactions;
+    @Autowired ExecutionProperties executionProperties;
+
+    /**
+     * Executor that commits a cancel, as the cancel API does (request lock, then write), right after the planning
+     * snapshot commits and before the completion transaction starts. The snapshot shows no cancel, so the planner
+     * chooses SUCCEEDED or FAILED; only the completion transaction can see the cancel.
+     */
+    ProductionExecutor cancellingAfterFinishPlan(java.util.concurrent.atomic.AtomicInteger cancels) {
+        return new ProductionExecutor(executionMapper, budgetControl, itTransactions, cost, selection, work,
+                executionProperties) {
+            @Override
+            <T> T fenced(Lease lease, java.util.function.Function<ExecutionMapper.RequestRow, T> body) {
+                T result = super.fenced(lease, body);
+                if (result instanceof Snapshot snapshot && !snapshot.request().cancelRequested()
+                        && finishPlanned(snapshot)) {
+                    itTransactions.execute(() -> {
+                        jdbc.queryForList("SELECT id FROM production_request WHERE id = ? FOR UPDATE",
+                                lease.requestId());
+                        return jdbc.update("""
+                                UPDATE production_request SET cancel_requested_at = UTC_TIMESTAMP(6)
+                                WHERE id = ? AND cancel_requested_at IS NULL
+                                """, lease.requestId());
+                    });
+                    cancels.incrementAndGet();
+                }
+                return result;
+            }
+
+            private boolean finishPlanned(Snapshot snapshot) {
+                return StepPlanner.next(snapshot.steps(), false, ProductionExecutorIT.this.work::kind) instanceof StepPlanner.Finish;
+            }
+        };
+    }
+
+    @Test
+    void cancelCommittedAfterASucceededPlanFinishesAsCancelled() {
+        long id = newRequest();
+        java.util.concurrent.atomic.AtomicInteger cancels = new java.util.concurrent.atomic.AtomicInteger();
+        try (ProductionExecutor racing = cancellingAfterFinishPlan(cancels)) {
+            assertThat(racing.runOnce("w1")).isTrue();
+        }
+
+        assertThat(cancels.get()).as("cancel landed between plan and completion").isEqualTo(1);
+        assertThat(status(id)).isEqualTo("CANCELLED");
+        assertThat(stepStatuses(id)).as("finished step results are kept").containsOnly("SUCCEEDED");
+        assertRunFinished(id, "CANCELLED");
+        assertLeaseReleased(id);
+        assertThat(cost.dispatches.get()).isEqualTo(EFFECT_STAGES);
+    }
+
+    @Test
+    void cancelCommittedAfterAFailedPlanFinishesAsCancelled() {
+        long id = newRequest();
+        work.fail(ProductionStage.RENDER, new StepFailure("RENDER_INVALID", false, "bad"));
+        java.util.concurrent.atomic.AtomicInteger cancels = new java.util.concurrent.atomic.AtomicInteger();
+        try (ProductionExecutor racing = cancellingAfterFinishPlan(cancels)) {
+            assertThat(racing.runOnce("w1")).isTrue();
+        }
+
+        assertThat(cancels.get()).isEqualTo(1);
+        assertThat(status(id)).isEqualTo("CANCELLED");
+        assertThat(step(id, ProductionStage.RENDER).get("status")).isEqualTo("FAILED");
+        assertThat(step(id, ProductionStage.METADATA).get("status")).as("open steps are cancelled")
+                .isEqualTo("CANCELLED");
+        assertThat(step(id, ProductionStage.QC).get("status")).isEqualTo("CANCELLED");
+        assertRunFinished(id, "CANCELLED");
+    }
+
+    @Test
+    void lateCancelStillWaitsForUnresolvedCostAndRollsBackOnFailure() {
+        long id = newRequest();
+        cost.unresolvedOverride = true;
+        java.util.concurrent.atomic.AtomicInteger cancels = new java.util.concurrent.atomic.AtomicInteger();
+        try (ProductionExecutor racing = cancellingAfterFinishPlan(cancels)) {
+            assertThat(racing.runOnce("w1")).isTrue();
+        }
+        assertThat(cancels.get()).isEqualTo(1);
+        assertThat(status(id)).as("cancel does not bypass the cost gate").isEqualTo("RECOVERY_REQUIRED");
+        assertThat(runStatus(id)).isEqualTo("RUNNING");
+        assertLeaseReleased(id);
+
+        cost.unresolvedOverride = false;
+        // receipt not applied yet also blocks a cancelled completion
+        ExecutionFakes.Op unapplied = cost.forStage(id, ProductionStage.QC);
+        unapplied.applied = false;
+        makeDue(id);
+        drain("w1");
+        assertThat(status(id)).isEqualTo("RECOVERY_REQUIRED");
+        unapplied.applied = true;
+
+        // a failing completion write rolls back the cancelled completion as a whole
+        cost.duringRead = requestId -> jdbc.update("UPDATE production_request SET status = 'QUEUED' WHERE id = ?",
+                requestId);
+        makeDue(id);
+        drain("w1");
+        assertThat(status(id)).isEqualTo("RECOVERY_REQUIRED");
+        assertThat(runStatus(id)).isEqualTo("RUNNING");
+        assertThat(stepStatuses(id)).containsOnly("SUCCEEDED");
+
+        cost.duringRead = requestId -> {};
+        cost.spendingBlocked = true; // a spending block does not hold back a cancelled completion
+        makeDue(id);
+        drain("w1");
+        assertThat(status(id)).isEqualTo("CANCELLED");
+        assertRunFinished(id, "CANCELLED");
+        assertThat(cost.dispatches.get()).isEqualTo(EFFECT_STAGES);
     }
 
     private static void await(CountDownLatch latch) {

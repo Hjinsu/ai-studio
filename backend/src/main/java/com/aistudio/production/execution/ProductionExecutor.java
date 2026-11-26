@@ -340,14 +340,21 @@ public class ProductionExecutor implements AutoCloseable {
      * and evidence writers lock the request first, so the cost state cannot change between check and completion.
      * The cost port's reads join this transaction (READ COMMITTED, non-locking, no budget_control). Any failure
      * rolls the whole completion back and the request waits for a recheck.
+     *
+     * <p>The planned target comes from a snapshot taken in an earlier transaction. A cancel committed since then
+     * (the cancel API writes under the same request lock) is re-read here from the locked row and wins: the request
+     * finishes as CANCELLED, as the planner would decide from the current state.
      */
-    private void finish(Lease lease, List<StepRow> steps, ProductionStatus target) {
+    private void finish(Lease lease, List<StepRow> steps, ProductionStatus planned) {
         long anchor = anchorStep(steps);
         boolean[] costRead = { false };
+        ProductionStatus[] finished = { planned };
         String blocked;
         try {
             blocked = fenced(lease, locked -> {
                 costRead[0] = false; // a lock-conflict retry repeats the whole transaction
+                ProductionStatus target = locked.cancelRequested() ? ProductionStatus.CANCELLED : planned;
+                finished[0] = target;
                 CostState state = cost.readCostState(locked.id());
                 costRead[0] = true;
                 String reason = blockReason(state, target);
@@ -376,10 +383,10 @@ public class ProductionExecutor implements AutoCloseable {
             fenced(lease, locked -> postpone(lease, locked, anchor));
         }
         if (blocked != null) {
-            log.warn("Production request {} cannot finish as {}: {}", lease.requestId(), target, blocked);
+            log.warn("Production request {} cannot finish as {}: {}", lease.requestId(), finished[0], blocked);
             return;
         }
-        log.info("Production request {} finished as {}", lease.requestId(), target);
+        log.info("Production request {} finished as {}", lease.requestId(), finished[0]);
     }
 
     private static String blockReason(CostState state, ProductionStatus target) {
@@ -490,7 +497,8 @@ public class ProductionExecutor implements AutoCloseable {
                 || status == ProductionStatus.CANCELLED;
     }
 
-    private record Snapshot(RequestRow request, List<StepRow> steps) {}
+    /** Package-private so a test can act between the planning snapshot and the completion transaction. */
+    record Snapshot(RequestRow request, List<StepRow> steps) {}
 
     @Override
     public void close() {

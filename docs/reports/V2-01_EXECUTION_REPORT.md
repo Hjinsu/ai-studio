@@ -20,7 +20,7 @@
 | `EffectRequestHash` | 정규화 요청 해시(SHA-256). 시도·epoch·재시작과 무관 |
 | `RetryBackoff` | T03-C 규칙 선별(지수 + equal jitter) |
 | `StepFailure`, `LeaseLostException` | 로컬 실패 분류, fencing 실패 |
-| test: `StepPlannerTest`, `ExecutionRulesTest`, `ExecutionFakes`, `ProductionExecutorIT` | 단위 13, 격리 DB 통합 24 |
+| test: `StepPlannerTest`, `ExecutionRulesTest`, `ExecutionFakes`, `ProductionExecutorIT` | 실행기 단위 14건, 격리 통합 31건(종료 비용 경합 3건, 취소 경합 3건, FAKE 가격 1건 포함) |
 
 ## 실행 규칙(구현된 동작)
 
@@ -33,9 +33,10 @@
   - `REJECTED`: 발송 없음, 단계 실패(취소 의도 시 취소).
   - `WAITING`·`RECOVERY_REQUIRED`·예외·null: 결과 불명. 단계·요청 `RECOVERY_REQUIRED`, `retry_at = 현재 + 복구 재확인`, lease 해제. 재확인 때 **같은 키·해시를 다시 제시**하며 시도로 세지 않는다. 새 효과를 만들지 않는다.
   - 영수증 적용 트랜잭션 실패 시 롤백하고 복구 대기로 전환한다. 재제시하면 포트가 저장된 영수증을 돌려주어 재적용한다.
-- **종료**(종료 경합 수정 반영): 요청 행을 잠그고 fencing을 확인한 **하나의 트랜잭션** 안에서 `readCostState`를 호출하고, 그 결과에 따라 보류 또는 종료 쓰기를 같은 트랜잭션에서 수행한다. 정산·증거 기록자는 요청을 먼저 잠그므로 확인과 종료 사이에 비용 상태가 바뀌지 않는다. 비용 포트의 읽기는 이 트랜잭션(READ COMMITTED, 비잠금, budget_control 미획득)에 참여한다. 조회 실패나 종료 쓰기 오류는 Run·포인터·요청 변경을 모두 롤백한 뒤 별도 fenced 트랜잭션에서 복구 대기로 둔다(`COST_STATE_UNAVAILABLE`/`FINISH_FAILED`). `readCostState`가 미해결·미적용 영수증·조회 실패(성공은 지출 차단 포함) 중 하나라도 보고하면 종료하지 않는다. 요청을 `RECOVERY_REQUIRED`로 두고 마지막 실행 단계의 `retry_at`으로 재확인을 예약하며 Run은 열린 상태로 유지한다. 종료 가능하면 한 트랜잭션에서 미완료 단계를 취소(취소 시)하고, active Run 포인터를 해제(content DRAFT)한 뒤 Run과 요청을 종료하고 lease를 해제한다.
+- **종료**(종료 경합 수정 반영): 요청 행을 잠그고 fencing을 확인한 **하나의 트랜잭션** 안에서 `readCostState`를 호출하고, 그 결과에 따라 보류 또는 종료 쓰기를 같은 트랜잭션에서 수행한다. 정산·증거 기록자는 요청을 먼저 잠그므로 확인과 종료 사이에 비용 상태가 바뀌지 않는다. 비용 포트의 읽기는 이 트랜잭션(READ COMMITTED, 비잠금, budget_control 미획득)에 참여한다. 조회 실패나 종료 쓰기 오류는 Run·포인터·요청 변경을 모두 롤백한 뒤 별도 fenced 트랜잭션에서 복구 대기로 둔다(`COST_STATE_UNAVAILABLE`/`FINISH_FAILED`). `readCostState`가 미해결·미적용 영수증·조회 실패(성공은 지출 차단 포함) 중 하나라도 보고하면 종료하지 않는다. 요청을 `RECOVERY_REQUIRED`로 두고 마지막 실행 단계의 `retry_at`으로 재확인을 예약하며 Run은 열린 상태로 유지한다. 종료 목표는 계획 스냅샷(이전 트랜잭션)에서 정했더라도 이 종료 트랜잭션에서 잠근 요청 행의 `cancel_requested`를 다시 읽어, 그사이 취소 API가 요청 락에서 커밋한 취소가 있으면 `SUCCEEDED`/`FAILED` 대신 `CANCELLED`로 종료한다(종료 취소 경합 수정). 이 재확인은 비용 확인과 같은 트랜잭션·같은 락 아래에서 수행되며 비용 미해결·미적용 영수증·조회 실패 차단과 오류 시 전체 롤백은 그대로다. 지출 차단은 기존 규칙대로 `SUCCEEDED`만 막으므로 취소 종료는 막지 않는다(플래너가 최신 상태로 결정했을 때와 같음). 종료 가능하면 한 트랜잭션에서 미완료 단계를 취소(취소 시)하고, active Run 포인터를 해제(content DRAFT)한 뒤 Run과 요청을 종료하고 lease를 해제한다.
 - **취소**: 미발송 단계는 시작하지 않고 `CANCELLED`로 둔다. 실행 중인 로컬 단계의 실제 결과는 보존한다. 불명 효과가 있으면 정산 후에 취소를 마친다.
-- **잠금 순서**: claim은 budget_control(X) → 요청이다. 단계와 종료는 요청 → (선정 포트) → content → content_run 순서다. 요청 락 보유 중에 budget_control을 잡지 않는다. 비용 상태 조회는 트랜잭션 밖에서 수행한다.
+- **잠금 순서**: claim은 budget_control(X) → 요청이다. 단계와 종료는 요청 → (선정 포트) → content → content_run 순서다. 요청 락 보유 중에 budget_control을 잡지 않는다. 비용 상태 조회(`readCostState`)는 요청 락을 보유한 종료 트랜잭션 안에서 비잠금 읽기로 수행하며 budget_control이나 다른 락을 얻지 않는다.
+- **FAKE 가격**: 효과 단계의 최대 금액은 양수만 허용한다. `fake-effect-max-krw`가 0 이하이면 설정 바인딩에서 거부하고(`FakeStageWork`도 0 이하·null 거부), 어떤 `StageWork`든 0 이하 가격을 내면 요청 해시 계산에서 거부되어 비용 포트에 제시하지 않고 로컬 실패(`LOCAL_ERROR`, 3회 한도)로 처리한다.
 
 ## 테스트 결과(실제 실행)
 
@@ -52,12 +53,16 @@ $env:AI_STUDIO_IT_DB_HOST='127.0.0.1'; $env:AI_STUDIO_IT_DB_PORT='3307'; $env:AI
 - 변형 확인: lease 상한 검사를 3으로 바꾸면 동시 claim 테스트가 실패한다. 만료 검사를 제거해도 fenced 트랜잭션의 갱신 조건(`lease_until > 현재`)이 쓰기를 막는다. 이는 의도한 이중 방어다.
 - 비밀정보: diff 패턴 검사와 임시 비밀번호 미포함을 확인했다. 로컬에는 gitleaks가 없어 CI의 gitleaks job에서 확인한다.
 
-## 미검증·보류
+## 결합 검증과 실행기 독립 리뷰
 
-- 실제 `ProductionCostPort`·`ProductionSelectionPort` 구현과의 결합 검증은 미실행이다. 포트는 테스트 대역(`ExecutionFakes`)으로만 검증했다. 따라서 실행기는 기본 비활성이며 API로 만든 요청은 QUEUED로 남는다.
-- 예산 원장·두 연결 한도 경합·정산 재생·기존 정산 API 우회 거부는 Codex 범위로 미검증이다.
-- 사용자 수동 복구 경로(관리자 확인 증거 입력 후 재확인 트리거)와 UI는 미구현이다. 현재 재확인은 `recovery-recheck` 주기로 자동 수행한다.
-- CI 미실행(커밋 push 후 확인 필요). V7 이력 DB는 대상이 아니다.
+검증 브랜치 `v2/review-v2-01`의 공통 기준은 `5cba9a8`이다. 실행기 `123f2fc252d06a5defd98a84f1b3b117e3b7f612`와 비용 `6675f86a8a996ff314b7316436e489d2d2445502`를 임시 결합하고 Claude의 보완을 반영했다.
+
+- Codex 독립 리뷰에서 종료 계획 스냅샷 이후 커밋된 취소 의도가 누락될 수 있음을 확인했다. Claude가 종료 트랜잭션의 잠긴 요청에서 취소 의도를 다시 확인하도록 수정했다. 성공·실패 계획 후 취소와 미해결 비용·미적용 영수증·쓰기 오류의 차단을 회귀 검증했다.
+- FAKE 가격 설정과 효과 요청 해시는 양수만 받는다. 기본값은 KRW 1이다. 0원 설정과 효과 시도에서 공급자 포트에 도달하지 않는 것을 검증했다.
+- 기존 실행기 단독 테스트에서만 대역 빈을 우선하도록 지정했다. `ProductionPortsIT`는 실제 비용·선정 포트를 사용하며 Provider 경계만 FAKE다.
+- 격리 MariaDB 11.8.2(binlog OFF)에서 `gradlew.bat :backend:test :backend:bootJar :backend:integrationTest --rerun-tasks --no-build-cache` 실행 결과 단위 165건, 통합 200건이 통과했고 bootJar가 생성됐다. 이 중 기존 실행기 통합 31건과 실제 포트 결합 6건이 통과했다.
+- 별도 MariaDB 11.8.2(binlog ON)에서 `ProductionPortsIT`, `ProductionCostIT`, `ContentUpgradeIT`, `ProductionGrantsIT` 18건이 통과했다. [결합 검증 상세](../v2/V2-01_SAFETY_HANDOFF.md)
+- V7 이력 DB와 사용자 수동 복구 경로는 이 검증의 대상에서 제외했다. 실행기 기본 설정은 비활성이다.
 
 ## Codex 전달 사항(공통 계약 확인 요청, 변경 없음)
 
@@ -67,9 +72,9 @@ $env:AI_STUDIO_IT_DB_HOST='127.0.0.1'; $env:AI_STUDIO_IT_DB_PORT='3307'; $env:AI
 4. **`markReceiptApplied`**: 실행기의 fenced 트랜잭션에 참여한다. 이 트랜잭션에서는 요청 락을 이미 보유하므로 budget_control을 획득하면 안 된다. 같은 영수증의 중복 호출은 멱등이어야 한다.
 5. **`readCostState`**(종료 경합 수정 후): 요청 락을 보유한 실행기 종료 트랜잭션(READ COMMITTED) 안에서 호출한다. `v2/safety` `2211cc0` 구현은 비잠금 읽기만 하고 기본 전파로 참여하므로 그대로 호환된다. 이 구현의 `REPEATABLE_READ` 지정은 참여 시 적용되지 않으며, 실행기 트랜잭션은 락 획득 뒤 최신 커밋 상태를 읽는다. 앞으로도 이 메서드에서 budget_control이나 요청 이외의 락을 얻지 않고, 모든 정산·증거 쓰기가 요청을 먼저 잠그는지 결합 검증에서 확인해야 한다.
 6. **`ProductionSelectionPort.link`**: 실행기 트랜잭션(요청 락 보유)에 참여한다. 요청의 content/run/selection_hash 연결, Content PRODUCING·active 포인터 설정은 포트가 담당한다. 실행기는 이후 Run QUEUED→RUNNING과 종료 시 포인터 해제·Run 종료를 담당한다. 동일 fingerprint 재생은 기존 연결, 다른 fingerprint는 `ApiException(RESOURCE_CONFLICT)`이면 재시도 불가로 처리한다.
-7. **FAKE 가격**: `PricedRequest("KRW", fake-effect-max-krw(기본 1), "SUCCESS")`. FAKE 비용 대역의 시나리오 이름과 통화가 다르면 알려 준다.
+7. **FAKE 가격**: `PricedRequest("KRW", fake-effect-max-krw(기본 1, 양수만 허용), "SUCCESS")`. FAKE 비용 대역의 시나리오 이름과 통화가 다르면 알려 준다.
 8. **설정 제안**: 비용 포트 FAKE 구현이 들어오면 local/test 프로파일에서 `ai-studio.production.executor.enabled=true`를 켜는 설정 변경은 통합 담당자가 결정한다.
 
 ## 다음 작업
 
-Codex의 비용·선정 포트 구현과 `v2/product` 결합 → 결합 통합 테스트(실제 예약·dispatch·정산 경로) → Codex 독립 리뷰(기준: 이 보고서 커밋) → 사용자 검토. 재개 시 위 명령으로 격리 DB를 지정하여 동일 검증을 실행한다.
+검증 브랜치의 동일 HEAD에서 원격 CI를 확인하고, 비용 구현은 별도 Codex 세션에서 `6675f86a8a996ff314b7316436e489d2d2445502` 기준으로 독립 리뷰한다. 검증 결과와 독립 리뷰를 사용자에게 제출해 병합 승인을 받는다.

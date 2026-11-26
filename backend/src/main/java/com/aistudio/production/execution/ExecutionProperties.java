@@ -50,8 +50,8 @@ public record ExecutionProperties(
         if (retryCap.compareTo(retryBase) < 0) {
             throw new IllegalArgumentException("retryCap must not be shorter than retryBase");
         }
-        if (fakeEffectMaxKrw.signum() < 0) {
-            throw new IllegalArgumentException("fakeEffectMaxKrw must not be negative");
+        if (fakeEffectMaxKrw.signum() <= 0) {
+            throw new IllegalArgumentException("fakeEffectMaxKrw must be positive");
         }
     }
 

@@ -19,6 +19,10 @@ final class EffectRequestHash {
         if (request == null || request.currency() == null || request.maximumAmount() == null) {
             throw new IllegalArgumentException("A priced request needs currency and maximum amount");
         }
+        if (request.maximumAmount().signum() <= 0) {
+            // A zero or negative maximum would present an unbounded or free effect; never reach the cost port.
+            throw new IllegalArgumentException("A priced request needs a positive maximum amount");
+        }
         String scenario = request.fakeScenario() == null ? "" : request.fakeScenario();
         String canonical = String.join("\n", "v1", stage.name(), targetKey.length() + ":" + targetKey,
                 Integer.toString(inputGeneration), request.currency(),

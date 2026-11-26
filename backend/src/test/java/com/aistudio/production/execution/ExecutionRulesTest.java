@@ -44,6 +44,26 @@ class ExecutionRulesTest {
     }
 
     @Test
+    void fakeEffectMaximumMustBePositive() {
+        assertThat(ExecutionProperties.defaults().fakeEffectMaxKrw()).isEqualByComparingTo(BigDecimal.ONE);
+        assertThat(new ExecutionProperties(true, null, null, null, null, null, null, null, null,
+                new BigDecimal("0.01")).fakeEffectMaxKrw()).isEqualByComparingTo("0.01");
+        for (String zero : new String[] {"0", "0.00", "-0.000001"}) {
+            assertThatThrownBy(() -> new ExecutionProperties(true, null, null, null, null, null, null, null, null,
+                    new BigDecimal(zero))).isInstanceOf(IllegalArgumentException.class);
+            assertThatThrownBy(() -> new FakeStageWork(new BigDecimal(zero)))
+                    .isInstanceOf(IllegalArgumentException.class);
+            assertThatThrownBy(() -> EffectRequestHash.of(ProductionStage.SCRIPT, "video", 1,
+                    new PricedRequest("KRW", new BigDecimal(zero), "SUCCESS")))
+                    .isInstanceOf(IllegalArgumentException.class);
+        }
+        assertThatThrownBy(() -> new FakeStageWork(null)).isInstanceOf(IllegalArgumentException.class);
+        var context = new StageWork.StepContext(7, 70, ProductionStage.SCRIPT, "video", 1, 1, 1, "SHORTS", null,
+                null);
+        assertThat(new FakeStageWork(BigDecimal.ONE).price(context).maximumAmount()).isPositive();
+    }
+
+    @Test
     void requestHashIsStableForEqualAmountsAndChangesWithTheRequest() {
         String base = EffectRequestHash.of(ProductionStage.SCRIPT, "video", 1,
                 new PricedRequest("KRW", new BigDecimal("1.0"), "SUCCESS"));

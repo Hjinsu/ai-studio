@@ -272,6 +272,8 @@ final class ExecutionFakes {
     static final class ScriptedWork extends FakeStageWork {
         final Map<ProductionStage, Queue<RuntimeException>> failures = new ConcurrentHashMap<>();
         volatile Map<ProductionStage, Consumer<StepContext>> hooks = Map.of();
+        /** Overrides the priced maximum per stage (e.g. zero) to exercise the executor's positive-price guard. */
+        volatile Map<ProductionStage, BigDecimal> prices = Map.of();
 
         ScriptedWork() {
             super(BigDecimal.ONE);
@@ -280,6 +282,14 @@ final class ExecutionFakes {
         void reset() {
             failures.clear();
             hooks = Map.of();
+            prices = Map.of();
+        }
+
+        @Override
+        public ProductionCostPort.PricedRequest price(StepContext context) {
+            BigDecimal override = prices.get(context.stage());
+            return override == null ? super.price(context)
+                    : new ProductionCostPort.PricedRequest("KRW", override, FAKE_SCENARIO);
         }
 
         void fail(ProductionStage stage, RuntimeException... errors) {

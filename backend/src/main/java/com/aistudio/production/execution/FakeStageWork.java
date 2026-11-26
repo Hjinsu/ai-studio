@@ -21,6 +21,9 @@ public class FakeStageWork implements StageWork {
     private final BigDecimal effectMaxKrw;
 
     public FakeStageWork(BigDecimal effectMaxKrw) {
+        if (effectMaxKrw == null || effectMaxKrw.signum() <= 0) {
+            throw new IllegalArgumentException("FAKE effect maximum must be a positive KRW amount");
+        }
         this.effectMaxKrw = effectMaxKrw;
     }
 
