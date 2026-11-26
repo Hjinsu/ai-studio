@@ -4,6 +4,7 @@ import static com.aistudio.production.stage.Findings.blank;
 import static com.aistudio.production.stage.Findings.list;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -11,6 +12,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -33,6 +35,13 @@ public final class ScenesReview {
     private static final Pattern EVIDENCE_LOOK = Pattern.compile(
             "\\b(real|actual|authentic|genuine|unedited)\\s+(photo|photograph|footage|image|recording|video)s?\\b"
                     + "|\\b(nasa|esa|telescope|satellite|news)\\s+(photo|photograph|footage|image)s?\\b");
+    /** The vertical frame token, not part of a longer number, time or ratio (19:16, 9:160, 9:16:2, 9:16.5). */
+    private static final Pattern FRAME_RATIO = Pattern.compile(
+            "(?<![\\p{Nd}.,:])9\\s?:\\s?16(?!\\p{Nd}|[.,:]\\p{Nd})");
+    private static final Pattern CLAUSE_END = Pattern.compile("[,.;:!?()\\[\\]]");
+    private static final int FRAMING_WINDOW = 3;
+    private static final Set<String> FRAMING_WORDS = Set.of("vertical", "portrait", "aspect", "ratio", "frame",
+            "framed", "framing", "format", "composition", "orientation", "crop", "cropped", "canvas", "layout");
 
     public Validation review(ScenesInput input, Scenes scenes) {
         Findings findings = new Findings();
@@ -125,9 +134,7 @@ public final class ScenesReview {
         }
         Set<String> narrated = Statements.numbers(scene.narration());
         Function<String, Set<String>> added = text -> {
-            Set<String> numbers = new LinkedHashSet<>(Statements.numbers(text));
-            numbers.remove("9");
-            numbers.remove("16"); // the 9:16 frame is a format, not a claim
+            Set<String> numbers = new LinkedHashSet<>(visualNumbers(text));
             numbers.removeAll(narrated);
             return numbers;
         };
@@ -145,6 +152,50 @@ public final class ScenesReview {
             findings.block("SCENE_PRESENTED_AS_EVIDENCE", location, List.of(),
                     "Generated images must not be presented as real photographs or footage.");
         }
+    }
+
+    /**
+     * Numbers a visual field uses, except a 9:16 frame token in a framing clause ("vertical 9:16",
+     * "9:16 composition", "aspect ratio 9:16"): that names the output format, not a claim. Any other 9 or 16,
+     * including a bare "9:16" outside a framing clause, is still compared with the narration.
+     */
+    static Set<String> visualNumbers(String text) {
+        if (text == null) {
+            return Set.of();
+        }
+        StringBuilder kept = new StringBuilder(text.length());
+        Matcher ratio = FRAME_RATIO.matcher(text);
+        int last = 0;
+        while (ratio.find()) {
+            kept.append(text, last, ratio.start());
+            kept.append(framing(text, ratio.start(), ratio.end()) ? " " : ratio.group());
+            last = ratio.end();
+        }
+        kept.append(text, last, text.length());
+        return Statements.numbers(kept.toString());
+    }
+
+    /** A framing word within {@value #FRAMING_WINDOW} words of the token, without crossing a clause boundary. */
+    private static boolean framing(String text, int start, int end) {
+        String before = text.substring(0, start);
+        Matcher boundary = CLAUSE_END.matcher(before);
+        int from = 0;
+        while (boundary.find()) {
+            from = boundary.end();
+        }
+        String after = text.substring(end);
+        Matcher next = CLAUSE_END.matcher(after);
+        int to = next.find() ? next.start() : after.length();
+        List<String> left = words(before.substring(from));
+        List<String> right = words(after.substring(0, to));
+        List<String> near = new ArrayList<>(left.subList(Math.max(0, left.size() - FRAMING_WINDOW), left.size()));
+        near.addAll(right.subList(0, Math.min(FRAMING_WINDOW, right.size())));
+        return near.stream().anyMatch(FRAMING_WORDS::contains);
+    }
+
+    private static List<String> words(String text) {
+        return Arrays.stream(text.toLowerCase(Locale.ROOT).split("[^\\p{L}\\p{Nd}]+"))
+                .filter(word -> !word.isEmpty()).toList();
     }
 
     private static void style(ScenesInput input, Scenes scenes, Findings findings) {
