@@ -1,6 +1,6 @@
 # 회사 PC 다음 세션 — AI Studio v2
 
-2026-11-26 KST · V2-01·V2-02 DONE · V2-03 결합 검증 후보.
+2026-11-26 KST · V2-01·V2-02 DONE · V2-03 HOLD, F01~F06 수정 결합 및 독립 재검토 대기.
 
 ## 기준과 보존
 
@@ -31,7 +31,7 @@ git -C ../ai-studio-v2 status --short --branch
 
 ## 다음 작업
 
-**V2-03 자료 조사·대본·장면 구성**의 제품과 안전성 구현을 `v2/review-v2-03`에 결합했다. 독립 리뷰는 구현·결합 세션과 분리하고, 최신 Draft PR HEAD와 CI가 일치하는지 확인한 뒤 제품 코드를 읽기 전용으로 검토한다. [결합 검증 보고서](reports/V2-03_INTEGRATION_REPORT.md) · [승인 설계](v2/V2-03_IMPLEMENTATION_PLAN.md)
+**V2-03 자료 조사·대본·장면 구성**의 F01~F06과 F05 후속을 `v2/review-v2-03`에 결합했다. 다음 작업은 Draft PR #6의 최신 HEAD에 대한 별도 독립 재검토다. 구현·결합 세션과 분리하고, 대상 SHA와 CI 일치를 확인한 뒤 읽기 전용으로 검토한다. HOLD 해제와 병합은 독립 리뷰 APPROVE 및 사용자 승인 후 진행한다. [결합 검증 보고서](reports/V2-03_INTEGRATION_REPORT.md) · [승인 설계](v2/V2-03_IMPLEMENTATION_PLAN.md)
 
 ```powershell
 git fetch origin

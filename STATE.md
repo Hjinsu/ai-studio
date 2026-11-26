@@ -21,9 +21,9 @@
 - 독립 리뷰 기준 `54ffea3c09246b61a057c427e6210591af20cccb`, 수정 브랜치 `v2/review-v2-03`, [Draft PR #6](https://github.com/Hjinsu/ai-studio/pull/6). 사용자가 HOLD를 수용했다. 별도 독립 리뷰 APPROVE와 사용자 승인 전까지 병합·DONE을 보류한다.
 - F01은 UTF-8 저장 크기·지적 수·필드 길이를 제한하고 차단 지적을 우선 보존한다. F02는 공급자 응답 반환 후 형식 검사를 결과 불명과 분리한다. F03은 SCRIPT 비교 목록을 한 번 읽어 예약과 재생에 사용한다. F04는 요청 생성과 claim에 같은 공급자 준비 조건을 적용한다.
 - 변경 경로는 planning 서비스·검수 기록·준비 상태, 비용 서비스, 요청 API·실행기 설정, 격리 DB와 실행기 테스트, 실제 API Edge 스크립트다. Codex 커밋은 `ec10c07`이다.
-- Claude F05 `5f8dfe3`와 F06 `a6fa744`를 `e139cef`에서 결합했다. 실행기 설정은 공급자 준비 조건과 고정 채널 길이 조회를 함께 사용한다. 포함된 F05는 일반 16 수치를 차단하며, 장면 프롬프트의 `The orbital resonance ratio is 9:16`은 화면비로 제외되는 경계 사례가 남아 Claude 후속 인수 대기 중이다.
+- Claude F05 `5f8dfe3`와 F06 `a6fa744`를 `e139cef`에서 결합했다. F05 후속 `8fd969a`를 `9b952e6`에서 인수했고, `782b6d5`에서 `vertical 9:16 ratio of the tower` 등 사실 비율과 프레이밍 표현이 붙은 경우도 검수 대상으로 유지했다.
 - `e139cef`에서 `AI_STUDIO_REVIEW_EDGE=true`와 `gradlew.bat --no-build-cache :backend:test :backend:bootJar :backend:integrationTest --rerun-tasks`로 단위 287건, 격리 MariaDB 11.8.2 통합 253건(실제 API Edge 1건 포함), 실패·오류·건너뜀 0건, bootJar 성공. 정산 영수증 새 lease 적용, SCENES 형식 오류·로컬 소켓 타임아웃 분리, 대본 21개 이상에서 최초 20개 고정·재생, V11 기존 데이터 보존, 제한 운영 계정 11단계, 소유자 200·다른 인증 사용자 404·미인증 401, LONGFORM 및 길이 범위를 변경한 SHORTS를 확인했다.
-- 동일 프론트 소스의 lint·typecheck·build, Vitest 97건, Mock Edge 14건 통과. OpenAPI lint 기존 경고 2건과 생성 타입 일치, Gitleaks 및 `git diff --check` 통과. F05 후속 커밋 인수 후 결합 검증을 다시 실행하고 HEAD를 Push한 뒤 Draft PR CI 7/7과 별도 독립 리뷰를 확인한다. 원격 Draft PR HEAD는 현재 `54ffea3`이다.
+- 최종 코드 `782b6d5` 재실행에서 단위 292건, 격리 통합 253건(실제 API Edge 포함), Vitest 97건, Mock Edge 14건이 통과했다. 다음 작업은 [Draft PR #6 최신 HEAD의 CI](https://github.com/Hjinsu/ai-studio/pull/6/checks)를 확인한 별도 독립 리뷰다. F05의 괄호 화면비 표현은 검수 대상이 될 수 있고 비영어 화면비 표현은 지원 범위 밖이다. 일반 자연어 의미 검증은 V2-05에서 다룬다. [최종 결합 검증](docs/reports/V2-03_INTEGRATION_REPORT.md#hold-수정-결합)
 - V12 적용은 격리 테스트 DB로 제한했다. 기존 migration, OpenAPI 및 생성 타입에는 변경이 없다.
 
 ### V2-03 — 제품·안전성 결합 검증 후보 (2026-11-26 KST)

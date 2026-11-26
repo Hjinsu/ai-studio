@@ -13,7 +13,7 @@
 | V2-00 | Codex | DONE · 사용자 승인 | v2 문서 전용 기준선. 분기 원점 `dab7013c4557ba87d4440dfc86417344bb2c4e1d`. [검토](docs/v2/V2-00_REPOSITORY_REVIEW.md) |
 | V2-01 | Claude Code 실행 / Codex 비용·공통 계약 | DONE · 사용자 최종 승인 | FAKE 11단계와 비용 안전성 검증, 설계·실행기·비용 독립 리뷰 완료. [PR #4](https://github.com/Hjinsu/ai-studio/pull/4)로 v2/integration 병합. [종료 기록](STATE.md#v2-01--최종-승인-및-종료) |
 | V2-02 | Claude Code 생성·평가·선정·UI / Codex 저장·계약·비용·검증 | DONE · 사용자 최종 승인 | 독립 재검토 APPROVE 및 HOLD 해소. [PR #5](https://github.com/Hjinsu/ai-studio/pull/5)로 v2/integration 병합. [종료 기록](STATE.md#v2-02--최종-승인-및-종료-2026-11-26-kst-done) |
-| V2-03 | Claude Code 제품 / Codex 공통·안전성·결합 | HOLD · 독립 리뷰 수정 | 기준 `54ffea3`. Codex F01~F04와 Claude F05~F06을 결합한 뒤 Draft PR #6의 최신 HEAD CI와 별도 독립 재검토를 확인한다. [결합 검증](docs/reports/V2-03_INTEGRATION_REPORT.md) |
+| V2-03 | Claude Code 제품 / Codex 공통·안전성·결합 | HOLD · 독립 재검토 대기 | 기준 `54ffea3`의 F01~F06 수정과 F05 후속을 `v2/review-v2-03`에 반영했다. Draft PR #6 최신 HEAD의 별도 독립 리뷰 APPROVE와 사용자 승인 후 병합을 검토한다. [결합 검증](docs/reports/V2-03_INTEGRATION_REPORT.md) |
 
 [품질·수익화 요구사항](docs/v2/05_CONTENT_QUALITY_AND_MONETIZATION.md)은 V2-02~08의 단계별 인수 기준에 적용한다. V2-01은 검수·재생성까지 동일 제작 요청 비용 경계를 제공한다. FFmpeg·FFprobe 준비는 V2-04에 포함한다.
 

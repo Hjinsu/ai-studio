@@ -2,6 +2,27 @@
 
 2026-11-26 KST · `v2/review-v2-03` · 구현 결합, 별도 독립 리뷰 대상
 
+## HOLD 수정 결합
+
+독립 리뷰 기준 `54ffea3c09246b61a057c427e6210591af20cccb`에 Codex `ec10c07`, Claude F05 `5f8dfe3`, F06 `a6fa744`, F05 후속 `8fd969a051ec2a1d440508dc988bf5a7652662ff`를 결합했다. 장면 비율 추가 회귀를 반영한 코드 SHA는 `782b6d5a31fe150764418ada5551326e6022ee9d`다. 최종 리뷰 대상은 이 기록을 포함한 [Draft PR #6](https://github.com/Hjinsu/ai-studio/pull/6)의 HEAD다.
+
+| ID | 통과한 회귀 |
+|---|---|
+| F01 | 128KiB를 넘는 검수 기록을 제한하고 차단을 보존한다. 정산된 영수증을 새 lease에서 한 번 적용하며 추가 SCRIPT 발송이 없다. |
+| F02 | 잘못된 SCENES DTO는 `EXECUTED_FAILED`로 정산하고 실제 로컬 소켓 타임아웃은 결과 불명으로 격리한다. |
+| F03 | 같은 채널의 채택 대본 21개 이상에서 최근 20개를 선택한다. 신규 채택과 경합해도 고정 입력·해시·정산 이벤트를 재사용한다. |
+| F04 | 공급자 유무를 요청 생성과 실행기 claim에서 같은 조건으로 판정한다. 공급자 부재 시 기존 planning 요청은 대기한다. |
+| F05 | orbital resonance ratio, mass ratio, gravitational ratio 및 `vertical 9:16 ratio of the tower`를 검수한다. 명확한 영어 화면비 지시에는 예외가 적용된다. |
+| F06 | 고정된 채널 길이 범위를 기준으로 LONGFORM과 SHORTS의 FAKE SELECT를 검증한다. |
+
+F05는 영어 표현에 대한 제한된 규칙이다. 괄호로 감싼 화면비는 검수 대상이 될 수 있고 비영어 화면비는 지원 범위 밖이다. 일반 자연어 의미 검증은 V2-05에서 다룬다. 독립 리뷰 APPROVE와 사용자 승인 전까지 HOLD를 유지한다.
+
+- `AI_STUDIO_REVIEW_EDGE=true`로 `gradlew.bat --no-build-cache :backend:test :backend:bootJar :backend:integrationTest --rerun-tasks` 실행. 단위 292건(ScenesReviewTest 21건), 격리 MariaDB 11.8.2 통합 253건(실제 API Edge 1건), 실패·오류·건너뜀 0건, bootJar 성공. 실제 저장·비용 포트, V11 데이터 보존과 V12 적용, 제한 운영 계정의 planning 실행, 실제 Edge에서 소유자 200·다른 인증 사용자 404·미인증 401을 검증했다.
+- 프론트 lint·typecheck·build, Vitest 97건, Mock API Edge 14건 통과. 최초 Vitest에서 예산 정책 화면의 로딩 대기 한 건이 시간 초과했고, `npm test -- --maxWorkers=2` 재실행에서 전체 통과했다.
+- OpenAPI lint 기존 경고 2건, 생성 타입 일치. 기존 migration, OpenAPI, 생성 타입 변경 없음. Gitleaks 및 `git diff --check` 통과. [최신 HEAD CI](https://github.com/Hjinsu/ai-studio/pull/6/checks)
+
+## 최초 결합 기준
+
 | 기준 | SHA |
 |---|---|
 | 통합 | `c4832b7eca2cbf89893bce92fa2b980263cf695e` |
