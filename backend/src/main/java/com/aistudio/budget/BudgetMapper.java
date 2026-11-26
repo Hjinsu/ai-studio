@@ -543,4 +543,6 @@ interface BudgetMapper {
 
     @Select("SELECT COUNT(*) FROM budget_reservation WHERE status = 'RECONCILIATION_REQUIRED'")
     long countReconciliationRequired();
+    @Select("SELECT EXISTS(SELECT 1 FROM provider_operation WHERE reservation_id = #{id})")
+    boolean productionManaged(long id);
 }

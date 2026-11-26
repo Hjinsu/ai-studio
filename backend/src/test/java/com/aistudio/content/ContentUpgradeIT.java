@@ -109,7 +109,7 @@ class ContentUpgradeIT {
     }
 
     @Test
-    void v5DatabaseWithT02DataUpgradesToV6WithoutChangingExistingData() {
+    void populatedV5DatabaseUpgradesThroughV6AndV9WithoutChangingExistingData() {
         assertThat(jdbc.queryForList("SELECT version FROM flyway_schema_history ORDER BY installed_rank", String.class))
                 .containsExactly("1", "2", "3", "4", "5");
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE()"
@@ -166,5 +166,18 @@ class ContentUpgradeIT {
                 view.currentRevision().channelConfigId())).isEqualTo(2);
         // 기존 채널 보관(FD-16 경로)도 동작
         channels.archive(channelId, channels.get(channelId).channel().version(), admin);
+
+        Map<String, Long> beforeV9 = checksums();
+        Flyway.configure().dataSource(DB.dataSource()).locations("classpath:db/migration").cleanDisabled(true).load()
+                .migrate();
+        List<String> v9History = history();
+        assertThat(v9History).hasSize(7).startsWith(historyAfter.toArray(String[]::new));
+        assertThat(v9History.getLast()).startsWith("9:");
+        assertThat(checksums()).isEqualTo(beforeV9);
+        assertThat(contents.get(view.content().id()).currentRevision()).isEqualTo(view.currentRevision());
+        assertThat(jdbc.queryForList("""
+                SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE()
+                AND table_name IN ('production_request', 'production_step', 'provider_operation')
+                """, String.class)).containsExactlyInAnyOrder("production_request", "production_step", "provider_operation");
     }
 }

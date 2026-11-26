@@ -130,19 +130,31 @@ public class ContentService {
                     c.language() == null ? channel.language() : c.language(), c.targetDurationSeconds(),
                     c.settings(), c.changeReason(), contentType, config);
 
-            ContentMapper.NewContent row = new ContentMapper.NewContent(c.channelId(), c.topicId(), contentType,
-                    input.workingTitle(), actor.userId());
-            mapper.insertContent(row);
-            ContentMapper.NewRevision revision = newRevision(row.id, c.channelId(), 1, config, null, input, actor);
-            mapper.insertRevision(revision);
-            if (mapper.setInitialRevision(row.id, revision.id, input.workingTitle()) != 1) {
-                throw new IllegalStateException("content " + row.id + " initial revision pointer was not set");
-            }
-            audit.record(actor, "CONTENT_CREATE", "CONTENT", row.id,
-                    Map.of("channelId", c.channelId(), "topicId", c.topicId(), "contentType", contentType));
-            return row.id;
+            return insertInitial(c.channelId(), c.topicId(), contentType, config, input, actor).content().id();
         }, null);
         return new ContentResult(get(result.targetId()), result.replayed());
+    }
+
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.MANDATORY)
+    public ContentView createSelected(long channelId, long topicId, String type, ChannelConfig config,
+            String title, String brief, String language, int duration, Actor actor) {
+        RevisionInput input = normalize(title, brief, language, duration, null, null, type, config);
+        return insertInitial(channelId, topicId, type, config, input, actor);
+    }
+
+    private ContentView insertInitial(long channelId, long topicId, String contentType, ChannelConfig config,
+            RevisionInput input, Actor actor) {
+        ContentMapper.NewContent row = new ContentMapper.NewContent(channelId, topicId, contentType,
+                input.workingTitle(), actor.userId());
+        mapper.insertContent(row);
+        ContentMapper.NewRevision revision = newRevision(row.id, channelId, 1, config, null, input, actor);
+        mapper.insertRevision(revision);
+        if (mapper.setInitialRevision(row.id, revision.id, input.workingTitle()) != 1) {
+            throw new IllegalStateException("content " + row.id + " initial revision pointer was not set");
+        }
+        audit.record(actor, "CONTENT_CREATE", "CONTENT", row.id,
+                Map.of("channelId", channelId, "topicId", topicId, "contentType", contentType));
+        return new ContentView(mapper.findById(row.id), mapper.findRevisionById(revision.id));
     }
 
     public RevisionResult createRevision(CreateRevision c, Actor actor) {

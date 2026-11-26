@@ -125,4 +125,6 @@ interface ChannelMapper {
 
     @Select("SELECT COUNT(*) FROM channel_config WHERE channel_id = #{channelId}")
     long countConfigs(long channelId);
+    @Select("SELECT " + CONFIG_COLUMNS + " FROM channel_config WHERE channel_id = #{channelId} AND id = #{id}")
+    ChannelConfig findConfigById(long channelId, long id);
 }
