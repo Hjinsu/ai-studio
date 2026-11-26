@@ -8,6 +8,7 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.Objects;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,6 +19,9 @@ import com.aistudio.production.contract.ProductionDiscovery;
 import com.aistudio.production.contract.ProductionDiscovery.EvaluatedCandidate;
 import com.aistudio.production.contract.ProductionDiscovery.Mode;
 import com.aistudio.production.contract.ProductionStage;
+import com.aistudio.production.contract.PlanningJson;
+import com.aistudio.production.contract.ProductionPlanning;
+import com.aistudio.production.planning.PlanningResultMapper;
 import com.aistudio.production.discovery.persistence.ProductionDiscoveryMapper;
 import com.aistudio.production.discovery.persistence.ProductionDiscoveryMapper.Batch;
 import com.aistudio.content.command.CanonicalJson;
@@ -41,16 +45,41 @@ class ProductionRequestService {
     private final JsonMapper json;
     private final BudgetControlLock control;
     private final LockRetryingTransactions transactions;
+    private final PlanningResultMapper planningResults;
+    private final String shortsPipeline;
 
     ProductionRequestService(ProductionRequestMapper mapper, ChannelService channels,
             BudgetControlLock control, LockRetryingTransactions transactions, ProductionDiscoveryMapper discovery,
-            JsonMapper json) {
+            JsonMapper json, PlanningResultMapper planningResults,
+            @Value("${ai-studio.production.planning-enabled:false}") boolean planningEnabled) {
         this.mapper = mapper;
         this.channels = channels;
         this.control = control;
         this.transactions = transactions;
         this.discovery = discovery;
         this.json = json;
+        this.planningResults = planningResults;
+        this.shortsPipeline = planningEnabled ? ProductionPlanning.PIPELINE : ProductionDiscovery.PIPELINE;
+    }
+
+    @Transactional(readOnly = true)
+    public ProductionRequestController.Planning planning(long actorId, long id) {
+        requireOwner(mapper.byId(id), actorId);
+        var results = planningResults.applied(id).stream().map(result -> {
+            if (!PlanningJson.matches(result.bodyJson(), result.bodyHash())) {
+                throw new ApiException(ErrorCode.INVALID_STATE_TRANSITION, "Planning result integrity check failed.");
+            }
+            Object body = switch (result.stage()) {
+                case RESEARCH -> json.readValue(result.bodyJson(), ProductionPlanning.Research.class);
+                case SCRIPT -> json.readValue(result.bodyJson(), ProductionPlanning.Script.class);
+                case SCENES -> json.readValue(result.bodyJson(), ProductionPlanning.Scenes.class);
+                default -> throw new ApiException(ErrorCode.INVALID_STATE_TRANSITION);
+            };
+            return new ProductionRequestController.PlanningResult(Long.toString(result.operationId()),
+                    result.stage(), result.bodyHash(), body,
+                    json.readValue(result.validationJson(), ProductionPlanning.Validation.class));
+        }).toList();
+        return new ProductionRequestController.Planning("FAKE", results);
     }
 
     Created create(long actorId, long channelId, String type, String key, Mode selectionMode, Integer candidateCount) {
@@ -80,7 +109,7 @@ class ProductionRequestService {
                 }
                 long configId = channels.latestConfigInTransaction(channelId).id();
                 mapper.insert(channelId, configId, actorId, type,
-                        discoveryEnabled ? ProductionDiscovery.PIPELINE : "v2-fixed-1", key, hash, limit);
+                        discoveryEnabled ? shortsPipeline : "v2-fixed-1", key, hash, limit);
                 ProductionRequestMapper.Request request = mapper.byKey(key);
                 for (ProductionStage stage : ProductionStage.values()) {
                     mapper.addStep(request.id(), stage);

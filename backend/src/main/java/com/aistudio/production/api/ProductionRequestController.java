@@ -52,6 +52,11 @@ class ProductionRequestController {
             String contentId, String runId, Instant cancelRequestedAt, String limitKrw, String reservedKrw,
             String recognizedKrw, List<ProductionRequestMapper.Step> steps) {}
 
+    record PlanningResult(String operationId, com.aistudio.production.contract.ProductionStage stage,
+            String bodyHash, Object body, com.aistudio.production.contract.ProductionPlanning.Validation validation) {}
+
+    record Planning(String executionMode, List<PlanningResult> results) {}
+
     private final ProductionRequestService service;
 
     ProductionRequestController(ProductionRequestService service) {
@@ -84,6 +89,11 @@ class ProductionRequestController {
     @PostMapping("/{id}/cancel")
     Detail cancel(@PathVariable @Pattern(regexp = ApiId.PATTERN) String id) {
         return service.cancel(CurrentActor.principal().id(), ApiId.parse("id", id));
+    }
+
+    @GetMapping("/{id}/planning")
+    Planning planning(@PathVariable @Pattern(regexp = ApiId.PATTERN) String id) {
+        return service.planning(CurrentActor.principal().id(), ApiId.parse("id", id));
     }
 
     @GetMapping("/{id}/discovery")

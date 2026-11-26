@@ -94,6 +94,11 @@ class ProductionRequestApiIT {
         String location = result.getResponse().getHeader("Location");
         assertThat(location).startsWith(PATH + "/");
 
+        mvc.perform(get(location + "/planning").with(ApiTestSupport.as(admin)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.executionMode").value("FAKE"))
+                .andExpect(jsonPath("$.results").isEmpty());
+
         mvc.perform(post(PATH).with(ApiTestSupport.as(admin)).header("Idempotency-Key", key)
                         .contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isOk());

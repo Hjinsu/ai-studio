@@ -56,7 +56,7 @@ class ProductionSelectionService implements ProductionSelectionPort {
                 || selection.title() == null || selection.brief() == null) {
             throw ApiException.validation("selection", "a SHA-256 fingerprint, title and brief are required");
         }
-        boolean discovered = ProductionDiscovery.PIPELINE.equals(request.pipelineVersion());
+        boolean discovered = ProductionDiscovery.supportsPipeline(request.pipelineVersion());
         var snapshot = discovered ? discovery.snapshot(request.id()) : null;
         if (discovered && (snapshot == null
                 || (selection.language() != null && !snapshot.language().equals(selection.language())))) {

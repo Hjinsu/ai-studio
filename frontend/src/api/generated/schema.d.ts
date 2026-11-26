@@ -808,6 +808,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/production-requests/{id}/planning": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ProductionRequestId"];
+            };
+            cookie?: never;
+        };
+        /** Read applied production planning results */
+        get: operations["getProductionPlanning"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/production-requests/{id}/selection": {
         parameters: {
             query?: never;
@@ -831,6 +850,101 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        ProductionPlanning: {
+            /** @enum {string} */
+            executionMode: "FAKE";
+            results: components["schemas"]["PlanningResult"][];
+        };
+        PlanningResult: {
+            operationId: string;
+            /** @enum {string} */
+            stage: "RESEARCH" | "SCRIPT" | "SCENES";
+            bodyHash: string;
+            body: components["schemas"]["PlanningResearch"] | components["schemas"]["PlanningScript"] | components["schemas"]["PlanningScenes"];
+            validation: components["schemas"]["PlanningValidation"];
+        };
+        PlanningValidation: {
+            findings: components["schemas"]["PlanningFinding"][];
+        };
+        PlanningFinding: {
+            /** @enum {string} */
+            severity: "BLOCK" | "RECOMMENDATION";
+            code: string;
+            location: string;
+            references: string[];
+            correction: string;
+        };
+        PlanningResearch: {
+            question: string;
+            angle: string;
+            investigations: components["schemas"]["PlanningInvestigation"][];
+            claims: components["schemas"]["PlanningClaim"][];
+            sources: components["schemas"]["PlanningSource"][];
+            limitations: string[];
+            scriptClaimIds: string[];
+        };
+        PlanningInvestigation: {
+            id: string;
+            question: string;
+            requestedEvidence: string;
+            status: string;
+        };
+        PlanningClaim: {
+            id: string;
+            /** @enum {string} */
+            kind: "FACT" | "HYPOTHESIS" | "SCENARIO" | "UNVERIFIED";
+            text: string;
+            evidenceRefs: components["schemas"]["PlanningEvidence"][];
+            uncertainty: string | null;
+        };
+        PlanningSource: {
+            id: string;
+            /** @enum {string} */
+            origin: "RETRIEVED" | "MODEL_HINT" | "FAKE" | "FIXTURE";
+            /** @enum {string} */
+            status: "VERIFIED" | "UNVERIFIED" | "FIXTURE";
+            url: string | null;
+            title: string | null;
+            publisher: string | null;
+            checkedAtUtc: string | null;
+            documentHash: string | null;
+        };
+        PlanningEvidence: {
+            sourceId: string;
+            locator: string;
+            supportingExcerpt: string;
+            /** @enum {string} */
+            relation: "SUPPORTS" | "CONTRADICTS" | "INSUFFICIENT";
+        };
+        PlanningScript: {
+            language: string;
+            segments: components["schemas"]["PlanningSegment"][];
+            hookSegmentIds: string[];
+            estimatedDurationMs: number;
+            timingRuleVersion: string;
+            editorialIntent: string;
+        };
+        PlanningSegment: {
+            id: string;
+            narration: string;
+            claimIds: string[];
+        };
+        PlanningScenes: {
+            visualStyle: string;
+            scenes: components["schemas"]["PlanningScene"][];
+        };
+        PlanningScene: {
+            id: string;
+            order: number;
+            segmentIds: string[];
+            estimatedDurationMs: number;
+            narration: string;
+            visualDescription: string;
+            imagePrompt: string;
+            direction: string;
+            transition: string | null;
+            subtitleText: string;
+        };
         /** @enum {string} */
         ProductionStatus: "QUEUED" | "RUNNING" | "RECOVERY_REQUIRED" | "SUCCEEDED" | "FAILED" | "CANCELLED";
         ProductionDiscoveryDetail: {
@@ -3123,6 +3237,40 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    getProductionPlanning: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ProductionRequestId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Applied planning outputs and validation findings */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductionPlanning"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description Result integrity conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
     chooseProductionCandidate: {

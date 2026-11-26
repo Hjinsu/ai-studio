@@ -39,7 +39,8 @@ class MigrationConventionTest {
             "V6__create_content_domain.sql", "304900fda20821c83a9f3f3a56c9568f4215544158020569bd6f36e9d2412588",
             "V9__create_production_contract.sql", "ad1a8974d010afe54d5215174e1cc9ca8661a0ee30817e52ed122913afbc9957",
             "V10__create_production_discovery.sql", "83878c9553675f259e14421462f183f7bfb99bcdcfe3d3f4508785fe85debccc",
-            "V11__preserve_discovery_rechecks.sql", "f124242b3a3ae274528a811a015b375a2f202a9e45d59440fb17e07f9f8a3e32");
+            "V11__preserve_discovery_rechecks.sql", "f124242b3a3ae274528a811a015b375a2f202a9e45d59440fb17e07f9f8a3e32",
+            "V12__create_production_stage_result.sql", "ddb685a9df80db7adc38d5e1d65eac2d3b3385594b659a37ebaf7555787ec7fc");
 
     /** V1은 ADR-014 이전 기준선이므로 collation 규칙 검사에서 제외한다 (수정 금지). */
     private static final List<String> COLLATION_RULE_EXEMPT = List.of("V1__initial_baseline.sql");
@@ -115,7 +116,9 @@ class MigrationConventionTest {
             "production_step.target_key",
             "provider_operation.effect_key",
             "provider_operation.request_hash",
-            "provider_operation.evidence_hash");
+            "provider_operation.evidence_hash",
+            "production_stage_result.input_hash",
+            "production_stage_result.body_hash");
 
     private static final Pattern CREATE_TABLE = Pattern.compile("create\\s+table\\s+(\\w+)");
     private static final Pattern COLUMN_COLLATE = Pattern.compile("^\\s*(\\w+)\\s+[^\\n]*?\\bcollate\\s*=?\\s*(\\w+)");

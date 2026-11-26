@@ -12,6 +12,10 @@ public final class ProductionDiscovery {
 
     private ProductionDiscovery() {}
 
+    public static boolean supportsPipeline(String version) {
+        return PIPELINE.equals(version) || ProductionPlanning.PIPELINE.equals(version);
+    }
+
     public enum Mode { AUTO, MANUAL }
 
     public record Input(long requestId, long channelConfigId, String language, int candidateCount,

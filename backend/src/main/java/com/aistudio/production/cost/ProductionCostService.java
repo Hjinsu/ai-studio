@@ -175,7 +175,7 @@ public class ProductionCostService implements ProductionCostPort {
         control.shared();
         Request request = requireRequest(owner.requestId());
         Step step = requireStep(owner);
-        if (discoveryEffect != (ProductionDiscovery.PIPELINE.equals(request.pipelineVersion())
+        if (discoveryEffect != (ProductionDiscovery.supportsPipeline(request.pipelineVersion())
                 && step.stage() == ProductionStage.DISCOVER)) {
             throw new ApiException(ErrorCode.INVALID_STATE_TRANSITION);
         }
@@ -300,7 +300,7 @@ public class ProductionCostService implements ProductionCostPort {
                 return false;
             }
             Step step = mapper.step(requestId, operation.productionStepId());
-            if (ProductionDiscovery.PIPELINE.equals(request.pipelineVersion()) && step.stage() == ProductionStage.DISCOVER
+            if (ProductionDiscovery.supportsPipeline(request.pipelineVersion()) && step.stage() == ProductionStage.DISCOVER
                     && normalized.outcome() == Outcome.RESULT_ADOPTED) {
                 if (operation.evidenceHash() == null) {
                     if (body == null || discovery.saveResponse(requestId, operationId, body, normalized.resultHash()) != 1) {

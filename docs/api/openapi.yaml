@@ -1275,6 +1275,34 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/production-requests/{id}/planning:
+    parameters:
+      - $ref: '#/components/parameters/ProductionRequestId'
+    get:
+      operationId: getProductionPlanning
+      summary: Read applied production planning results
+      tags: [Production]
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Applied planning outputs and validation findings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductionPlanning'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Result integrity conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/production-requests/{id}/selection:
     parameters:
       - $ref: '#/components/parameters/ProductionRequestId'
@@ -1434,6 +1462,234 @@ components:
           schema: { $ref: '#/components/schemas/BudgetPolicy' }
 
   schemas:
+    ProductionPlanning:
+      type: object
+      required: [executionMode, results]
+      properties:
+        executionMode:
+          type: string
+          enum: [FAKE]
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanningResult'
+
+    PlanningResult:
+      type: object
+      required: [operationId, stage, bodyHash, body, validation]
+      properties:
+        operationId:
+          type: string
+        stage:
+          type: string
+          enum: [RESEARCH, SCRIPT, SCENES]
+        bodyHash:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+        body:
+          oneOf:
+            - $ref: '#/components/schemas/PlanningResearch'
+            - $ref: '#/components/schemas/PlanningScript'
+            - $ref: '#/components/schemas/PlanningScenes'
+        validation:
+          $ref: '#/components/schemas/PlanningValidation'
+
+    PlanningValidation:
+      type: object
+      required: [findings]
+      properties:
+        findings:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanningFinding'
+
+    PlanningFinding:
+      type: object
+      required: [severity, code, location, references, correction]
+      properties:
+        severity:
+          type: string
+          enum: [BLOCK, RECOMMENDATION]
+        code:
+          type: string
+        location:
+          type: string
+        references:
+          type: array
+          items:
+            type: string
+        correction:
+          type: string
+
+    PlanningResearch:
+      type: object
+      required: [question, angle, investigations, claims, sources, limitations, scriptClaimIds]
+      properties:
+        question:
+          type: string
+        angle:
+          type: string
+        investigations:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanningInvestigation'
+        claims:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanningClaim'
+        sources:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanningSource'
+        limitations:
+          type: array
+          items:
+            type: string
+        scriptClaimIds:
+          type: array
+          items:
+            type: string
+
+    PlanningInvestigation:
+      type: object
+      required: [id, question, requestedEvidence, status]
+      properties:
+        id:
+          type: string
+        question:
+          type: string
+        requestedEvidence:
+          type: string
+        status:
+          type: string
+
+    PlanningClaim:
+      type: object
+      required: [id, kind, text, evidenceRefs, uncertainty]
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+          enum: [FACT, HYPOTHESIS, SCENARIO, UNVERIFIED]
+        text:
+          type: string
+        evidenceRefs:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanningEvidence'
+        uncertainty:
+          type: [string, 'null']
+
+    PlanningSource:
+      type: object
+      required: [id, origin, status, url, title, publisher, checkedAtUtc, documentHash]
+      properties:
+        id:
+          type: string
+        origin:
+          type: string
+          enum: [RETRIEVED, MODEL_HINT, FAKE, FIXTURE]
+        status:
+          type: string
+          enum: [VERIFIED, UNVERIFIED, FIXTURE]
+        url:
+          type: [string, 'null']
+        title:
+          type: [string, 'null']
+        publisher:
+          type: [string, 'null']
+        checkedAtUtc:
+          type: [string, 'null']
+        documentHash:
+          type: [string, 'null']
+
+    PlanningEvidence:
+      type: object
+      required: [sourceId, locator, supportingExcerpt, relation]
+      properties:
+        sourceId:
+          type: string
+        locator:
+          type: string
+        supportingExcerpt:
+          type: string
+        relation:
+          type: string
+          enum: [SUPPORTS, CONTRADICTS, INSUFFICIENT]
+
+    PlanningScript:
+      type: object
+      required: [language, segments, hookSegmentIds, estimatedDurationMs, timingRuleVersion, editorialIntent]
+      properties:
+        language:
+          type: string
+        segments:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanningSegment'
+        hookSegmentIds:
+          type: array
+          items:
+            type: string
+        estimatedDurationMs:
+          type: integer
+        timingRuleVersion:
+          type: string
+        editorialIntent:
+          type: string
+
+    PlanningSegment:
+      type: object
+      required: [id, narration, claimIds]
+      properties:
+        id:
+          type: string
+        narration:
+          type: string
+        claimIds:
+          type: array
+          items:
+            type: string
+
+    PlanningScenes:
+      type: object
+      required: [visualStyle, scenes]
+      properties:
+        visualStyle:
+          type: string
+        scenes:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanningScene'
+
+    PlanningScene:
+      type: object
+      required: [id, order, segmentIds, estimatedDurationMs, narration, visualDescription, imagePrompt, direction, transition, subtitleText]
+      properties:
+        id:
+          type: string
+        order:
+          type: integer
+        segmentIds:
+          type: array
+          items:
+            type: string
+        estimatedDurationMs:
+          type: integer
+        narration:
+          type: string
+        visualDescription:
+          type: string
+        imagePrompt:
+          type: string
+        direction:
+          type: string
+        transition:
+          type: [string, 'null']
+        subtitleText:
+          type: string
+
     ProductionStatus:
       type: string
       enum: [QUEUED, RUNNING, RECOVERY_REQUIRED, SUCCEEDED, FAILED, CANCELLED]
