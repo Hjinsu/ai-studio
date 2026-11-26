@@ -2,6 +2,33 @@
 
 2026-11-26 KST · `v2/review-v2-03` · 구현 결합, 별도 독립 리뷰 대상
 
+## F05 최종 수정 결합 및 검증 (2026-11-26 KST)
+
+**HOLD.** 기준 `eabf980780d06474767f6195895c3b0df84a926b`와 Claude 브랜치 `v2/03-f05-final-fix`의 원격 SHA `1d31f5046bce52cc70a6fb4236b7b05abc079b5c`를 확인했다. 별도 `ai-studio-v2-review-03` worktree의 `v2/review-v2-03`에서 fast-forward했다. 제품 변경 파일은 `ScenesReview.java`와 `ScenesReviewTest.java`다.
+
+이전 독립 재리뷰는 주변 프레이밍 단어가 사실 비율을 수치 검수에서 제외하는 문제로 HOLD였다. 이번 변경은 주변 단어 예외를 제거하고, 문장부호로 나눈 절 전체가 허용된 화면비 지시 문법과 일치할 때만 9:16을 제외한다. 지정된 이전 사례 여섯 개 모두 Venus fixture의 실제 SCENES 검수에서 `SCENE_NEW_FACT`에 9와 16을 남겼다. 명확히 분리된 정상 화면비 지시, 정상 fixture와 대본 근거 수치도 통과했다.
+
+### 신규 F05 반례
+
+| 사실 설명의 장면 프롬프트 | 기대 `SCENE_NEW_FACT` 참조 | 실제 참조 |
+|---|---|---|
+| `The mass ratio: vertical 9:16` | 9, 16 | 없음 |
+| `The mass ratio (9:16 vertical)` | 9, 16 | 없음 |
+| `The mass ratio — 9:16 frame` | 9, 16 | 없음 |
+| `The mass ratio, 9:16 composition` | 9, 16 | 없음 |
+
+`ScenesReviewTest`의 Venus fixture 첫 장면 이미지 프롬프트만 교체하고 `SCENE_NEW_FACT`의 참조를 읽어 재현했다. `ScenesReview.CLAUSE_SEPARATOR`가 사실을 지칭하는 앞부분을 분리하면 `FRAMING_CLAUSE`가 나머지 절을 허용한다. `The mass ratio: 9:16 vertical` 및 ASCII 하이픈을 쓴 `The mass ratio - 9:16 frame`은 각각 9와 16을 보존했다. 정상 대조군은 `A Venus illustration. Aspect ratio: 9:16.`, `A Venus illustration (vertical 9:16)`, `A Venus illustration, 9:16 vertical frame`, `A Venus illustration — vertical 9:16`이다.
+
+Claude 담당 수정에서 문장부호로 이어진 사실 비율을 수치 검수에 남기고 위 네 사례와 정상 대조군을 회귀로 추가한다. 일반 자연어 의미 검증은 V2-05 범위다. Draft PR #6은 별도 독립 리뷰 APPROVE 및 사용자 승인까지 HOLD다. [Draft PR #6 검사](https://github.com/Hjinsu/ai-studio/pull/6/checks)
+
+### 로컬 검증
+
+- `AI_STUDIO_REVIEW_EDGE=true`, `gradlew.bat --no-build-cache :backend:test :backend:bootJar :backend:integrationTest --rerun-tasks`. Java 21·Gradle 9.8.2에서 단위 293건(ScenesReviewTest 22건), 격리 MariaDB 11.8.2 통합 253건(실제 API Edge 1건 포함), 실패·오류·건너뜀 0건, bootJar 성공. F01~F04 및 F06의 검수 크기·영수증 재생, 응답 형식과 타임아웃 분리, 비교 스냅샷, 공급자 준비 조건, 동결된 길이 범위를 재검증했다. 비용 보호·lease·fencing·사용자 취소 회귀와 V11 데이터 보존·V12 적용을 포함한다. 실제 API Edge에서 AUTO·MANUAL·차단·재조회·이력·다크·모바일·소유자 격리·미인증 경로를 검증했다.
+- Node 24.19.0에서 `npm ci`, `npm run lint`, `npm run typecheck`, `npm test` 97건, `npm run build`, `npm run e2e` Mock Edge 14건 통과.
+- `frontend/tools/openapi-typescript`에서 `npm ci`, `npm run lint:openapi`, `npm run check` 통과. 기존 경고 2건은 CSRF 4xx 응답 미정의와 미사용 PageMeta다.
+- 사용자 PATH를 다시 읽어 FFmpeg 9.1과 Gitleaks 8.30.1을 확인했다. Gitleaks의 결합 증분 및 HEAD 도달 이력에 탐지 0건. 로컬 전체 ref 검사에서는 게시 대상 밖의 과거 `BudgetMapper.java` SQL 조인 오탐 2건이 재확인됐다. `git diff --check` 통과.
+- 기존 migration, OpenAPI 및 생성 타입은 기준과 동일하다. 임시 MariaDB는 루프백의 별도 포트와 임시 데이터 디렉터리에서 사용했다.
+
 ## HOLD 수정 결합
 
 독립 리뷰 기준 `54ffea3c09246b61a057c427e6210591af20cccb`에 Codex `ec10c07`, Claude F05 `5f8dfe3`, F06 `a6fa744`, F05 후속 `8fd969a051ec2a1d440508dc988bf5a7652662ff`를 결합했다. 장면 비율 추가 회귀를 반영한 코드 SHA는 `782b6d5a31fe150764418ada5551326e6022ee9d`다. 최종 리뷰 대상은 이 기록을 포함한 [Draft PR #6](https://github.com/Hjinsu/ai-studio/pull/6)의 HEAD다.

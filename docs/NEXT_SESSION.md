@@ -1,6 +1,6 @@
 # 회사 PC 다음 세션 — AI Studio v2
 
-2026-11-26 KST · V2-01·V2-02 DONE · V2-03 HOLD, F01~F06 수정 결합 및 독립 재검토 대기.
+2026-11-26 KST · V2-01·V2-02 DONE · V2-03 HOLD, F05 최종 수정 결합 및 문장부호 반례 보완 대기.
 
 ## 기준과 보존
 
@@ -31,7 +31,7 @@ git -C ../ai-studio-v2 status --short --branch
 
 ## 다음 작업
 
-**V2-03 자료 조사·대본·장면 구성**의 F01~F06과 F05 후속을 `v2/review-v2-03`에 결합했다. 다음 작업은 Draft PR #6의 최신 HEAD에 대한 별도 독립 재검토다. 구현·결합 세션과 분리하고, 대상 SHA와 CI 일치를 확인한 뒤 읽기 전용으로 검토한다. HOLD 해제와 병합은 독립 리뷰 APPROVE 및 사용자 승인 후 진행한다. [결합 검증 보고서](reports/V2-03_INTEGRATION_REPORT.md) · [승인 설계](v2/V2-03_IMPLEMENTATION_PLAN.md)
+**V2-03 자료 조사·대본·장면 구성**은 `v2/review-v2-03`의 별도 `ai-studio-v2-review-03` worktree에서 이어간다. Claude `1d31f50`은 기존 우회 사례 여섯 개를 막았다. 다음 작업은 Claude 담당으로 사실 비율과 프레이밍이 콜론·괄호·긴 대시·쉼표로 이어진 반례 네 개를 보완하고 정상 화면비 지시와 함께 회귀 검증하는 것이다. 다시 결합한 Draft PR #6 최신 HEAD에서 CI를 확인하고 별도 세션에서 읽기 전용 독립 재검토를 진행한다. HOLD 해제와 병합은 독립 리뷰 APPROVE 및 사용자 승인 후 진행한다. [결합 검증 보고서](reports/V2-03_INTEGRATION_REPORT.md) · [승인 설계](v2/V2-03_IMPLEMENTATION_PLAN.md)
 
 ```powershell
 git fetch origin

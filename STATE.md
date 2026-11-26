@@ -16,6 +16,12 @@
 ## 인수인계 기록
 작업 ID / 상태 / 변경 파일 / 테스트 명령 및 실제 결과 / 미해결 문제 / 다음 작업 / 필요 환경변수. 커밋 해시는 생성된 경우만 기록.
 
+### V2-03 — F05 최종 수정 검증 (2026-11-26 KST, HOLD)
+
+- 기준 `eabf980780d06474767f6195895c3b0df84a926b`에 Claude `1d31f5046bce52cc70a6fb4236b7b05abc079b5c`를 별도 `ai-studio-v2-review-03` worktree의 `v2/review-v2-03`에서 fast-forward했다. 변경 제품 파일은 `ScenesReview.java`, `ScenesReviewTest.java`다. 인수 문서는 `STATE.md`, `TASKS.md`, `docs/NEXT_SESSION.md`, `docs/reports/V2-03_INTEGRATION_REPORT.md`다.
+- 이전 HOLD 사례 여섯 개는 수치 검수에서 차단됐다. 콜론·괄호·긴 대시·쉼표가 사실 비율을 화면비 지시처럼 분리하는 신규 반례 네 개가 재현됐다. 다음 작업은 Claude 담당 F05 경계 보완과 회귀 추가, 결합 및 최신 HEAD의 CI 확인, 별도 독립 재검토다.
+- 백엔드 단위 293건(ScenesReviewTest 22건), 격리 MariaDB 11.8.2 통합 253건(실제 API Edge 1건 포함)과 bootJar 통과. V12는 격리 DB에만 적용했고 임시 서버의 정상 종료를 확인했다. Vitest 97건, Mock Edge 14건, 프론트 lint·typecheck·build, OpenAPI lint(기존 경고 2건)와 생성 타입 검사, 게시 이력 Gitleaks, diff 검사 통과. Migration 파일은 기준과 동일하다. [결합 보고서](docs/reports/V2-03_INTEGRATION_REPORT.md#f05-최종-수정-결합-및-검증-2026-11-26-kst) · [Draft PR #6 검사](https://github.com/Hjinsu/ai-studio/pull/6/checks)
+
 ### V2-03 — 독립 리뷰 HOLD 수정 (2026-11-26 KST)
 
 - 독립 리뷰 기준 `54ffea3c09246b61a057c427e6210591af20cccb`, 수정 브랜치 `v2/review-v2-03`, [Draft PR #6](https://github.com/Hjinsu/ai-studio/pull/6). 사용자가 HOLD를 수용했다. 별도 독립 리뷰 APPROVE와 사용자 승인 전까지 병합·DONE을 보류한다.
