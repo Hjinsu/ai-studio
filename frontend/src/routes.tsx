@@ -21,6 +21,7 @@ export const routes: RouteObject[] = [
       { path: 'channels', lazy: () => import('./pages/ChannelsPage').then((m) => ({ Component: m.ChannelsPage })) },
       { path: 'channels/:channelId', lazy: () => import('./pages/ChannelDetailPage').then((m) => ({ Component: m.ChannelDetailPage })) },
       { path: 'production', lazy: () => import('./pages/ProductionRequestStartPage').then((m) => ({ Component: m.ProductionRequestStartPage })) },
+      { path: 'production/requests', lazy: () => import('./pages/ProductionRequestsPage').then((m) => ({ Component: m.ProductionRequestsPage })) },
       { path: 'production/:requestId', lazy: () => import('./pages/ProductionRequestDetailPage').then((m) => ({ Component: m.ProductionRequestDetailPage })) },
       { path: 'budget/policies', lazy: () => import('./pages/PoliciesPage').then((m) => ({ Component: m.PoliciesPage })) },
       { path: 'budget/policies/:policyId', lazy: () => import('./pages/PolicyDetailPage').then((m) => ({ Component: m.PolicyDetailPage })) },

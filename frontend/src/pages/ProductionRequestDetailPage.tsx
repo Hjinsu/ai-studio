@@ -14,6 +14,7 @@ import {
   getProductionRequest,
   isTerminal,
   productionKey,
+  type CandidateChoice,
   type EvaluatedCandidate,
   type ProductionDiscovery,
   type ProductionRequestDetail,
@@ -30,7 +31,17 @@ import { PageHeader } from '../ui/PageHeader'
 import { EmptyState, ErrorState, InlineNotice, LoadingSkeleton, QueryView } from '../ui/States'
 import { LabelBadge, StatusBadge } from '../ui/StatusBadge'
 import { useToast } from '../ui/toast-context'
-import { BLOCK, CRITERIA, PRODUCTION_STATUS, SELECTION_MODE, SOURCE_TYPE, STAGE, STEP_STATUS } from './ProductionRequestLabels'
+import {
+  BLOCK,
+  CRITERIA,
+  FAKE_RUN_NOTICE,
+  SELECTION_MODE,
+  SOURCE_TYPE,
+  STAGE,
+  STEP_ERROR,
+  STEP_STATUS,
+  productionStatusLabel,
+} from './ProductionRequestLabels'
 
 /** 진행 중인 요청은 주기적으로 다시 조회한다(완료·실패·취소 후 중지). */
 const POLL_MS = 5_000
@@ -65,7 +76,7 @@ export function ProductionRequestDetailPage() {
   return (
     <QueryView query={detail} rows={6}>
       {(request) => {
-        const status = label(PRODUCTION_STATUS, request.status)
+        const status = productionStatusLabel(request.status)
         const open = !isTerminal(request.status) && !request.cancelRequestedAt
         return (
           <>
@@ -87,6 +98,7 @@ export function ProductionRequestDetailPage() {
                   <DateTime value={request.cancelRequestedAt} />에 취소를 요청했습니다. 실행 중인 단계와 비용 확인이 끝나면 취소됩니다.
                 </InlineNotice>
               )}
+              {request.status === 'SUCCEEDED' && <InlineNotice tone="warning">{FAKE_RUN_NOTICE}</InlineNotice>}
               {request.status === 'RECOVERY_REQUIRED' && (
                 <InlineNotice tone="warning">
                   외부 실행 결과 또는 비용 정산을 확인하는 중입니다. 예약은 유지되며 같은 작업을 다시 호출하지 않습니다.
@@ -108,6 +120,7 @@ export function ProductionRequestDetailPage() {
                     { key: 'stage', header: '단계', cell: (step) => text(STAGE, step.stage) },
                     { key: 'status', header: '상태', cell: (step) => <LabelBadge value={label(STEP_STATUS, step.status)} /> },
                     { key: 'attempts', header: '시도', align: 'right', cell: (step) => <span className="num">{step.attempts}회</span> },
+                    { key: 'error', header: '마지막 오류', cell: (step) => <StepError code={step.lastErrorCode} /> },
                   ]}
                 />
               </Card>
@@ -179,17 +192,20 @@ function DiscoveryCandidates({
   onChanged: (generation: AbortSignal) => Promise<unknown>
 }) {
   const toast = useToast()
-  const [picking, setPicking] = useState<EvaluatedCandidate | null>(null)
+  // 확인 대화상자를 열 때 본 후보 묶음(version·batchToken)을 고정한다. 폴링으로 묶음이 바뀌면 다시 고르게 한다.
+  const [picking, setPicking] = useState<{ candidate: EvaluatedCandidate; choice: CandidateChoice } | null>(null)
   const choose = useSessionMutation({
-    mutationFn: (candidate: EvaluatedCandidate) =>
-      chooseProductionCandidate(request.id, candidate.candidateId, discovery.version),
-    onSuccess: async (_result, candidate, generation) => {
+    mutationFn: (choice: CandidateChoice) => chooseProductionCandidate(request.id, choice),
+    onSuccess: async (_result, choice, generation) => {
       assertSession(generation)
       setPicking(null)
-      toast.success(`후보 ${candidate.candidateId}번을 선택했습니다. 다시 확인한 뒤 다음 단계로 진행합니다.`, generation)
+      toast.success(`후보 ${choice.candidateId}번을 선택했습니다. 다시 확인한 뒤 다음 단계로 진행합니다.`, generation)
       await onChanged(generation)
     },
   })
+  const batchChanged =
+    picking != null &&
+    (picking.choice.version !== discovery.version || picking.choice.batchToken !== discovery.batchToken || !discovery.awaitingSelection)
   const mode = SELECTION_MODE[discovery.selectionMode] ?? { text: discovery.selectionMode, help: '' }
   const ordered = [...discovery.candidates].sort((a, b) => rank(b) - rank(a) || a.candidateId - b.candidateId)
   const eligible = ordered.filter((c) => c.blockCodes.length === 0)
@@ -239,7 +255,13 @@ function DiscoveryCandidates({
                   selected={candidate.candidateId === discovery.selectedCandidateId}
                   chosen={candidate.candidateId === discovery.chosenCandidateId}
                   canChoose={discovery.awaitingSelection && candidate.blockCodes.length === 0}
-                  onChoose={() => { choose.reset(); setPicking(candidate) }}
+                  onChoose={() => {
+                    choose.reset()
+                    setPicking({
+                      candidate,
+                      choice: { candidateId: candidate.candidateId, version: discovery.version, batchToken: discovery.batchToken },
+                    })
+                  }}
                 />
               ))}
             </ol>
@@ -252,18 +274,24 @@ function DiscoveryCandidates({
         confirmLabel="이 소재 선택"
         tone="primary"
         busy={choose.isPending}
-        onConfirm={() => picking && choose.mutate(picking)}
+        confirmDisabled={batchChanged}
+        onConfirm={() => picking && !batchChanged && choose.mutate(picking.choice)}
         onCancel={() => setPicking(null)}
       >
         {picking && (
           <>
-            <p className="font-medium">{picking.candidate.title}</p>
+            <p className="font-medium">{picking.candidate.candidate.title}</p>
             <p className="text-sm text-muted">
               선정 직전에 최신 소재·콘텐츠와 다시 비교합니다. 그사이 중복이 생기면 선택이 해제되고 다시 고를 수 있습니다.
             </p>
           </>
         )}
-        {choose.error && <ErrorState error={choose.error} compact />}
+        {batchChanged && (
+          <InlineNotice tone="warning">
+            후보 평가가 바뀌었습니다. 이 창을 닫고 최신 후보 목록에서 다시 선택해 주세요.
+          </InlineNotice>
+        )}
+        {choose.error && !batchChanged && <ErrorState error={choose.error} compact />}
       </ConfirmDialog>
     </Card>
   )
@@ -403,5 +431,17 @@ function CandidateCard({
         </div>
       )}
     </li>
+  )
+}
+
+function StepError({ code }: { code: string | null }) {
+  if (!code) {
+    return <span className="text-muted">—</span>
+  }
+  return (
+    <span className="break-words">
+      {STEP_ERROR[code] ?? code}
+      {STEP_ERROR[code] && <span className="num block text-xs text-muted">{code}</span>}
+    </span>
   )
 }

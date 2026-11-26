@@ -95,7 +95,7 @@ public final class DiscoverySelections {
         identity.put("title", TextSimilarity.normalized(c.title()));
         identity.put("brief", brief);
         identity.put("duration", duration);
-        return new Selection(CanonicalJson.sha256(identity), c.title(), brief, duration);
+        return new Selection(CanonicalJson.sha256(identity), c.title(), brief, duration, input.language());
     }
 
     /** Labelled brief. Later discovery runs read the Question and Angle lines back for comparison. */

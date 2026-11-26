@@ -46,7 +46,26 @@ test('start production with manual selection, review candidates and choose one (
   const posts = recorded.filter((r) => r.method === 'POST' && r.path.startsWith('/api/v1/production-requests'))
   expect(posts[0].body).toEqual({ channelId: '1', contentType: 'SHORTS', selectionMode: 'MANUAL', candidateCount: 5 })
   expect(posts[0].headers['idempotency-key']).toMatch(/^ui-/)
-  expect(posts[1].body).toEqual({ candidateId: 3, version: 1 })
+  expect(posts[1].body).toEqual({ candidateId: 3, version: 1, batchToken: '1'.repeat(64) })
+})
+
+test('production history lists requests, marks FAKE completion and opens the detail (V2-02)', async ({ page }) => {
+  await installMockApi(page, { signedIn: true })
+  await page.goto('/')
+  await page.getByRole('link', { name: '제작 이력' }).first().click()
+  await expect(page.getByRole('heading', { name: '제작 이력' })).toBeVisible()
+  await expect(page.getByText(/실제 AI 호출과 영상 파일 생성 없이/)).toBeVisible()
+  const table = page.getByRole('table', { name: '제작 요청 목록' })
+  await expect(table.getByRole('row')).toHaveCount(3)
+  const done = table.getByRole('row').filter({ hasText: '#41' })
+  await expect(done).toContainText('A Teaspoon of Neutron Star')
+  await expect(done).toContainText('FAKE 완료')
+  await expect(table.getByRole('row').filter({ hasText: '#42' })).toContainText('미선정')
+  await shot(page, 'v2-02-history-light')
+  await table.getByRole('link', { name: '#42' }).click()
+  await expect(page).toHaveURL(/\/production\/42$/)
+  await expect(page.getByRole('heading', { name: '제작 요청 #42' })).toBeVisible()
+  await expect(page.getByRole('table', { name: '진행 단계' }).getByRole('columnheader', { name: '마지막 오류' })).toBeVisible()
 })
 
 test('production screens in dark mode and on mobile have no page overflow', async ({ page }) => {
@@ -55,14 +74,14 @@ test('production screens in dark mode and on mobile have no page overflow', asyn
   await expect(page.getByRole('heading', { name: '대시보드' })).toBeVisible()
   await page.getByRole('button', { name: '다크 모드' }).click()
   await expect(page.locator('html')).toHaveClass(/dark/)
-  for (const [path, name] of [['/production', 'v2-02-start-dark'], ['/production/42', 'v2-02-detail-dark']]) {
+  for (const [path, name] of [['/production', 'v2-02-start-dark'], ['/production/requests', 'v2-02-history-dark'], ['/production/42', 'v2-02-detail-dark']]) {
     await page.goto(path)
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
     await expect(page.locator('html')).toHaveClass(/dark/)
     await shot(page, name)
   }
   await page.setViewportSize({ width: 390, height: 844 })
-  for (const [path, name] of [['/production', 'v2-02-start-mobile'], ['/production/42', 'v2-02-detail-mobile']]) {
+  for (const [path, name] of [['/production', 'v2-02-start-mobile'], ['/production/requests', 'v2-02-history-mobile'], ['/production/42', 'v2-02-detail-mobile']]) {
     await page.goto(path)
     await page.waitForLoadState('networkidle')
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible()

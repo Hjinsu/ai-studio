@@ -10,7 +10,10 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -23,11 +26,13 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.Primary;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
@@ -42,13 +47,16 @@ import com.aistudio.budget.BudgetControlService;
 import com.aistudio.budget.BudgetPolicyService;
 import com.aistudio.channel.ChannelService;
 import com.aistudio.channel.ChannelSettings;
+import com.aistudio.production.contract.DiscoveryExecutionPort;
 import com.aistudio.production.contract.ProductionCostPort;
+import com.aistudio.production.contract.ProductionDiscovery.Block;
 import com.aistudio.production.contract.ProductionDiscovery.Candidate;
 import com.aistudio.production.contract.ProductionDiscovery.Claim;
 import com.aistudio.production.contract.ProductionDiscovery.EvaluatedCandidate;
 import com.aistudio.production.contract.ProductionDiscovery.Input;
 import com.aistudio.production.contract.ProductionDiscovery.Response;
 import com.aistudio.production.contract.ProductionSelectionPort;
+import com.aistudio.production.discovery.DiscoveryFixtures;
 import com.aistudio.production.discovery.DiscoverySelections;
 import com.aistudio.production.discovery.FakeDiscoveryProvider;
 import com.aistudio.production.discovery.RuleBasedDiscoveryEvaluator;
@@ -59,12 +67,14 @@ import com.aistudio.shared.db.LockRetryingTransactions;
 import com.aistudio.topic.TopicNormalizer;
 
 import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * V2-02 DISCOVER/SELECT in the executor against an isolated MariaDB (V1~V10): requests are created through the
- * production API, effects go through the real V2-01 cost port (FAKE provider), SELECT links through the real
- * selection port, and the discovery persistence seam is the product-branch stand-in {@link FakeDiscoveryPort}.
+ * V2-02 DISCOVER/SELECT in the executor against an isolated MariaDB (V1~V11). Requests are created through the
+ * production API; DISCOVER, SELECT and settlement run through the real discovery persistence/cost adapter, the
+ * real V2-01 cost port and the real selection port. Only the discovery provider is a scripted FAKE, and failures
+ * are injected by {@link InjectingDiscoveryPort} just before a delegated side effect, on the same ports and DB.
  */
 @Tag("integration")
 @SpringBootTest(properties = {
@@ -82,6 +92,7 @@ import tools.jackson.databind.json.JsonMapper;
 class DiscoveryExecutionIT {
     private static final String PATH = "/api/v1/production-requests";
     private static final TestDatabases.TestDatabase DB = TestDatabases.create();
+    private static final TypeReference<List<EvaluatedCandidate>> EVALUATIONS = new TypeReference<>() {};
 
     @DynamicPropertySource
     static void database(DynamicPropertyRegistry registry) {
@@ -91,8 +102,16 @@ class DiscoveryExecutionIT {
     @TestConfiguration
     static class Ports {
         @Bean
-        FakeDiscoveryPort fakeDiscoveryPort(JdbcTemplate jdbc, ProductionCostPort cost, JsonMapper json) {
-            return new FakeDiscoveryPort(jdbc, cost, json);
+        @Primary
+        ScriptedDiscoveryProvider scriptedDiscoveryProvider() {
+            return new ScriptedDiscoveryProvider();
+        }
+
+        @Bean
+        @Primary
+        InjectingDiscoveryPort injectingDiscoveryPort(
+                @Qualifier("productionDiscoveryService") DiscoveryExecutionPort real) {
+            return new InjectingDiscoveryPort(real);
         }
     }
 
@@ -103,7 +122,8 @@ class DiscoveryExecutionIT {
     @Autowired BudgetControlService control;
     @Autowired JdbcTemplate jdbc;
     @Autowired ProductionExecutor executor;
-    @Autowired FakeDiscoveryPort port;
+    @Autowired InjectingDiscoveryPort port;
+    @Autowired ScriptedDiscoveryProvider provider;
     @Autowired JsonMapper json;
     @Autowired ExecutionMapper executionMapper;
     @Autowired BudgetControlLock budgetControl;
@@ -125,6 +145,7 @@ class DiscoveryExecutionIT {
     @BeforeEach
     void isolate() {
         port.reset();
+        provider.reset();
         jdbc.update("""
                 UPDATE production_request SET status = 'FAILED', lease_owner = NULL, lease_until = NULL
                 WHERE status IN ('QUEUED', 'RUNNING', 'RECOVERY_REQUIRED')
@@ -157,6 +178,10 @@ class DiscoveryExecutionIT {
     }
 
     int drain(String owner) {
+        return drain(executor, owner);
+    }
+
+    static int drain(ProductionExecutor executor, String owner) {
         int claims = 0;
         while (executor.runOnce(owner)) {
             if (++claims > 50) {
@@ -164,6 +189,11 @@ class DiscoveryExecutionIT {
             }
         }
         return claims;
+    }
+
+    ProductionExecutor restartedExecutor() {
+        return new ProductionExecutor(executionMapper, budgetControl, transactions, cost, selection,
+                new FakeStageWork(BigDecimal.ONE), properties, new DiscoveryFlow(port, new RuleBasedDiscoveryEvaluator()));
     }
 
     String requestStatus(long id) {
@@ -179,9 +209,19 @@ class DiscoveryExecutionIT {
         return jdbc.queryForMap("SELECT * FROM production_discovery WHERE production_request_id = ?", id);
     }
 
+    /** The evaluation stored at DISCOVER; never overwritten by a later re-check. */
     List<EvaluatedCandidate> evaluations(long id) {
-        return json.readValue(batch(id).get("evaluation_json").toString(),
-                new TypeReference<List<EvaluatedCandidate>>() {});
+        return json.readValue(batch(id).get("evaluation_json").toString(), EVALUATIONS);
+    }
+
+    /** The latest SELECT re-check, or null when SELECT has not re-checked yet. */
+    List<EvaluatedCandidate> rechecks(long id) {
+        Object recheck = batch(id).get("recheck_json");
+        return recheck == null ? null : json.readValue(recheck.toString(), EVALUATIONS);
+    }
+
+    static EvaluatedCandidate find(List<EvaluatedCandidate> list, int candidateId) {
+        return list.stream().filter(e -> e.candidateId() == candidateId).findFirst().orElseThrow();
     }
 
     int operations(long id, String stage) {
@@ -213,19 +253,29 @@ class DiscoveryExecutionIT {
                 """, channel, title, normalized, TopicNormalizer.hash(TopicNormalizer.VERSION, normalized), admin.id());
     }
 
-    void choose(long id, int candidate, int version, int expectedStatus) throws Exception {
+    JsonNode discoveryView(long id) throws Exception {
+        return json.readTree(mvc.perform(get(PATH + "/" + id + "/discovery").with(ApiTestSupport.as(admin)))
+                .andExpect(status().isOk()).andExpect(ApiTestSupport.matchesContract())
+                .andReturn().getResponse().getContentAsString());
+    }
+
+    /** Chooses with the version and batch token the requester last received. */
+    void choose(long id, int candidate, int expectedStatus) throws Exception {
+        JsonNode view = discoveryView(id);
+        choose(id, candidate, view.path("version").asInt(), view.path("batchToken").asString(), expectedStatus);
+    }
+
+    void choose(long id, int candidate, int version, String token, int expectedStatus) throws Exception {
         mvc.perform(post(PATH + "/" + id + "/selection").with(ApiTestSupport.as(admin))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"candidateId\":" + candidate + ",\"version\":" + version + "}"))
+                        .content("{\"candidateId\":%d,\"version\":%d,\"batchToken\":\"%s\"}"
+                                .formatted(candidate, version, token)))
                 .andExpect(status().is(expectedStatus));
     }
 
-    int version(long id) {
-        return ((Number) batch(id).get("version")).intValue();
-    }
-
-    long channelOf(long id) {
-        return jdbc.queryForObject("SELECT channel_id FROM production_request WHERE id = ?", Long.class, id);
+    boolean leased(long id) {
+        return jdbc.queryForObject("SELECT lease_owner IS NOT NULL FROM production_request WHERE id = ?",
+                Boolean.class, id);
     }
 
     // ------------------------------------------------------------------ AUTO
@@ -234,6 +284,8 @@ class DiscoveryExecutionIT {
     void autoDiscoversEvaluatesSelectsTheBestCandidateAndFinishesElevenStages() throws Exception {
         long channel = channel(List.of());
         long id = create(channel, "");
+        // the request keeps the language frozen at creation even if the channel changes afterwards
+        jdbc.update("UPDATE channel SET language = 'ko' WHERE id = ?", channel);
         drain("w1");
 
         assertThat(requestStatus(id)).isEqualTo("SUCCEEDED");
@@ -246,12 +298,15 @@ class DiscoveryExecutionIT {
         Map<String, Object> batch = batch(id);
         assertThat(((Number) batch.get("selected_candidate_id")).intValue()).isEqualTo(best.candidateId());
         assertThat((String) batch.get("selection_reason")).startsWith("AUTO: highest ranked");
+        assertThat(rechecks(id)).as("the SELECT re-check is stored next to the first evaluation").hasSize(8);
         assertThat(linkedTitle(id)).isEqualTo(best.candidate().title());
-        assertThat(jdbc.queryForObject("""
-                SELECT v.brief FROM production_request p JOIN content c ON c.id = p.content_id
+        Map<String, Object> revision = jdbc.queryForMap("""
+                SELECT v.brief, v.language FROM production_request p JOIN content c ON c.id = p.content_id
                 JOIN content_revision v ON v.id = c.current_revision_id WHERE p.id = ?
-                """, String.class, id)).startsWith("Question: " + best.candidate().centralQuestion());
-        assertThat(port.generations.get()).isEqualTo(1);
+                """, id);
+        assertThat((String) revision.get("brief")).startsWith("Question: " + best.candidate().centralQuestion());
+        assertThat(revision.get("language")).isEqualTo("en");
+        assertThat(provider.generations.get()).isEqualTo(1);
         assertThat(jdbc.queryForObject("""
                 SELECT COUNT(*) FROM provider_operation WHERE production_request_id = ? AND status = 'SETTLED'
                     AND applied_at IS NOT NULL
@@ -264,10 +319,14 @@ class DiscoveryExecutionIT {
                 .andExpect(jsonPath("$.candidates.length()").value(8))
                 .andExpect(jsonPath("$.selectedCandidateId").value(best.candidateId()))
                 .andExpect(ApiTestSupport.matchesContract());
+        mvc.perform(get(PATH).with(ApiTestSupport.as(admin)))
+                .andExpect(status().isOk()).andExpect(ApiTestSupport.matchesContract())
+                .andExpect(jsonPath("$.items[0].id").value(Long.toString(id)))
+                .andExpect(jsonPath("$.items[0].selectedTitle").value(best.candidate().title()));
     }
 
     @Test
-    void autoSkipsACandidateThatBecameADuplicateBeforeSelect() throws Exception {
+    void autoSkipsACandidateThatBecameADuplicateBeforeSelectAndKeepsBothEvaluations() throws Exception {
         long channel = channel(List.of());
         long id = create(channel, "");
         AtomicBoolean once = new AtomicBoolean();
@@ -289,6 +348,34 @@ class DiscoveryExecutionIT {
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM topic WHERE channel_id = ? AND title = ?",
                 Integer.class, channel, ranked.get(0).candidate().title())).isEqualTo(1);
         assertThat(step(id, "SELECT").get("attempts")).isEqualTo(1);
+        assertThat(find(evaluations(id), ranked.get(0).candidateId()).eligible())
+                .as("the first evaluation is preserved").isTrue();
+        EvaluatedCandidate rechecked = find(rechecks(id), ranked.get(0).candidateId());
+        assertThat(rechecked.blockCodes()).contains(Block.DUPLICATE);
+        assertThat(rechecked.comparisons()).anySatisfy(c -> assertThat(c.reason()).isEqualTo("EXACT_TITLE"));
+    }
+
+    @Test
+    void autoWithEveryCandidateBlockedAtSelectRecordsTheLatestReasonsAndFails() throws Exception {
+        long channel = channel(List.of());
+        long id = create(channel, ",\"candidateCount\":5");
+        AtomicBoolean once = new AtomicBoolean();
+        port.beforeLock = requestId -> {
+            if (once.compareAndSet(false, true)) {
+                evaluations(requestId).forEach(e -> insertTopic(channel, e.candidate().title()));
+            }
+        };
+        drain("w1");
+
+        assertThat(requestStatus(id)).isEqualTo("FAILED");
+        assertThat(step(id, "SELECT").get("status")).isEqualTo("FAILED");
+        assertThat(step(id, "SELECT").get("last_error_code")).isEqualTo("DISCOVERY_NO_ELIGIBLE_CANDIDATE");
+        assertThat(port.exhausted.get()).isEqualTo(1);
+        assertThat(evaluations(id)).as("first evaluation kept").anySatisfy(e -> assertThat(e.eligible()).isTrue());
+        assertThat(rechecks(id)).hasSize(5).allSatisfy(e -> assertThat(e.blockCodes()).contains(Block.DUPLICATE));
+        assertThat(batch(id).get("selected_candidate_id")).isNull();
+        assertThat(jdbc.queryForObject("SELECT content_id FROM production_request WHERE id = ?", Long.class, id))
+                .isNull();
     }
 
     /** Ranking of the DISCOVER evaluation, reproduced from the stored response on an empty catalog. */
@@ -302,7 +389,7 @@ class DiscoveryExecutionIT {
     @Test
     void allCandidatesBlockedFailsDiscoverWithoutFurtherStagesOrRegeneration() throws Exception {
         long channel = channel(List.of());
-        port.responses = input -> withClaims(new FakeDiscoveryProvider().generate(input));
+        provider.responses = input -> withClaims(new FakeDiscoveryProvider().generate(input));
         long id = create(channel, "");
         drain("w1");
 
@@ -312,6 +399,7 @@ class DiscoveryExecutionIT {
         assertThat(step(id, "SELECT").get("status")).isEqualTo("PENDING");
         assertThat(evaluations(id)).hasSize(8).allSatisfy(e -> assertThat(e.eligible()).isFalse());
         assertThat(operations(id, "DISCOVER")).isEqualTo(1);
+        assertThat(provider.generations.get()).isEqualTo(1);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM provider_operation WHERE production_request_id = ?",
                 Integer.class, id)).as("no later stage and no second discovery").isEqualTo(1);
         assertThat(jdbc.queryForObject("""
@@ -322,9 +410,9 @@ class DiscoveryExecutionIT {
     }
 
     @Test
-    void invalidStoredResponseConfirmsTheCostAndFailsWithoutEvaluation() throws Exception {
+    void malformedProviderResponseConfirmsTheCostAndFailsWithoutStoringOrEvaluating() throws Exception {
         long channel = channel(List.of());
-        port.responses = input -> {
+        provider.responses = input -> {
             Response full = new FakeDiscoveryProvider().generate(input);
             return new Response(full.version(), full.candidates().subList(0, 4)); // wrong count
         };
@@ -332,13 +420,20 @@ class DiscoveryExecutionIT {
         drain("w1");
 
         assertThat(requestStatus(id)).isEqualTo("FAILED");
-        assertThat(step(id, "DISCOVER").get("last_error_code")).isEqualTo("DISCOVERY_RESPONSE_INVALID");
+        assertThat(step(id, "DISCOVER").get("status")).isEqualTo("FAILED");
+        assertThat(step(id, "DISCOVER").get("last_error_code")).isEqualTo("EFFECT_EXECUTED_FAILED");
+        assertThat(batch(id).get("response_json")).as("a malformed body is never stored").isNull();
         assertThat(batch(id).get("evaluation_json")).isNull();
         assertThat(jdbc.queryForObject("""
-                SELECT o.applied_at IS NOT NULL AND r.recognized_cost_krw = 1
+                SELECT o.applied_at IS NOT NULL AND r.recognized_cost_krw = 1 AND r.reserved_remaining_krw = 0
                 FROM provider_operation o JOIN budget_reservation r ON r.id = o.reservation_id
                 WHERE o.production_request_id = ?
-                """, Boolean.class, id)).as("the confirmed cost is kept and applied").isTrue();
+                """, Boolean.class, id)).as("the executed cost is confirmed and applied").isTrue();
+        assertThat(provider.generations.get()).isEqualTo(1);
+        mvc.perform(get(PATH + "/" + id).with(ApiTestSupport.as(admin)))
+                .andExpect(status().isOk()).andExpect(ApiTestSupport.matchesContract())
+                .andExpect(jsonPath("$.steps[0].lastErrorCode").value("EFFECT_EXECUTED_FAILED"))
+                .andExpect(jsonPath("$.recognizedKrw").value("1.000000"));
     }
 
     @Test
@@ -353,14 +448,14 @@ class DiscoveryExecutionIT {
         assertThat(jdbc.queryForObject("""
                 SELECT COUNT(*) FROM provider_operation WHERE production_request_id = ? AND dispatched_at IS NOT NULL
                 """, Integer.class, id)).isZero();
-        assertThat(port.generations.get()).isZero();
+        assertThat(provider.generations.get()).isZero();
     }
 
     @Test
     void unknownDiscoverOutcomeKeepsTheReservationAndNeverRedispatches() throws Exception {
         long channel = channel(List.of());
         long id = create(channel, "");
-        port.scenario = "UNKNOWN";
+        provider.failAfterDispatch = true;
         drain("w1");
 
         assertThat(requestStatus(id)).isEqualTo("RECOVERY_REQUIRED");
@@ -369,14 +464,17 @@ class DiscoveryExecutionIT {
                 SELECT r.reserved_remaining_krw > 0 FROM provider_operation o
                 JOIN budget_reservation r ON r.id = o.reservation_id WHERE o.production_request_id = ?
                 """, Boolean.class, id)).isTrue();
-        assertThat(jdbc.queryForObject("SELECT lease_owner FROM production_request WHERE id = ?", String.class, id))
-                .isNull();
+        assertThat(leased(id)).isFalse();
+        assertThat(provider.generations.get()).isEqualTo(1);
 
+        provider.failAfterDispatch = false;
         makeDue(id);
-        drain("w2"); // restart: the same key is re-presented, the port reports it unresolved again
+        try (ProductionExecutor restarted = restartedExecutor()) {
+            drain(restarted, "w2"); // restart: the same key is re-presented, the port reports it unresolved again
+        }
         assertThat(operations(id, "DISCOVER")).isEqualTo(1);
         assertThat(step(id, "DISCOVER").get("attempts")).as("recovery does not count an attempt").isEqualTo(1);
-        assertThat(port.generations.get()).isZero();
+        assertThat(provider.generations.get()).as("an unknown outcome is never sent again").isEqualTo(1);
         assertThat(requestStatus(id)).isEqualTo("RECOVERY_REQUIRED");
     }
 
@@ -394,13 +492,16 @@ class DiscoveryExecutionIT {
         assertThat(step(id, "DISCOVER").get("status")).isEqualTo("RECOVERY_REQUIRED");
         assertThat(step(id, "DISCOVER").get("last_error_code")).isEqualTo("RECEIPT_APPLY_FAILED");
         String hash = (String) batch(id).get("response_hash");
+        assertThat(hash).isNotNull();
         assertThat(batch(id).get("evaluation_json")).isNull();
 
         makeDue(id);
-        drain("w2");
+        try (ProductionExecutor restarted = restartedExecutor()) {
+            drain(restarted, "w2");
+        }
         assertThat(requestStatus(id)).isEqualTo("SUCCEEDED");
         assertThat(batch(id).get("response_hash")).isEqualTo(hash);
-        assertThat(port.generations.get()).as("the stored response is replayed, not regenerated").isEqualTo(1);
+        assertThat(provider.generations.get()).as("the stored response is replayed, not regenerated").isEqualTo(1);
         assertThat(operations(id, "DISCOVER")).isEqualTo(1);
     }
 
@@ -422,6 +523,7 @@ class DiscoveryExecutionIT {
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM topic WHERE channel_id = ?", Integer.class, channel))
                 .as("Topic, Content, Revision and Run are rolled back together").isZero();
         assertThat(batch(id).get("selected_candidate_id")).isNull();
+        assertThat(batch(id).get("recheck_json")).as("the re-check is rolled back with the link").isNull();
 
         makeDue(id);
         drain("w1");
@@ -435,17 +537,31 @@ class DiscoveryExecutionIT {
     void twoRequestsRacingForTheSameCandidateNeverCreateTheSameTopicTwice() throws Exception {
         long channel = channel(List.of());
         // both requests receive the same batch, so their best candidate is the same
-        port.responses = input -> new FakeDiscoveryProvider().generate(new Input(1, input.channelConfigId(),
+        provider.responses = input -> new FakeDiscoveryProvider().generate(new Input(1, input.channelConfigId(),
                 input.language(), input.candidateCount(), input.minDurationSeconds(), input.maxDurationSeconds(),
                 input.strategy(), input.audience(), input.prohibitedTopics(), input.rulesVersion()));
         long first = create(channel, "");
         long second = create(channel, "");
 
+        race(List.of("race-1", "race-2"));
+        drain("race-tail");
+
+        assertThat(requestStatus(first)).isEqualTo("SUCCEEDED");
+        assertThat(requestStatus(second)).isEqualTo("SUCCEEDED");
+        assertThat(linkedTitle(first)).isNotEqualTo(linkedTitle(second));
+        assertThat(jdbc.queryForObject("""
+                SELECT COUNT(*) = COUNT(DISTINCT normalized_hash) FROM topic WHERE channel_id = ?
+                """, Boolean.class, channel)).isTrue();
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM content WHERE channel_id = ?", Integer.class, channel))
+                .isEqualTo(2);
+    }
+
+    private void race(List<String> owners) throws Exception {
         CountDownLatch start = new CountDownLatch(1);
-        ExecutorService pool = Executors.newFixedThreadPool(2);
+        ExecutorService pool = Executors.newFixedThreadPool(owners.size());
         try {
             List<Future<Integer>> runs = new ArrayList<>();
-            for (String owner : List.of("race-1", "race-2")) {
+            for (String owner : owners) {
                 runs.add(pool.submit(() -> {
                     start.await();
                     return drain(owner);
@@ -458,16 +574,58 @@ class DiscoveryExecutionIT {
         } finally {
             pool.shutdownNow();
         }
-        drain("race-tail");
+    }
 
-        assertThat(requestStatus(first)).isEqualTo("SUCCEEDED");
-        assertThat(requestStatus(second)).isEqualTo("SUCCEEDED");
-        assertThat(linkedTitle(first)).isNotEqualTo(linkedTitle(second));
-        assertThat(jdbc.queryForObject("""
-                SELECT COUNT(*) = COUNT(DISTINCT normalized_hash) FROM topic WHERE channel_id = ?
-                """, Boolean.class, channel)).isTrue();
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM content WHERE channel_id = ?", Integer.class, channel))
-                .isEqualTo(2);
+    private static final Candidate SKY = DiscoveryFixtures.candidate("Rayleigh scattering",
+            "Why is the daytime sky blue instead of violet?", "Why the Sky Is Blue, Not Violet",
+            "Walk through the scattering mechanism one step at a time with a simple diagram.");
+    /** The same question and angle in different words and a different title (no exact Topic match). */
+    private static final Candidate SKY_PARAPHRASE = DiscoveryFixtures.candidate("Rayleigh scattering",
+            "Why does the daytime atmosphere look azure rather than violet?", "The Azure Atmosphere Puzzle",
+            "Walk through the scattering mechanism step by step with a simple diagram.");
+
+    @Test
+    void concurrentSelectOfDifferentlyWordedDuplicatesLinksOnlyOne() throws Exception {
+        long channel = channel(List.of());
+        long first = create(channel, ",\"selectionMode\":\"MANUAL\",\"candidateCount\":5");
+        long second = create(channel, ",\"selectionMode\":\"MANUAL\",\"candidateCount\":5");
+        provider.responses = input -> DiscoveryFixtures.response(5, input.requestId() == first ? SKY : SKY_PARAPHRASE);
+        drain("w1");
+        assertThat(step(first, "SELECT").get("status")).isEqualTo("PENDING");
+        assertThat(step(second, "SELECT").get("status")).isEqualTo("PENDING");
+        assertThat(find(evaluations(first), 1).eligible()).isTrue();
+        assertThat(find(evaluations(second), 1).eligible()).as("no conflict before either is linked").isTrue();
+        choose(first, 1, 200);
+        choose(second, 1, 200);
+
+        // both SELECT transactions hold their request lock before either takes the channel lock
+        CyclicBarrier bothLocked = new CyclicBarrier(2);
+        Set<Long> arrived = ConcurrentHashMap.newKeySet();
+        port.beforeLock = requestId -> {
+            if (arrived.add(requestId)) {
+                try {
+                    bothLocked.await(30, TimeUnit.SECONDS);
+                } catch (Exception e) {
+                    throw new IllegalStateException(e);
+                }
+            }
+        };
+        race(List.of("race-1", "race-2"));
+
+        List<Long> linked = List.of(first, second).stream()
+                .filter(id -> "SUCCEEDED".equals(requestStatus(id))).toList();
+        assertThat(linked).as("exactly one of the substantive duplicates is linked").hasSize(1);
+        long loser = linked.get(0) == first ? second : first;
+        assertThat(requestStatus(loser)).isEqualTo("RUNNING");
+        assertThat(step(loser, "SELECT").get("status")).isEqualTo("PENDING");
+        assertThat(step(loser, "SELECT").get("attempts")).isEqualTo(0);
+        assertThat(batch(loser).get("chosen_candidate_id")).isNull();
+        assertThat(find(rechecks(loser), 1).blockCodes()).containsExactly(Block.DUPLICATE);
+        assertThat(find(evaluations(loser), 1).eligible()).as("the first evaluation is preserved").isTrue();
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM topic WHERE channel_id = ?", Integer.class, channel))
+                .isEqualTo(1);
+        assertThat(leased(loser)).isFalse();
+        assertThat(discoveryView(loser).path("awaitingSelection").asBoolean()).isTrue();
     }
 
     // ------------------------------------------------------------------ MANUAL
@@ -487,22 +645,25 @@ class DiscoveryExecutionIT {
         assertThat(jdbc.queryForMap("SELECT lease_owner, lease_until FROM production_request WHERE id = ?", manual))
                 .containsEntry("lease_owner", null).containsEntry("lease_until", null);
         assertThat(executor.runOnce("w1")).as("the waiting request is not claimed").isFalse();
-        try (ProductionExecutor restarted = new ProductionExecutor(executionMapper, budgetControl, transactions, cost,
-                selection, new FakeStageWork(BigDecimal.ONE), properties,
-                new DiscoveryFlow(port, new RuleBasedDiscoveryEvaluator()))) {
+        try (ProductionExecutor restarted = restartedExecutor()) {
             assertThat(restarted.runOnce("after-restart")).as("the wait survives a restart").isFalse();
         }
-        mvc.perform(get(PATH + "/" + manual + "/discovery").with(ApiTestSupport.as(admin)))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.awaitingSelection").value(true))
-                .andExpect(jsonPath("$.candidates.length()").value(5)).andExpect(ApiTestSupport.matchesContract());
+        JsonNode view = discoveryView(manual);
+        assertThat(view.path("awaitingSelection").asBoolean()).isTrue();
+        assertThat(view.path("candidates").size()).isEqualTo(5);
 
         List<EvaluatedCandidate> ranked = DiscoverySelections.ranked(evaluations(manual));
         EvaluatedCandidate pick = ranked.get(ranked.size() - 1); // the requester may prefer a lower-ranked one
-        int version = version(manual);
-        choose(manual, pick.candidateId(), version, 200);
-        choose(manual, pick.candidateId(), version, 200); // the same choice again returns the stored result
-        choose(manual, ranked.get(0).candidateId() == pick.candidateId() ? ranked.get(1).candidateId()
-                : ranked.get(0).candidateId(), version, 409);
+        int other = ranked.get(0).candidateId() == pick.candidateId() ? ranked.get(1).candidateId()
+                : ranked.get(0).candidateId();
+        int version = view.path("version").asInt();
+        String token = view.path("batchToken").asString();
+        choose(manual, pick.candidateId(), version, "0".repeat(64), 409); // a token of no batch
+        choose(manual, pick.candidateId(), version, token, 200);
+        choose(manual, pick.candidateId(), version, token, 200); // the same choice again returns the stored result
+        choose(manual, other, version, token, 409);
+        JsonNode chosen = discoveryView(manual);
+        choose(manual, other, chosen.path("version").asInt(), chosen.path("batchToken").asString(), 409);
         drain("w1");
 
         assertThat(requestStatus(manual)).isEqualTo("SUCCEEDED");
@@ -510,6 +671,7 @@ class DiscoveryExecutionIT {
         assertThat(((Number) batch.get("selected_candidate_id")).intValue()).isEqualTo(pick.candidateId());
         assertThat((String) batch.get("selection_reason")).startsWith("MANUAL:");
         assertThat(linkedTitle(manual)).isEqualTo(pick.candidate().title());
+        assertThat(step(manual, "SELECT").get("attempts")).isEqualTo(1);
     }
 
     @Test
@@ -517,6 +679,7 @@ class DiscoveryExecutionIT {
         long id = create(channel(List.of()), ",\"selectionMode\":\"MANUAL\"");
         drain("w1");
         assertThat(step(id, "SELECT").get("status")).isEqualTo("PENDING");
+        JsonNode view = discoveryView(id);
 
         mvc.perform(post(PATH + "/" + id + "/cancel").with(ApiTestSupport.as(admin))).andExpect(status().isOk());
         drain("w1");
@@ -525,7 +688,7 @@ class DiscoveryExecutionIT {
         assertThat(jdbc.queryForObject("SELECT content_id FROM production_request WHERE id = ?", Long.class, id))
                 .isNull();
         EvaluatedCandidate any = DiscoverySelections.best(evaluations(id)).orElseThrow();
-        choose(id, any.candidateId(), version(id), 409);
+        choose(id, any.candidateId(), view.path("version").asInt(), view.path("batchToken").asString(), 409);
     }
 
     @Test
@@ -535,7 +698,8 @@ class DiscoveryExecutionIT {
         drain("w1");
         List<EvaluatedCandidate> ranked = DiscoverySelections.ranked(evaluations(id));
         EvaluatedCandidate pick = ranked.get(0);
-        choose(id, pick.candidateId(), version(id), 200);
+        JsonNode before = discoveryView(id);
+        choose(id, pick.candidateId(), 200);
         insertTopic(channel, pick.candidate().title()); // linked elsewhere after the choice
         drain("w1");
 
@@ -544,18 +708,68 @@ class DiscoveryExecutionIT {
         assertThat(step(id, "SELECT").get("attempts")).isEqualTo(0);
         assertThat(batch(id).get("chosen_candidate_id")).isNull();
         assertThat(port.invalidations.get()).isEqualTo(1);
-        EvaluatedCandidate invalidated = evaluations(id).stream()
-                .filter(e -> e.candidateId() == pick.candidateId()).findFirst().orElseThrow();
+        assertThat(find(evaluations(id), pick.candidateId()).eligible()).as("first evaluation preserved").isTrue();
+        EvaluatedCandidate invalidated = find(rechecks(id), pick.candidateId());
         assertThat(invalidated.eligible()).isFalse();
         assertThat(invalidated.comparisons()).anySatisfy(c -> assertThat(c.reason()).isEqualTo("EXACT_TITLE"));
         assertThat(executor.runOnce("w1")).isFalse();
 
-        EvaluatedCandidate next = DiscoverySelections.ranked(evaluations(id)).get(0);
-        choose(id, pick.candidateId(), version(id), 422); // the invalidated candidate can no longer be chosen
-        choose(id, next.candidateId(), version(id), 200);
+        EvaluatedCandidate next = DiscoverySelections.ranked(rechecks(id)).get(0);
+        // the batch the requester saw before the re-check is stale
+        choose(id, next.candidateId(), before.path("version").asInt(), before.path("batchToken").asString(), 409);
+        choose(id, pick.candidateId(), 422); // the invalidated candidate can no longer be chosen
+        choose(id, next.candidateId(), 200);
         drain("w1");
         assertThat(requestStatus(id)).isEqualTo("SUCCEEDED");
         assertThat(linkedTitle(id)).isEqualTo(next.candidate().title());
+    }
+
+    @Test
+    void aChoiceInvalidatedDuringRetryWaitReturnsToPendingAcrossARestart() throws Exception {
+        long channel = channel(List.of());
+        long id = create(channel, ",\"selectionMode\":\"MANUAL\",\"candidateCount\":6");
+        drain("w1");
+        List<EvaluatedCandidate> ranked = DiscoverySelections.ranked(evaluations(id));
+        EvaluatedCandidate pick = ranked.get(0);
+        choose(id, pick.candidateId(), 200);
+        AtomicBoolean once = new AtomicBoolean();
+        port.beforeRecord = requestId -> {
+            if (once.compareAndSet(false, true)) {
+                throw new IllegalStateException("simulated failure after link");
+            }
+        };
+        drain("w1");
+        assertThat(step(id, "SELECT").get("status")).isEqualTo("RETRY_WAIT");
+        assertThat(step(id, "SELECT").get("attempts")).isEqualTo(1);
+        assertThat(step(id, "SELECT").get("retry_at")).isNotNull();
+        assertThat(leased(id)).isFalse();
+
+        insertTopic(channel, pick.candidate().title()); // linked elsewhere while the retry waits
+        makeDue(id);
+        drain("w1");
+
+        Map<String, Object> select = step(id, "SELECT");
+        assertThat(select.get("status")).as("waits for the requester, as claim, planner and API expect")
+                .isEqualTo("PENDING");
+        assertThat(select.get("retry_at")).isNull();
+        assertThat(select.get("last_error_code")).isNull();
+        assertThat(select.get("attempts")).as("earlier attempts are kept").isEqualTo(1);
+        assertThat(batch(id).get("chosen_candidate_id")).isNull();
+        assertThat(port.invalidations.get()).isEqualTo(1);
+        assertThat(leased(id)).as("the lease is returned while waiting").isFalse();
+        assertThat(executor.runOnce("w1")).isFalse();
+        try (ProductionExecutor restarted = restartedExecutor()) {
+            assertThat(restarted.runOnce("after-restart")).as("the wait survives a restart").isFalse();
+            assertThat(discoveryView(id).path("awaitingSelection").asBoolean()).isTrue();
+
+            EvaluatedCandidate next = DiscoverySelections.ranked(rechecks(id)).get(0);
+            assertThat(next.candidateId()).isNotEqualTo(pick.candidateId());
+            choose(id, next.candidateId(), 200);
+            drain(restarted, "after-restart");
+            assertThat(requestStatus(id)).isEqualTo("SUCCEEDED");
+            assertThat(linkedTitle(id)).isEqualTo(next.candidate().title());
+            assertThat(step(id, "SELECT").get("attempts")).as("the new attempt counts on top").isEqualTo(2);
+        }
     }
 
     @Test
@@ -567,8 +781,7 @@ class DiscoveryExecutionIT {
         drain("w1");
         List<EvaluatedCandidate> evaluated = evaluations(id);
         assertThat(evaluated).filteredOn(e -> e.candidate().coreTopic().equals(prohibited))
-                .allSatisfy(e -> assertThat(e.blockCodes()).contains(
-                        com.aistudio.production.contract.ProductionDiscovery.Block.CHANNEL_PROHIBITED));
+                .allSatisfy(e -> assertThat(e.blockCodes()).contains(Block.CHANNEL_PROHIBITED));
     }
 
     private static Response withClaims(Response response) {

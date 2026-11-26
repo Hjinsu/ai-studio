@@ -175,6 +175,17 @@ interface ExecutionMapper {
     int waitStep(@Param("requestId") long requestId, @Param("stepId") long stepId,
             @Param("status") StepStatus status, @Param("code") String code, @Param("delayMicros") long delayMicros);
 
+    /**
+     * V2-02 MANUAL wait: a SELECT in local retry wait goes back to PENDING without a retry time or error code.
+     * Attempts are kept. A PENDING SELECT is left unchanged.
+     */
+    @Update("""
+            UPDATE production_step SET status = 'PENDING', retry_at = NULL, last_error_code = NULL, finished_at = NULL
+            WHERE id = #{stepId} AND production_request_id = #{requestId} AND stage = 'SELECT'
+              AND status = 'RETRY_WAIT'
+            """)
+    int awaitChoice(@Param("requestId") long requestId, @Param("stepId") long stepId);
+
     /** Recheck time for a request whose completion is blocked by cost state; status of the step is unchanged. */
     @Update("""
             UPDATE production_step SET retry_at = UTC_TIMESTAMP(6) + INTERVAL #{delayMicros} MICROSECOND

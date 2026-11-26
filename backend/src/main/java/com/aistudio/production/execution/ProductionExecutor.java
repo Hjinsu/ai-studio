@@ -23,7 +23,6 @@ import com.aistudio.production.contract.ProductionDiscovery.Mode;
 import com.aistudio.production.contract.ProductionDiscovery.Response;
 import com.aistudio.production.contract.ProductionStage;
 import com.aistudio.production.discovery.DiscoveryInputs;
-import com.aistudio.production.discovery.DiscoveryResponseCodec;
 import com.aistudio.production.discovery.DiscoveryResponseException;
 import com.aistudio.production.discovery.DiscoveryResponseValidator;
 import com.aistudio.production.discovery.DiscoverySelections;
@@ -510,8 +509,12 @@ public class ProductionExecutor implements AutoCloseable {
         if (batch == null || batch.candidates() == null || batch.candidates().isEmpty()) {
             throw new IllegalStateException("No evaluated discovery batch for request " + locked.id());
         }
+        // The stored batch is rebuilt for evaluation only; the fingerprint uses the hash the adapter verified
+        // against the applied receipt.
         Response response = DiscoverySelections.response(batch.candidates());
-        String responseHash = DiscoveryResponseCodec.sha256(response);
+        if (batch.responseHash() == null || batch.responseHash().isBlank()) {
+            throw new IllegalStateException("No verified discovery response hash for request " + locked.id());
+        }
         List<CatalogEntry> catalog = discovery.port().catalog(locked.id(), response.candidates());
         List<EvaluatedCandidate> fresh = DiscoverySelections.merge(batch.candidates(),
                 discovery.evaluator().evaluate(input, response, catalog));
@@ -519,6 +522,7 @@ public class ProductionExecutor implements AutoCloseable {
         EvaluatedCandidate chosen;
         if (batch.mode() == Mode.MANUAL) {
             if (batch.chosenCandidateId() == null) {
+                awaitChoice(locked, step);
                 return SelectOutcome.WAITING;
             }
             chosen = ranked.stream().filter(c -> c.candidateId() == batch.chosenCandidateId()).findFirst()
@@ -526,7 +530,8 @@ public class ProductionExecutor implements AutoCloseable {
             if (chosen == null) {
                 discovery.port().invalidateManualChoice(owner, batch.version(), fresh);
                 if (!ranked.isEmpty()) {
-                    return SelectOutcome.WAITING; // remaining eligible candidates: the requester chooses again
+                    awaitChoice(locked, step); // remaining eligible candidates: the requester chooses again
+                    return SelectOutcome.WAITING;
                 }
                 startCounted(locked, step);
                 mapper.endStep(locked.id(), step.id(), StepStatus.FAILED, NO_ELIGIBLE);
@@ -534,6 +539,8 @@ public class ProductionExecutor implements AutoCloseable {
             }
         } else {
             if (ranked.isEmpty()) {
+                // keep the latest catalog reasons next to the first evaluation before failing
+                discovery.port().recordExhaustedSelection(owner, batch.version(), fresh);
                 startCounted(locked, step);
                 mapper.endStep(locked.id(), step.id(), StepStatus.FAILED, NO_ELIGIBLE);
                 return SelectOutcome.FAILED;
@@ -541,15 +548,24 @@ public class ProductionExecutor implements AutoCloseable {
             chosen = ranked.get(0);
         }
         startCounted(locked, step);
-        ProductionSelectionPort.Selection value = DiscoverySelections.selection(input, chosen, responseHash);
+        ProductionSelectionPort.Selection value = DiscoverySelections.selection(input, chosen, batch.responseHash());
         ProductionSelectionPort.Selected selected = selection.link(owner, value);
         discovery.port().recordSelection(owner, batch.version(), chosen.candidateId(),
-                DiscoverySelections.rationale(batch.mode(), chosen, ranked.size()));
+                DiscoverySelections.rationale(batch.mode(), chosen, ranked.size()), fresh);
         mapper.startRun(selected.contentId(), selected.runId());
         if (mapper.succeedStep(locked.id(), step.id(), "run:" + selected.runId()) != 1) {
             throw new IllegalStateException("SELECT step " + step.id() + " could not complete");
         }
         return SelectOutcome.LINKED;
+    }
+
+    /**
+     * A MANUAL request waits for the requester with SELECT PENDING, the condition the claim query, the planner and
+     * the API use. A SELECT waiting for a local retry goes back to PENDING without a retry time; its attempts are
+     * kept, so the next attempt after a new choice counts on top of them.
+     */
+    private void awaitChoice(RequestRow locked, StepRow step) {
+        mapper.awaitChoice(locked.id(), step.id());
     }
 
     private void startCounted(RequestRow locked, StepRow step) {

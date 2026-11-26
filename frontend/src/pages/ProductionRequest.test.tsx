@@ -11,14 +11,25 @@ const control = on('GET', '/api/v1/budget/control', 200, {
 
 const stages = ['DISCOVER', 'SELECT', 'RESEARCH', 'SCRIPT', 'SCENES', 'IMAGE', 'TTS', 'SUBTITLE', 'RENDER', 'METADATA', 'QC']
 
-function detail(status: string, stepStatus: (stage: string) => string, extra: Record<string, unknown> = {}) {
+function detail(
+  status: string,
+  stepStatus: (stage: string) => string,
+  extra: Record<string, unknown> = {},
+  stepError: (stage: string) => string | null = () => null,
+) {
   return {
     id: '42', channelId: '5', contentType: 'SHORTS', status, contentId: null, runId: null, cancelRequestedAt: null,
     limitKrw: '2000.000000', reservedKrw: '0', recognizedKrw: '1.000000',
-    steps: stages.map((stage) => ({ stage, targetKey: 'video', inputGeneration: 1, status: stepStatus(stage), attempts: stage === 'DISCOVER' ? 1 : 0 })),
+    steps: stages.map((stage) => ({
+      stage, targetKey: 'video', inputGeneration: 1, status: stepStatus(stage), attempts: stage === 'DISCOVER' ? 1 : 0,
+      lastErrorCode: stepError(stage),
+    })),
     ...extra,
   }
 }
+
+const TOKEN_1 = 'a'.repeat(64)
+const TOKEN_2 = 'b'.repeat(64)
 
 const scores = { interest: 25, channelFit: 20, originality: 20, visualPotential: 11, evidencePotential: 15, costEfficiency: 5 }
 
@@ -39,7 +50,7 @@ function candidate(id: number, title: string, blockCodes: string[] = [], total =
 }
 
 const waiting = {
-  selectionMode: 'MANUAL', candidateCount: 5, version: 1, awaitingSelection: true, chosenCandidateId: null,
+  selectionMode: 'MANUAL', candidateCount: 5, version: 1, batchToken: TOKEN_1, awaitingSelection: true, chosenCandidateId: null,
   selectedCandidateId: null, selectionReason: null,
   candidates: [
     candidate(1, 'Why the Sky Is Blue', ['DUPLICATE'], 98),
@@ -130,12 +141,12 @@ describe('Production request detail', () => {
       me, csrf, health, allChannels,
       on('GET', '/api/v1/production-requests/42', 200, detail('RUNNING', (s) => (s === 'DISCOVER' ? 'SUCCEEDED' : 'PENDING'))),
       (call) => call.method === 'GET' && call.url === '/api/v1/production-requests/42/discovery'
-        ? { status: 200, body: chosen ? { ...waiting, version: 2, awaitingSelection: false, chosenCandidateId: 3 } : waiting }
+        ? { status: 200, body: chosen ? { ...waiting, version: 2, batchToken: TOKEN_2, awaitingSelection: false, chosenCandidateId: 3 } : waiting }
         : undefined,
       (call) => {
         if (call.method === 'POST' && call.url === '/api/v1/production-requests/42/selection') {
           chosen = true
-          return { status: 200, body: { ...waiting, version: 2, awaitingSelection: false, chosenCandidateId: 3 } }
+          return { status: 200, body: { ...waiting, version: 2, batchToken: TOKEN_2, awaitingSelection: false, chosenCandidateId: 3 } }
         }
       },
     )
@@ -162,7 +173,7 @@ describe('Production request detail', () => {
     expect(calls.some((c) => c.method === 'POST')).toBe(false)
     await user.click(within(dialog).getByRole('button', { name: '이 소재 선택' }))
     await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
-    expect(calls.find((c) => c.method === 'POST')?.body).toEqual({ candidateId: 3, version: 1 })
+    expect(calls.find((c) => c.method === 'POST')?.body).toEqual({ candidateId: 3, version: 1, batchToken: TOKEN_1 })
     expect(await screen.findByText(/후보 3번 선택을 기록했습니다/)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '이 소재 선택' })).not.toBeInTheDocument()
   })
@@ -183,6 +194,30 @@ describe('Production request detail', () => {
     expect(await within(dialog).findByRole('alert')).toHaveTextContent('충돌')
   })
 
+  it('asks for a new choice when polling brings a different batch while the dialog is open', async () => {
+    let dialogOpen = false
+    const calls = mockApi(
+      me, csrf, health, allChannels,
+      on('GET', '/api/v1/production-requests/42', 200, detail('RUNNING', (s) => (s === 'DISCOVER' ? 'SUCCEEDED' : 'PENDING'))),
+      (call) => call.method === 'GET' && call.url === '/api/v1/production-requests/42/discovery'
+        ? { status: 200, body: dialogOpen ? { ...waiting, version: 2, batchToken: TOKEN_2 } : waiting }
+        : undefined,
+    )
+    renderApp('/production/42')
+    const user = userEvent.setup()
+    const list = await screen.findByRole('list', { name: '소재 후보 목록' })
+    await user.click(within(list).getAllByRole('button', { name: '이 소재 선택' })[0])
+    const dialog = await screen.findByRole('alertdialog')
+    dialogOpen = true
+    expect(await within(dialog).findByText(/후보 평가가 바뀌었습니다/, undefined, { timeout: 8000 })).toBeInTheDocument()
+    const confirm = within(dialog).getByRole('button', { name: '이 소재 선택' })
+    expect(confirm).toBeDisabled()
+    await user.click(confirm)
+    expect(calls.some((c) => c.method === 'POST')).toBe(false)
+    await user.click(within(dialog).getByRole('button', { name: '취소' }))
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
+  }, 15_000)
+
   it('shows the automatic selection with its reason and the final state without choice buttons', async () => {
     mockApi(
       me, csrf, health, allChannels,
@@ -196,6 +231,8 @@ describe('Production request detail', () => {
     expect(await screen.findByText('선정 소재: A Teaspoon of Neutron Star')).toBeInTheDocument()
     expect(screen.getByText(/AUTO: highest ranked of 2 eligible/)).toBeInTheDocument()
     expect(screen.getByText('선정됨')).toBeInTheDocument()
+    expect(screen.getByText('FAKE 완료')).toBeInTheDocument()
+    expect(screen.getByText(/실제 AI 호출과 영상 파일 생성 없이/)).toBeInTheDocument()
     expect(screen.getByText('₩8')).toBeInTheDocument()
     expect(screen.getByText('₩2,000')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '이 소재 선택' })).not.toBeInTheDocument()
@@ -208,7 +245,8 @@ describe('Production request detail', () => {
   it('reports when every candidate was blocked', async () => {
     mockApi(
       me, csrf, health, allChannels,
-      on('GET', '/api/v1/production-requests/42', 200, detail('FAILED', (s) => (s === 'DISCOVER' ? 'FAILED' : 'PENDING'))),
+      on('GET', '/api/v1/production-requests/42', 200, detail('FAILED', (s) => (s === 'DISCOVER' ? 'FAILED' : 'PENDING'), {},
+        (s) => (s === 'DISCOVER' ? 'DISCOVERY_NO_ELIGIBLE_CANDIDATE' : null))),
       on('GET', '/api/v1/production-requests/42/discovery', 200, {
         ...waiting, selectionMode: 'AUTO', awaitingSelection: false,
         candidates: waiting.candidates.map((c) => ({ ...c, blockCodes: ['DUPLICATE'] })),
@@ -217,6 +255,23 @@ describe('Production request detail', () => {
     renderApp('/production/42')
     expect(await screen.findByText(/모든 후보가 차단되었습니다/)).toBeInTheDocument()
     expect(screen.getAllByText('실패').length).toBeGreaterThan(0)
+    const steps = screen.getByRole('table', { name: '진행 단계' })
+    expect(within(steps).getByText('선정 가능한 후보 없음')).toBeInTheDocument()
+    expect(within(steps).getByText('DISCOVERY_NO_ELIGIBLE_CANDIDATE')).toBeInTheDocument()
+  })
+
+  it('labels a malformed discovery response as an executed failure with a confirmed cost', async () => {
+    mockApi(
+      me, csrf, health, allChannels,
+      on('GET', '/api/v1/production-requests/42', 200, detail('FAILED', (s) => (s === 'DISCOVER' ? 'FAILED' : 'PENDING'), {},
+        (s) => (s === 'DISCOVER' ? 'EFFECT_EXECUTED_FAILED' : null))),
+      on('GET', '/api/v1/production-requests/42/discovery', 200, { ...waiting, selectionMode: 'AUTO', awaitingSelection: false, candidates: [] }),
+    )
+    renderApp('/production/42')
+    expect(await screen.findByText('소재 후보를 만들지 못했습니다')).toBeInTheDocument()
+    const steps = screen.getByRole('table', { name: '진행 단계' })
+    expect(within(steps).getByText(/외부 실행 실패\(비용 확정\)/)).toBeInTheDocument()
+    expect(screen.getByText('₩1')).toBeInTheDocument()
   })
 
   it('cancels only after confirmation', async () => {
@@ -245,5 +300,60 @@ describe('Production request detail', () => {
     mockApi(me, csrf, health, allChannels, on('GET', '/api/v1/production-requests/404', 404, error('RESOURCE_NOT_FOUND', 'missing')))
     renderApp('/production/404')
     expect(await screen.findByRole('alert')).toHaveTextContent(/찾을 수 없|없습니다|missing/)
+  })
+})
+
+describe('Production request history', () => {
+  const items = [
+    {
+      id: '43', channelId: '5', channelName: 'science', selectedTitle: null, status: 'RUNNING',
+      limitKrw: '2000.000000', reservedKrw: '1.000000', recognizedKrw: '0', createdAt: '2026-11-26T01:00:00Z',
+    },
+    {
+      id: '42', channelId: '5', channelName: 'science', selectedTitle: 'A Teaspoon of Neutron Star', status: 'SUCCEEDED',
+      limitKrw: '2000.000000', reservedKrw: '0', recognizedKrw: '8.000000', createdAt: '2026-11-26T00:00:00Z',
+    },
+  ]
+
+  it('lists requests newest first with channel, selected topic, FAKE status, cost and a link to the detail', async () => {
+    const calls = mockApi(
+      me, csrf, health, allChannels,
+      on('GET', '/api/v1/production-requests', 200, { ...page(items), totalElements: 2 }),
+      on('GET', '/api/v1/production-requests/42', 200, detail('SUCCEEDED', () => 'SUCCEEDED', { recognizedKrw: '8.000000' })),
+      on('GET', '/api/v1/production-requests/42/discovery', 404, error('RESOURCE_NOT_FOUND', 'none')),
+    )
+    const { router } = renderApp('/production/requests')
+    const user = userEvent.setup()
+    expect(await screen.findByRole('heading', { name: '제작 이력' })).toBeInTheDocument()
+    expect(screen.getByText(/실제 AI 호출과 영상 파일 생성 없이/)).toBeInTheDocument()
+    const nav = screen.getAllByRole('navigation', { name: '주 메뉴' })[0]
+    expect(within(nav).getByRole('link', { name: '제작 이력' })).toHaveAttribute('aria-current', 'page')
+    expect(within(nav).getByRole('link', { name: '제작 시작' })).not.toHaveAttribute('aria-current')
+    const table = await screen.findByRole('table', { name: '제작 요청 목록' })
+    const rows = within(table).getAllByRole('row').slice(1)
+    expect(rows).toHaveLength(2)
+    expect(rows[0]).toHaveTextContent('#43')
+    expect(rows[0]).toHaveTextContent('미선정')
+    expect(rows[0]).toHaveTextContent('진행 중')
+    expect(rows[1]).toHaveTextContent('A Teaspoon of Neutron Star')
+    expect(rows[1]).toHaveTextContent('FAKE 완료')
+    expect(rows[1]).toHaveTextContent('₩8')
+    expect(rows[1]).toHaveTextContent('science')
+    expect(calls.find((c) => c.url.startsWith('/api/v1/production-requests?'))?.url).toBe('/api/v1/production-requests?page=0&size=20')
+    await user.click(within(rows[1]).getByRole('link', { name: '#42' }))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/production/42'))
+    expect(await screen.findByRole('heading', { name: '제작 요청 #42' })).toBeInTheDocument()
+  })
+
+  it('shows an empty state when there are no requests', async () => {
+    mockApi(me, csrf, health, allChannels, on('GET', '/api/v1/production-requests', 200, page([])))
+    renderApp('/production/requests')
+    expect(await screen.findByText('제작 요청이 없습니다')).toBeInTheDocument()
+  })
+
+  it('shows a permission error from the list query', async () => {
+    mockApi(me, csrf, health, allChannels, on('GET', '/api/v1/production-requests', 403, error('FORBIDDEN', 'denied')))
+    renderApp('/production/requests')
+    expect(await screen.findByRole('alert')).toBeInTheDocument()
   })
 })

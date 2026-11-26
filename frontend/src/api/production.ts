@@ -13,6 +13,8 @@ export type DiscoveryScores = Schemas['DiscoveryScores']
 export type BlockCode = EvaluatedCandidate['blockCodes'][number]
 export type SelectionMode = ProductionDiscovery['selectionMode']
 export type ContentType = ProductionRequestDetail['contentType']
+export type ProductionRequestPage = Schemas['ProductionRequestPage']
+export type ProductionRequestListItem = Schemas['ProductionRequestListItem']
 
 export interface CreateProductionRequest {
   channelId: string
@@ -33,9 +35,19 @@ export const createProductionRequest = (idempotencyKey: string, body: CreateProd
 export const getProductionRequest = (id: string) => request<ProductionRequestDetail>('GET', `${PATH}/${id}`)
 export const cancelProductionRequest = (id: string) => request<ProductionRequestDetail>('POST', `${PATH}/${id}/cancel`)
 export const getProductionDiscovery = (id: string) => request<ProductionDiscovery>('GET', `${PATH}/${id}/discovery`)
-export const chooseProductionCandidate = (id: string, candidateId: number, version: number) =>
-  request<ProductionDiscovery>('POST', `${PATH}/${id}/selection`, { body: { candidateId, version } })
+export const listProductionRequests = (page: number, size = 20) =>
+  request<ProductionRequestPage>('GET', PATH, { query: { page, size } })
 
+/** 사용자가 확인한 후보 묶음(version·batchToken)을 함께 보낸다. 묶음이 바뀌었으면 서버가 409로 거부한다. */
+export interface CandidateChoice {
+  candidateId: number
+  version: number
+  batchToken: string
+}
+export const chooseProductionCandidate = (id: string, choice: CandidateChoice) =>
+  request<ProductionDiscovery>('POST', `${PATH}/${id}/selection`, { body: choice })
+
+export const productionListKey = (page: number) => ['production-requests', page] as const
 export const productionKey = (id: string) => ['production-request', id] as const
 export const discoveryKey = (id: string) => ['production-request', id, 'discovery'] as const
 

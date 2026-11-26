@@ -3,6 +3,8 @@ package com.aistudio.production.discovery;
 import java.util.List;
 import java.util.Set;
 
+import com.aistudio.production.contract.ProductionDiscovery;
+
 /**
  * Versioned constants of the V2-02 discovery rules (prompt, response contract, evaluation). A change of any rule
  * here is a new {@link #RULES_VERSION}; stored evaluations keep the version they were made with.
@@ -10,7 +12,7 @@ import java.util.Set;
 public final class DiscoveryRules {
     public static final int RULES_VERSION = 1;
     public static final int RESPONSE_VERSION = 1;
-    public static final String PROMPT_VERSION = "v2-discovery-prompt-1";
+    public static final String PROMPT_VERSION = ProductionDiscovery.PROMPT_VERSION;
 
     /** UTF-8 bytes of a canonical response; matches the V10 column check. */
     public static final int MAX_RESPONSE_BYTES = 32 * 1024;

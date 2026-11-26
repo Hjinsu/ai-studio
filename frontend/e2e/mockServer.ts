@@ -73,8 +73,9 @@ export async function installMockApi(pageObject: Page, options: { signedIn?: boo
     comparisons: blockCodes.length ? [{ topicId: '7', contentId: '8', revisionId: '9', reason: 'QUESTION_SIMILARITY 0.86 ANGLE_OVERLAP 0.71 DUPLICATE' }] : [],
     rationale: `rules v1: total ${total}/100 (interest 25, channel fit 20, originality 15, visual 11, evidence 15, cost 5); max similarity 0.12`,
   })
+  const batchToken = (version: number) => String(version % 10).repeat(64)
   const productionDiscovery = () => ({
-    selectionMode: 'MANUAL', candidateCount: 5, version: productionState.version,
+    selectionMode: 'MANUAL', candidateCount: 5, version: productionState.version, batchToken: batchToken(productionState.version),
     awaitingSelection: productionState.chosen === null, chosenCandidateId: productionState.chosen, selectedCandidateId: null, selectionReason: null,
     candidates: [
       candidate(1, 'Why the Sky Is Blue, Not Violet', 'Why is the daytime sky blue instead of violet?', ['DUPLICATE'], 76),
@@ -87,14 +88,24 @@ export async function installMockApi(pageObject: Page, options: { signedIn?: boo
   const productionDetail = () => ({
     id: '42', channelId: '1', contentType: 'SHORTS', status: 'RUNNING', contentId: null, runId: null, cancelRequestedAt: null,
     limitKrw: '2000.000000', reservedKrw: '0', recognizedKrw: '1.000000',
-    steps: stages.map((stage) => ({ stage, targetKey: 'video', inputGeneration: 1, status: stage === 'DISCOVER' ? 'SUCCEEDED' : 'PENDING', attempts: stage === 'DISCOVER' ? 1 : 0 })),
+    steps: stages.map((stage) => ({ stage, targetKey: 'video', inputGeneration: 1, status: stage === 'DISCOVER' ? 'SUCCEEDED' : 'PENDING', attempts: stage === 'DISCOVER' ? 1 : 0, lastErrorCode: null })),
+  })
+  const productionList = () => ({
+    page: 0, size: 20, totalElements: 2, totalPages: 1,
+    items: [
+      { id: '42', channelId: '1', channelName: 'IFNOVA', selectedTitle: null, status: 'RUNNING', limitKrw: '2000.000000', reservedKrw: '0', recognizedKrw: '1.000000', createdAt: '2026-11-26T01:00:00Z' },
+      { id: '41', channelId: '1', channelName: 'IFNOVA', selectedTitle: 'A Teaspoon of Neutron Star', status: 'SUCCEEDED', limitKrw: '2000.000000', reservedKrw: '0', recognizedKrw: '8.000000', createdAt: '2026-11-25T01:00:00Z' },
+    ],
   })
   const handleProduction = (method: string, path: string, body: Record<string, unknown> | undefined): { status: number; body?: unknown } | null => {
     if (path === '/api/v1/production-requests' && method === 'POST') return { status: 201, body: { id: '42', status: 'QUEUED' } }
+    if (path === '/api/v1/production-requests' && method === 'GET') return { status: 200, body: productionList() }
     if (path === '/api/v1/production-requests/42' && method === 'GET') return { status: 200, body: productionDetail() }
     if (path === '/api/v1/production-requests/42/discovery') return { status: 200, body: productionDiscovery() }
     if (path === '/api/v1/production-requests/42/selection' && method === 'POST') {
-      if (body?.version !== productionState.version) return { status: 409, body: error('RESOURCE_CONFLICT', 'stale version') }
+      if (body?.version !== productionState.version || body?.batchToken !== batchToken(productionState.version)) {
+        return { status: 409, body: error('RESOURCE_CONFLICT', 'stale batch') }
+      }
       productionState.chosen = Number(body?.candidateId)
       productionState.version += 1
       return { status: 200, body: productionDiscovery() }
