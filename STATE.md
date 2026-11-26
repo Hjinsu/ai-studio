@@ -382,3 +382,9 @@ AI_STUDIO_IT_DB_HOST=127.0.0.1 AI_STUDIO_IT_DB_PORT=3307 AI_STUDIO_IT_DB_USER=ro
 - The isolated MariaDB 11.8.2 instance at loopback 3323 used binlog ON. The complete backend rerun passed 210 unit and 222 integration tests and bootJar after the manual confirmation regression was extended and the mode read was moved inside the fenced transaction.
 - Frontend typecheck, lint, build, The final Vitest run passed 89 tests, including review-only batches and explicit confirmation. The 13-test Edge E2E suite passed on the preceding candidate. Live Edge used actual frontend/backend and FAKE effects against a separate database on the same isolated instance. AUTO 8, MANUAL 5 and 10, reload, history, cancellation, failure, and light/dark/mobile passed. The policy badge and confirmation display case used seeded evaluation fixtures read through the real API.
 - OpenAPI lint and generated type check passed with two pre-existing lint warnings. V1–V11 were applied to isolated databases only and match the safety baseline. The next step is independent review at the final validation commit and final user approval.
+
+## V2 후속 설계 제안 문서 — PROPOSED
+
+- 문서 전용 브랜치 `docs/v2-provider-discovery`, 기준 `c4832b7eca2cbf89893bce92fa2b980263cf695e`. [공급자 및 제작 원가](docs/v2/06_AI_PROVIDER_AND_PRICING.md)와 [소재 발굴 및 데이터 API](docs/v2/07_TOPIC_DISCOVERY_AND_API.md)를 추가하고 README·제품·기술·로드맵·품질 문서에 연결했다.
+- V2-05·07·08 후속 범위에 기존 비용 보호와 데이터 이용 조건을 적용한다. V2-03은 승인된 FAKE/FIXTURE 범위를 따른다. API 가격·권리는 해당 단계에서 활성화 직전에 재검증한다.
+- Markdown 링크·Git 공백·비밀정보 패턴을 정적으로 검사했다. 코드 테스트, DB 변경, migration 적용 또는 실제 API 호출은 수행하지 않았다. 다음 작업은 문서 전용 커밋·푸시와 제안 검토다.

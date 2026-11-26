@@ -39,3 +39,5 @@ DISCOVER → SELECT → RESEARCH → SCRIPT → SCENES → IMAGE/TTS → SUBTITL
 
 ## 검증 기준
 기능 단위 자체 테스트 + 핵심 위험 독립 리뷰. 기존 회귀, 두 커넥션 예산/실행 경합, 호출 전후 종료, receipt 재전달, 파일 손상, 부분 재생성, 취소, 재시작, 승인 변경, 업로드 불명 검증. 기존 DB migration 권한/binlog 관련 검증 유지. 100k 부하, 다중 서버 검증은 제외. 실제 API/YouTube 검증은 사용자 승인과 한도 설정 뒤 실행.
+
+실제 공급자와 외부 자료의 사용 조건 및 기존 비용 보호 재사용은 [공급자·원가 제안](06_AI_PROVIDER_AND_PRICING.md)과 [소재 발굴·데이터 API 제안](07_TOPIC_DISCOVERY_AND_API.md)을 참조한다.

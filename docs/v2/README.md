@@ -9,6 +9,8 @@
 | [03_ROADMAP](03_ROADMAP.md) | V2-00~08 작업 범위와 완료 조건 |
 | [04_AGENT_HANDOFF](04_AGENT_HANDOFF.md) | 검토 당시 에이전트 지시와 분기 제안 기록 |
 | [05_CONTENT_QUALITY_AND_MONETIZATION](05_CONTENT_QUALITY_AND_MONETIZATION.md) | 독창성·품질·검수·수익화 요구사항 |
+| [06_AI_PROVIDER_AND_PRICING](06_AI_PROVIDER_AND_PRICING.md) | PROPOSED · 실제 공급자 후보 및 제작 원가 검증 |
+| [07_TOPIC_DISCOVERY_AND_API](07_TOPIC_DISCOVERY_AND_API.md) | PROPOSED · 소재 발굴, 검색 및 분석 데이터 활용 |
 | [V2-00 저장소 검토](V2-00_REPOSITORY_REVIEW.md) | 승인된 기준선 및 재사용 판단 |
 
 [V2-01 구현 계획](V2-01_IMPLEMENTATION_PLAN.md)은 승인된 실행·비용·공통 계약 기준이다.
