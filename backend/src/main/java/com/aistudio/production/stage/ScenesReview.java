@@ -39,9 +39,15 @@ public final class ScenesReview {
     private static final Pattern FRAME_RATIO = Pattern.compile(
             "(?<![\\p{Nd}.,:])9\\s?:\\s?16(?!\\p{Nd}|[.,:]\\p{Nd})");
     private static final Pattern CLAUSE_END = Pattern.compile("[,.;:!?()\\[\\]]");
-    private static final int FRAMING_WINDOW = 3;
-    private static final Set<String> FRAMING_WORDS = Set.of("vertical", "portrait", "aspect", "ratio", "frame",
-            "framed", "framing", "format", "composition", "orientation", "crop", "cropped", "canvas", "layout");
+    /** Frame adjectives that may stand right before the token ("vertical 9:16", "portrait framing 9:16"). */
+    private static final Set<String> FRAME_ADJECTIVES = Set.of("vertical", "portrait");
+    /** Nouns that may follow a frame adjective before the token ("vertical format 9:16"). */
+    private static final Set<String> FRAME_NOUNS = Set.of("frame", "framing", "format", "orientation");
+    /** Words that may stand right after the token ("9:16 composition", "9:16 vertical frame"). */
+    private static final Set<String> FRAME_FOLLOWERS = Set.of("vertical", "portrait", "composition", "frame",
+            "framing", "format", "orientation", "crop", "canvas");
+    /** The only words that may precede "aspect ratio 9:16"; any other word may name the ratio of a thing. */
+    private static final Set<String> ASPECT_LEAD_INS = Set.of("a", "an", "in", "at", "with", "using");
 
     public Validation review(ScenesInput input, Scenes scenes) {
         Findings findings = new Findings();
@@ -155,9 +161,11 @@ public final class ScenesReview {
     }
 
     /**
-     * Numbers a visual field uses, except a 9:16 frame token in a framing clause ("vertical 9:16",
-     * "9:16 composition", "aspect ratio 9:16"): that names the output format, not a claim. Any other 9 or 16,
-     * including a bare "9:16" outside a framing clause, is still compared with the narration.
+     * Numbers a visual field uses, except a 9:16 frame token written as an explicit framing instruction: directly
+     * after "vertical" or "portrait" (optionally followed by frame/framing/format/orientation) or after a leading
+     * "aspect ratio", or directly before a framing word ("9:16 composition", "9:16 aspect ratio"). A framing word
+     * elsewhere in the clause does not count, so "the orbital resonance ratio is 9:16" or "the aspect ratio of the
+     * planet is 9:16" keeps 9 and 16 as numbers compared with the narration. When in doubt, the numbers are kept.
      */
     static Set<String> visualNumbers(String text) {
         if (text == null) {
@@ -175,7 +183,7 @@ public final class ScenesReview {
         return Statements.numbers(kept.toString());
     }
 
-    /** A framing word within {@value #FRAMING_WINDOW} words of the token, without crossing a clause boundary. */
+    /** The token is directly framed by an explicit framing phrase in the same clause. */
     private static boolean framing(String text, int start, int end) {
         String before = text.substring(0, start);
         Matcher boundary = CLAUSE_END.matcher(before);
@@ -186,11 +194,29 @@ public final class ScenesReview {
         String after = text.substring(end);
         Matcher next = CLAUSE_END.matcher(after);
         int to = next.find() ? next.start() : after.length();
-        List<String> left = words(before.substring(from));
-        List<String> right = words(after.substring(0, to));
-        List<String> near = new ArrayList<>(left.subList(Math.max(0, left.size() - FRAMING_WINDOW), left.size()));
-        near.addAll(right.subList(0, Math.min(FRAMING_WINDOW, right.size())));
-        return near.stream().anyMatch(FRAMING_WORDS::contains);
+        return framedBefore(words(before.substring(from))) || framedAfter(words(after.substring(0, to)));
+    }
+
+    private static boolean framedBefore(List<String> left) {
+        int n = left.size();
+        if (n >= 1 && FRAME_ADJECTIVES.contains(left.get(n - 1))) {
+            return true;
+        }
+        if (n >= 2 && FRAME_ADJECTIVES.contains(left.get(n - 2)) && FRAME_NOUNS.contains(left.get(n - 1))) {
+            return true;
+        }
+        if (n >= 2 && left.get(n - 2).equals("aspect") && left.get(n - 1).equals("ratio")) {
+            return n == 2 || ASPECT_LEAD_INS.contains(left.get(n - 3));
+        }
+        return false;
+    }
+
+    private static boolean framedAfter(List<String> right) {
+        if (right.isEmpty()) {
+            return false;
+        }
+        return FRAME_FOLLOWERS.contains(right.get(0))
+                || right.size() >= 2 && right.get(0).equals("aspect") && right.get(1).equals("ratio");
     }
 
     private static List<String> words(String text) {

@@ -210,6 +210,46 @@ class ScenesReviewTest {
     }
 
     @Test
+    void explicitFramingInstructionsAreAllowed() {
+        for (String framing : List.of("Vertical 9:16", "Aspect ratio 9:16", "9:16 composition",
+                "Portrait framing 9:16", "Flat infographic of Venus in a 9:16 aspect ratio",
+                "Flat infographic of Venus, vertical format 9:16")) {
+            assertThat(prompt(0, framing).findings()).as(framing).isEmpty();
+        }
+    }
+
+    @Test
+    void aFactualRatioIsComparedWithTheNarrationEvenBesideRatioWords() {
+        for (String fact : List.of("The orbital resonance ratio is 9:16", "The mass ratio is 9:16",
+                "The gravitational ratio is 9:16", "The aspect ratio of the planet is 9:16",
+                "Orbit diagram, resonance ratio 9:16", "Planet aspect ratio 9:16", "Frame showing a 9:16 ratio",
+                "Orbit diagram in a 9:16 ratio of periods", "Composition: the mass ratio is 9:16")) {
+            Validation validation = prompt(0, fact);
+            assertThat(blocks(validation)).as(fact).containsExactly("SCENE_NEW_FACT");
+            assertThat(newFacts(validation)).as(fact).containsExactly("9", "16");
+        }
+        assertThat(blocks(prompt(0, "Venus has 16 moons"))).containsExactly("SCENE_NEW_FACT");
+        assertThat(newFacts(prompt(0, "Vertical 9:16, 16 moons"))).containsExactly("16");
+    }
+
+    @Test
+    void aFrameTokenAndASeparateFactualRatioInOneSentence() {
+        // the first 9:16 is the frame; the second is a claimed resonance the narration never states
+        assertThat(newFacts(prompt(0, "Vertical 9:16 frame showing the orbital resonance ratio of 9:16")))
+                .containsExactly("9", "16");
+        assertThat(newFacts(prompt(0, "9:16 composition, the mass ratio is 9:16"))).containsExactly("9", "16");
+        assertThat(ScenesReview.visualNumbers("vertical 9:16 frame, resonance ratio 9:16"))
+                .containsExactly("9", "16");
+    }
+
+    @Test
+    void aRatioTheNarrationStatesStaysAllowed() {
+        // scene 1 narrates "about 243 Earth days ... only about 225"
+        assertThat(prompt(0, "Orbit diagram showing the 243:225 day ratio, vertical 9:16").findings()).isEmpty();
+        assertThat(prompt(0, "The day to year ratio is 243:225, 9:16 composition").findings()).isEmpty();
+    }
+
+    @Test
     void visualNumbersKeepsEverythingButTheFramedToken() {
         assertThat(ScenesReview.visualNumbers("vertical 9:16, 16 moons")).containsExactly("16");
         assertThat(ScenesReview.visualNumbers("aspect 9:16.5")).containsExactly("9", "16.5");
