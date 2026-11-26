@@ -1,10 +1,10 @@
 # 회사 PC 다음 세션 — AI Studio v2
 
-2026-11-26 KST · V2-01·V2-02 DONE · V2-03 HOLD, F05 수치 예외 제거 및 별도 독립 리뷰 대기.
+2026-11-27 KST · V2-01·V2-02·V2-03 DONE.
 
 ## 기준과 보존
 
-- 재개 기준은 이 종료 기록이 반영된 최신 `origin/v2/integration`이다. V2-02 제품 병합 기준은 `8ca054dc489d55e763a0f91790366df282550b27`이며 승인 SHA `9acab98483539402ee61e9695a3d3ccf10b66f00`과 전체 Git 트리가 일치한다.
+- 재개 기준은 최신 `origin/v2/integration`이다. V2-03 제품 병합 `0aa11d0ea2eec7333cb901bc0ac140a8b414d82d`의 Git 트리는 승인 SHA `42cbbcfd2762306e3cd6ec7dced8c6b864325cda`와 동일하다.
 - 기존 원격 `main` `47ef69731a599c570846c1482dcabf8ead8fe2e4`, `t03/integration` `dab7013c4557ba87d4440dfc86417344bb2c4e1d`, C `1e888767a61407a7e9176df0e362df9d6143f1b2`, D `3a976e1fbb1a5c8fbda50257b12643ff6cfbca3a`를 보존한다. C/D 병합이나 공통 계약 cherry-pick은 v2 선행 작업이 아니다.
 - 집 PC의 기존 D 미커밋 MVP 문서와 로컬 integration의 미추적 리뷰는 원래 worktree에 별도 보존되어 있다. v2 문서는 새 브랜치에서 가져온다.
 - [승인된 기획](v2/README.md) · [품질·수익화 요구사항](v2/05_CONTENT_QUALITY_AND_MONETIZATION.md) · [현재 배정](../TASKS.md) · [기존 코드 검토](v2/V2-00_REPOSITORY_REVIEW.md)
@@ -31,13 +31,7 @@ git -C ../ai-studio-v2 status --short --branch
 
 ## 다음 작업
 
-**V2-03 자료 조사·대본·장면 구성**은 `v2/review-v2-03`의 별도 `ai-studio-v2-review-03` worktree에서 이어간다. F05 수치 예외를 제거했다. 다음 작업은 Draft PR #6 최신 HEAD 및 동일 SHA의 CI를 확인하고, 구현 세션과 분리된 읽기 전용 독립 리뷰에서 수치 검수와 구버전 영수증 재생을 확인하는 것이다. HOLD 해제와 병합은 독립 리뷰 APPROVE 및 사용자 승인 후 진행한다. 미디어 프로필은 V2-04 별도 승인 범위다. [결합 검증 보고서](reports/V2-03_INTEGRATION_REPORT.md) · [승인 설계](v2/V2-03_IMPLEMENTATION_PLAN.md)
-
-```powershell
-git fetch origin
-git rev-parse origin/v2/review-v2-03
-gh pr view v2/review-v2-03 --json headRefOid,isDraft,statusCheckRollup
-```
+V2-04의 설계와 착수 범위를 별도 승인에서 확인한다. V2-05 실제 AI 의미 검증과 OpenAPI 기존 경고 2건은 비차단 후속이다. 공급자 및 소재 발굴 문서는 PROPOSED로 유지한다. [V2-03 종료 기록](../STATE.md#v2-03--최종-승인-및-종료-2026-11-27-kst-done)
 
 ## 환경 및 검증 상태
 
