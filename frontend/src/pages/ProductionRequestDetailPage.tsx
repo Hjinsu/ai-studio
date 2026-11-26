@@ -32,7 +32,9 @@ import { PageHeader } from '../ui/PageHeader'
 import { EmptyState, ErrorState, InlineNotice, LoadingSkeleton, QueryView } from '../ui/States'
 import { LabelBadge, StatusBadge } from '../ui/StatusBadge'
 import { useToast } from '../ui/toast-context'
+import { MediaSection } from './ProductionMediaSection'
 import { PlanningSection } from './ProductionPlanningSection'
+import { hasFinalVideo, useProductionMedia } from './useProductionMedia'
 import {
   BLOCK,
   CRITERIA,
@@ -49,7 +51,7 @@ import {
 const POLL_MS = 5_000
 
 /**
- * 제작 요청 상세(V2-02~03): 진행 단계·비용, 소재 후보와 평가 근거, 선정 결과, 조사·대본·장면(읽기 전용). 직접 선택 모드에서 대기 중이면 적격 후보를
+ * 제작 요청 상세(V2-02~04): 진행 단계·비용, 소재 후보와 평가 근거, 선정 결과, 조사·대본·장면(읽기 전용), 영상·미디어 미리보기. 직접 선택 모드에서 대기 중이면 적격 후보를
  * 고를 수 있다. 저장된 결과만 보여주며 화면을 다시 열어도 같은 대기 상태를 이어서 확인할 수 있다.
  */
 export function ProductionRequestDetailPage() {
@@ -101,7 +103,7 @@ export function ProductionRequestDetailPage() {
                   <DateTime value={request.cancelRequestedAt} />에 취소를 요청했습니다. 실행 중인 단계와 비용 확인이 끝나면 취소됩니다.
                 </InlineNotice>
               )}
-              {request.status === 'SUCCEEDED' && <InlineNotice tone="warning">{FAKE_RUN_NOTICE}</InlineNotice>}
+              {request.status === 'SUCCEEDED' && <RunNotice request={request} />}
               {request.status === 'RECOVERY_REQUIRED' && (
                 <InlineNotice tone="warning">
                   외부 실행 결과 또는 비용 정산을 확인하는 중입니다. 예약은 유지되며 같은 작업을 다시 호출하지 않습니다.
@@ -114,6 +116,7 @@ export function ProductionRequestDetailPage() {
               </section>
               <DiscoverySection request={request} onChanged={refresh} />
               <PlanningSection request={request} />
+              <MediaSection request={request} />
               <Card title="진행 단계" description="고정된 11단계를 순서대로 실행합니다.">
                 <DataTable<ProductionStep>
                   caption="진행 단계"
@@ -146,6 +149,15 @@ export function ProductionRequestDetailPage() {
       }}
     </QueryView>
   )
+}
+
+/** 완료 안내: 최종 영상이 있는 미디어 요청은 미디어 섹션의 FAKE·로컬 안내를 쓰고, 그 밖의 요청은 기존 FAKE 실행 안내를 유지한다. */
+function RunNotice({ request }: { request: ProductionRequestDetail }) {
+  const media = useProductionMedia(request)
+  if (media.isPending || hasFinalVideo(media.data)) {
+    return null
+  }
+  return <InlineNotice tone="warning">{FAKE_RUN_NOTICE}</InlineNotice>
 }
 
 function DiscoverySection({

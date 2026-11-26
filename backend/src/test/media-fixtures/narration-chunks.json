@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "voice": {
+    "voiceId": "piper-en_US-ljspeech-high-1",
+    "language": "en",
+    "model": "en_US-ljspeech-high.onnx",
+    "modelSha256": "5d4f08ba6a2a48c44592eed3ce56bf85e9de3dd4e20df90541ae68a8310c029a",
+    "lengthScale": "1.0"
+  },
+  "pauses": { "comma": 0.14, "sentence": 0.32, "split": 0.05, "beat": 0.55, "lead": 0.08, "tail": 0.30 },
+  "topics": [
+    {
+      "key": "neutron-star",
+      "scenes": [
+        { "emphasis": ["sugar cube"], "beatAfter": [0], "segments": [
+          { "id": "s1", "cues": ["Guess what this sugar cube weighs?"] } ] },
+        { "emphasis": ["neutron star", "supernova"], "segments": [
+          { "id": "s2", "cues": ["It is not sugar.", "It is a scrap of a neutron star,", "the collapsed core left behind",
+            "when a massive star explodes as a supernova."] } ] },
+        { "emphasis": ["billion tons"], "segments": [
+          { "id": "s3", "cues": ["Now squeeze about 1.4 times the mass of our Sun", "into a ball only 20 kilometers across."] },
+          { "id": "s4", "cues": ["Packed that tightly,", "a piece the size of a sugar cube", "would weigh about a billion tons on Earth."] } ] },
+        { "emphasis": ["burst apart"], "segments": [
+          { "id": "s5", "cues": ["But if you could carry it home,", "it would not stay small.",
+            "Without the star's gravity holding it together,", "it would burst apart violently."] } ] },
+        { "emphasis": ["free quarks", "IFNOVA"], "segments": [
+          { "id": "s6", "cues": ["And deeper inside,", "nobody knows for sure what the matter becomes.", "Some models suggest",
+            "it might even break down into free quarks."] },
+          { "id": "s7", "cues": ["A spoonful of star you can only weigh with math.", "What question would you ask it?",
+            "Follow IFNOVA for more strange science."] } ] }
+      ]
+    },
+    {
+      "key": "venus-day",
+      "scenes": [
+        { "emphasis": ["longer than a year"], "beatAfter": [0], "segments": [
+          { "id": "s1", "cues": ["A day longer than a year?"] },
+          { "id": "s2", "cues": ["On Venus, yes.", "One spin on its axis takes about 243 Earth days,", "but one trip around the Sun",
+            "takes only about 225."] } ] },
+        { "emphasis": ["west", "the twist"], "segments": [
+          { "id": "s3", "cues": ["And it spins backward", "compared with most planets,", "so the Sun would rise in the west."] },
+          { "id": "s4", "cues": ["Here is the twist.", "Because it spins backward while it orbits,", "sunrise to sunrise is much shorter:",
+            "about 117 Earth days."] } ] },
+        { "emphasis": ["Nobody knows", "IFNOVA"], "segments": [
+          { "id": "s5", "cues": ["Why does it spin backward?", "Nobody knows for sure.", "A giant impact long ago,",
+            "or tides from its thick atmosphere,", "might have flipped it."] },
+          { "id": "s6", "cues": ["So which is longer on Venus, a day or a year?", "It depends on which day you mean.",
+            "Follow IFNOVA for more strange science."] } ] }
+      ]
+    }
+  ]
+}

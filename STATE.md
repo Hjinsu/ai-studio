@@ -16,6 +16,15 @@
 ## 인수인계 기록
 작업 ID / 상태 / 변경 파일 / 테스트 명령 및 실제 결과 / 미해결 문제 / 다음 작업 / 필요 환경변수. 커밋 해시는 생성된 경우만 기록.
 
+### V2-04-PRODUCT — 제품 구현 체크포인트 (2026-11-27 KST, IN_PROGRESS)
+
+- Claude Code, 공통 SHA `d7bec5f9aadcc423d7b2a987ac31d810367b4604`, 브랜치 `v2/04-product`. 상세·재개 절차: [진행 보고](docs/reports/V2-04_PRODUCT_REPORT.md). 사용자 지시로 이 브랜치 STATE.md에 직접 기록(통합 시 정리).
+- 완료: `backend/.../production/media/product/`(IMAGE·TTS·SUBTITLE·RENDER·METADATA·QC), 프런트 미디어 미리보기(`ProductionMediaSection.tsx`, `useProductionMedia.ts`, `api/production.ts`), 테스트·fixture 생성기(`backend/src/test/media-fixtures/`). 공통 계약·migration·OpenAPI 변경 없음.
+- 테스트: `:backend:test` 324 통과(FFmpeg 환경 지정). `ProductMediaIT` 2/2(실제 executor·비용·저장·HTTP, FFmpeg 직접 실행 테스트 대역). frontend lint/build/Vitest 102 통과, Playwright Edge media 3/3(API 대역). **전체 `:backend:integrationTest`는 중단으로 미완주.**
+- **NOT_TESTED**: 공통 보호 실행기(Job Object, ≤32 GiB 전용 scratch 볼륨) 경로의 실제 앱 E2E와 실제 앱 브라우저 검증 — 이 PC에 전용 볼륨 없음, VHDX 미생성(사용자 결정). 회사 PC에서 보고서 §6 절차로 재개.
+- 인수 MP4 두 편(Git 밖 `C:\Users\rlead\Downloads\AI-Studio-V2-04-Acceptance\output\`): neutron-star `6c2d9c22abe2bbe0af70e1bf62b58093a19b324906ea0a1d2de65c8368577e8b`, venus-day `20be054d32f0722221a2a29edee68afd5cae655786157acff4d303cbd128534f` (기술 QC PASS, 직접 FFmpeg 경로). 외부 자산 해시 `EXTERNAL_ASSETS_SHA256.txt`, 권리 `ASSETS_AND_RIGHTS.md`(사용자 확인 전).
+- 다음 작업: 외부 자산 복원 → 전체 IT 완주 → 회사 PC VHDX·scratch-root 설정 후 실제 앱 E2E·브라우저 검증 → 사람 청취·권리 확인 → IMPLEMENTED 보고.
+
 ### V2-04-COMMON — 공통 계약 구현 (2026-11-27 KST, IMPLEMENTED)
 
 - 사용자 착수 승인 기준 `715893fa47a955be399492ddc362b169b528dae3`, 설계 승인 `18c9b9484d6bc6637252732adb0063e7808ca960`, Codex `v2/04-common` / `../ai-studio-v2-04-common`. 공통 검증 커밋은 `origin/v2/04-common`에서 확인한다.
