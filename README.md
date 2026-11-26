@@ -2,7 +2,7 @@
 
 한 명의 운영자가 로컬 PC에서 YouTube 영상을 자동 제작하는 프로그램이다. 첫 목표는 채널 설정과 제작 시작 후 소재를 직접 입력하지 않아도 소재 발굴·선정, 조사, 대본, 장면, 이미지, TTS, 자막, FFmpeg, 게시 정보, 자동 품질 검사를 거쳐 실제 IFNOVA 영어 Shorts MP4(40~60초, 1080×1920)를 완성하는 것이다. 비공개 업로드와 공개 전환은 각각 별도 승인한다.
 
-- [v2 개발 기준](docs/v2/README.md)
+- [v2 개발 기준](docs/v2/README.md) · [콘텐츠 품질·수익화 요구사항](docs/v2/05_CONTENT_QUALITY_AND_MONETIZATION.md)
 - [작업 배정](TASKS.md) · [상태](STATE.md) · [결정](DECISIONS.md)
 - [회사 PC 재개](docs/NEXT_SESSION.md)
 - [로컬 실행](docs/guides/LOCAL_RUN_GUIDE.md) · [격리 테스트](docs/guides/LOCAL_TEST_GUIDE.md)

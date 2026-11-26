@@ -290,3 +290,8 @@ AI_STUDIO_IT_DB_HOST=127.0.0.1 AI_STUDIO_IT_DB_PORT=3307 AI_STUDIO_IT_DB_USER=ro
 - **DONE · ChatGPT APPROVE 및 사용자 승인.** v2/integration 분기 원점 `dab7013c4557ba87d4440dfc86417344bb2c4e1d`. 위 T03 상태는 과거 기록이다. 원격 C/D WIP와 기존 로컬 변경을 보존한다.
 - 변경 범위는 루트 개발 규칙·상태·결정·목차·협업 가이드, `docs/v2/` 및 [회사 PC 인수인계](docs/NEXT_SESSION.md)다. 문서 공백·링크·비밀 패턴 검사를 수행하고 V1~V6 및 제품 경로가 기준 SHA와 일치함을 확인했다. 제품 테스트·DB 접근·Migration 적용·CI 현행 결과 확인은 미실행이다.
 - 다음 배정은 V2-01이며 별도 착수 승인 후 진행한다. 첫 경계는 소재 전 제작 요청 ID와 한도 귀속이다. [작업 배정](TASKS.md)
+
+## V2-Q01 — 콘텐츠 품질·수익화 문서 반영 (2026-11-26 KST)
+
+- V2-00 DONE 유지. [품질·수익화 요구사항](docs/v2/05_CONTENT_QUALITY_AND_MONETIZATION.md)과 제품·로드맵·인수인계 문서 갱신. 제품 테스트·DB 접속·Migration 적용 미수행.
+- 다음 작업은 V2-01 공통 계약 설계 검토 및 제품 착수 승인이다. FFmpeg·FFprobe 준비는 V2-04에 배정했다.
