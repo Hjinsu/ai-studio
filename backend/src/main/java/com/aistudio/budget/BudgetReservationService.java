@@ -14,6 +14,7 @@ import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.aistudio.audit.AuditService;
@@ -45,6 +46,7 @@ public class BudgetReservationService {
     private static final int DECISION_ATTEMPTS = 3;
     private static final String LEGACY_RESERVE_PREFIX = "reserve:";
     private static final String HASHED_RESERVE_PREFIX = "reserve-v2:";
+    private static final String PRODUCTION_PREFIX = "production:";
 
     private static final class DecisionPeriodChanged extends RuntimeException {
     }
@@ -85,6 +87,14 @@ public class BudgetReservationService {
 
     // ================================================================ 예약
     public ReservationResult reserve(ReserveCommand command) {
+        if (command.requestKey() != null && command.requestKey().startsWith(PRODUCTION_PREFIX)
+                && mapper.reservationByRequestKey(command.requestKey()) == null) {
+            throw ApiException.validation("requestKey", "uses a production reservation namespace");
+        }
+        return reserve(command, false);
+    }
+
+    private ReservationResult reserve(ReserveCommand command, boolean production) {
         validateKey("requestKey", command.requestKey());
         if (command.purpose() == null || command.purpose().isBlank() || command.purpose().length() > 64) {
             throw ApiException.validation("purpose", "must be 1 to 64 characters");
@@ -102,6 +112,9 @@ public class BudgetReservationService {
         fields.put("estimateOriginal", Fingerprints.amount(estimate));
         String fingerprint = Fingerprints.of(fields);
 
+        if (production) {
+            return doReserve(command, currency, estimate, fingerprint, true);
+        }
         BudgetMapper.Reservation existing = mapper.reservationByRequestKey(command.requestKey());
         if (existing != null) {
             return replay(existing, fingerprint);
@@ -109,7 +122,7 @@ public class BudgetReservationService {
         try {
             for (int attempt = 1; ; attempt++) {
                 try {
-                    return transactions.execute(() -> doReserve(command, currency, estimate, fingerprint));
+                    return transactions.execute(() -> doReserve(command, currency, estimate, fingerprint, false));
                 } catch (DecisionPeriodChanged e) {
                     if (attempt == DECISION_ATTEMPTS) {
                         throw new ApiException(ErrorCode.SERVICE_UNAVAILABLE,
@@ -135,9 +148,11 @@ public class BudgetReservationService {
     }
 
     private ReservationResult doReserve(ReserveCommand command, String currency, BigDecimal estimate,
-            String fingerprint) {
+            String fingerprint, boolean controlAlreadyLocked) {
         // 1) control S: 지출 차단·정합성 상태 (Fail Closed, ADR-054, ADR-061)
-        controlLock.shared();
+        if (!controlAlreadyLocked) {
+            controlLock.shared();
+        }
         Channel channel = command.channelId() == null ? null : channels.lockForReservation(command.channelId());
         List<BudgetMapper.Policy> policies = mapper.lockActivePolicies(command.channelId());
         BudgetMapper.Reservation existing = mapper.reservationByRequestKey(command.requestKey());
@@ -213,6 +228,13 @@ public class BudgetReservationService {
     }
 
     private void requireSystemPolicies(List<BudgetMapper.Policy> policies) {
+        if (!hasSystemPolicies(policies)) {
+            throw new ApiException(ErrorCode.PREREQUISITE_NOT_MET,
+                    "Active SYSTEM DAY and MONTH budget policies are required before spending.");
+        }
+    }
+
+    private boolean hasSystemPolicies(List<BudgetMapper.Policy> policies) {
         boolean day = false;
         boolean month = false;
         for (BudgetMapper.Policy policy : policies) {
@@ -221,10 +243,7 @@ public class BudgetReservationService {
                 month |= "MONTH".equals(policy.periodType());
             }
         }
-        if (!day || !month) {
-            throw new ApiException(ErrorCode.PREREQUISITE_NOT_MET,
-                    "Active SYSTEM DAY and MONTH budget policies are required before spending.");
-        }
+        return day && month;
     }
 
     /** 정책 행 잠금 하에서 현재 bucket을 찾거나 만든다(동시 생성은 정책 잠금으로 직렬화, UNIQUE는 최종 방어). */
@@ -252,7 +271,7 @@ public class BudgetReservationService {
 
     public BudgetMapper.Reservation recordProvisional(EventCommand c) {
         requirePositiveOrZero(c.amount(), "amount");
-        return applyEvent(c, "PROVISIONAL", null, (r, s) -> {
+        return applyEvent(c, "PROVISIONAL", null, false, (r, s) -> {
             requireStatus(r, ACTIVE, RECONCILIATION_REQUIRED);
             Deltas d = SettlementMath.provisional(s, Money.original(c.amount()));
             return new Transition(d, r.originalCurrency(), ACTIVE, null, null, null);
@@ -260,8 +279,12 @@ public class BudgetReservationService {
     }
 
     public BudgetMapper.Reservation confirm(EventCommand c) {
+        return confirm(c, false);
+    }
+
+    private BudgetMapper.Reservation confirm(EventCommand c, boolean production) {
         requirePositiveOrZero(c.amount(), "amount");
-        return applyEvent(c, "CONFIRM", null, (r, s) -> {
+        return applyEvent(c, "CONFIRM", null, production, (r, s) -> {
             requireStatus(r, ACTIVE, RECONCILIATION_REQUIRED, RELEASED);
             String reason = c.reasonCode();
             if (RELEASED.equals(r.status())) {
@@ -277,7 +300,11 @@ public class BudgetReservationService {
     }
 
     public BudgetMapper.Reservation release(EventCommand c) {
-        return applyEvent(c, "RELEASE", null, (r, s) -> {
+        return release(c, false);
+    }
+
+    private BudgetMapper.Reservation release(EventCommand c, boolean production) {
+        return applyEvent(c, "RELEASE", null, production, (r, s) -> {
             requireStatus(r, ACTIVE, RECONCILIATION_REQUIRED);
             if (r.recognizedCostKrw().signum() != 0) {
                 throw new ApiException(ErrorCode.INVALID_STATE_TRANSITION,
@@ -308,7 +335,7 @@ public class BudgetReservationService {
         if ("ADJUSTMENT".equals(entryType) && (c.amount() == null || c.amount().signum() == 0)) {
             throw ApiException.validation("amount", "adjustment must not be 0");
         }
-        return applyEvent(c, entryType, basis, (r, s) -> {
+        return applyEvent(c, entryType, basis, false, (r, s) -> {
             requireStatus(r, SETTLED);
             boolean krwOnly = basis == AdjustBasis.KRW && !Money.KRW.equals(r.originalCurrency());
             Deltas d;
@@ -333,6 +360,7 @@ public class BudgetReservationService {
             if (r == null) {
                 throw new ApiException(ErrorCode.RESOURCE_NOT_FOUND);
             }
+            rejectProductionMutation(r);
             if (RECONCILIATION_REQUIRED.equals(r.status())) {
                 return r;
             }
@@ -342,6 +370,67 @@ public class BudgetReservationService {
             audit.record(actor, "BUDGET_RESERVATION_UNCERTAIN", "BUDGET_RESERVATION", r.id(), Map.of("reason", reason));
             return mapper.reservation(r.id());
         });
+    }
+    private void rejectProductionMutation(BudgetMapper.Reservation reservation) {
+        if (reservation.requestKey().startsWith(PRODUCTION_PREFIX) && mapper.productionManaged(reservation.id())) {
+            throw new ApiException(ErrorCode.POLICY_VIOLATION, "Production reservations require provider evidence.");
+        }
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    public long settleProduction(EventCommand command, boolean release) {
+        if (release) {
+            release(command, true);
+        } else {
+            confirm(command, true);
+        }
+        return mapper.costLogByEventKey(command.eventKey()).id();
+    }
+
+    public enum DispatchBudget { ALLOWED, BLOCKED, PERIOD_ENDED }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    public long createProductionReservation(ReserveCommand command) {
+        if (command.requestKey() == null || !command.requestKey().startsWith(PRODUCTION_PREFIX)) {
+            throw new IllegalArgumentException("Production reservation key is missing its namespace");
+        }
+        ReservationResult result;
+        try {
+            result = reserve(command, true);
+        } catch (DecisionPeriodChanged e) {
+            throw new ApiException(ErrorCode.SERVICE_UNAVAILABLE, "The budget period changed during reservation.");
+        }
+        if (result.replayed()) {
+            throw new ApiException(ErrorCode.RESOURCE_CONFLICT, "Production reservation key already exists.");
+        }
+        return result.reservation().id();
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    public DispatchBudget checkProductionDispatch(long channelId, long reservationId) {
+        Channel channel = channels.lockForReservation(channelId);
+        List<BudgetMapper.Policy> policies = mapper.lockActivePolicies(channelId);
+        BudgetMapper.Control control = mapper.control();
+        List<Long> ids = mapper.reservationBucketIds(reservationId);
+        List<BudgetMapper.Bucket> buckets = ids.isEmpty() ? List.of() : mapper.lockBuckets(ids);
+        BudgetMapper.Reservation reservation = mapper.lockReservation(reservationId);
+        if (reservation == null || !ACTIVE.equals(reservation.status())
+                || !Objects.equals(reservation.channelId(), channelId)
+                || reservation.estimateKrw().compareTo(reservation.reservedRemainingKrw()) != 0) {
+            return DispatchBudget.BLOCKED;
+        }
+        Instant now = clock.instant();
+        if (buckets.stream().anyMatch(bucket -> !now.isBefore(bucket.periodEnd()))) {
+            return DispatchBudget.PERIOD_ENDED;
+        }
+        if (channel == null || !Channel.ACTIVE.equals(channel.status()) || !control.spendingEnabled()
+                || "ERROR".equals(control.consistencyStatus()) || !hasSystemPolicies(policies)
+                || buckets.size() != policies.size() || policies.stream().anyMatch(policy -> buckets.stream()
+                .noneMatch(bucket -> bucket.policyId() == policy.id() && !now.isBefore(bucket.periodStart())
+                        && bucket.spentKrw().add(bucket.reservedKrw()).compareTo(bucket.limitKrw()) <= 0))) {
+            return DispatchBudget.BLOCKED;
+        }
+        return DispatchBudget.ALLOWED;
     }
 
     private record Transition(Deltas deltas, String eventCurrency, String newStatus, String reasonCode,
@@ -353,7 +442,7 @@ public class BudgetReservationService {
         Transition apply(BudgetMapper.Reservation reservation, SettlementMath.State state);
     }
 
-    private BudgetMapper.Reservation applyEvent(EventCommand c, String entryType, AdjustBasis basis,
+    private BudgetMapper.Reservation applyEvent(EventCommand c, String entryType, AdjustBasis basis, boolean production,
             TransitionRule rule) {
         validateKey("eventKey", c.eventKey());
         var fields = Fingerprints.fields();
@@ -371,11 +460,19 @@ public class BudgetReservationService {
         if (reserveNamespace && (existing == null || "RESERVE".equals(existing.entryType()))) {
             throw ApiException.validation("eventKey", "uses a namespace reserved for reservation entries");
         }
+        if (production) {
+            return doApplyEvent(c, entryType, fingerprint, true, rule);
+        }
+        if (c.eventKey().startsWith(PRODUCTION_PREFIX)
+                && (existing == null || existing.requestKey().startsWith(PRODUCTION_PREFIX)
+                        && mapper.productionManaged(existing.reservationId()))) {
+            throw ApiException.validation("eventKey", "uses a production settlement namespace");
+        }
         if (existing != null) {
             return replayEvent(existing, fingerprint);
         }
         try {
-            return transactions.execute(() -> doApplyEvent(c, entryType, fingerprint, rule));
+            return transactions.execute(() -> doApplyEvent(c, entryType, fingerprint, false, rule));
         } catch (DuplicateKeyException e) {
             BudgetMapper.CostLog raced = mapper.costLogByEventKey(c.eventKey());
             if (raced == null) {
@@ -392,10 +489,12 @@ public class BudgetReservationService {
         return mapper.reservation(existing.reservationId());
     }
 
-    private BudgetMapper.Reservation doApplyEvent(EventCommand c, String entryType, String fingerprint,
+    private BudgetMapper.Reservation doApplyEvent(EventCommand c, String entryType, String fingerprint, boolean production,
             TransitionRule rule) {
         Instant now = clock.instant();
-        controlLock.shared();
+        if (!production) {
+            controlLock.shared();
+        }
         List<Long> bucketIds = mapper.reservationBucketIds(c.reservationId());
         if (!bucketIds.isEmpty()) {
             mapper.lockBuckets(bucketIds);
@@ -403,6 +502,9 @@ public class BudgetReservationService {
         BudgetMapper.Reservation r = mapper.lockReservation(c.reservationId());
         if (r == null) {
             throw new ApiException(ErrorCode.RESOURCE_NOT_FOUND);
+        }
+        if (!production) {
+            rejectProductionMutation(r);
         }
         BudgetMapper.CostLog existing = mapper.costLogByEventKey(c.eventKey());
         if (existing != null) {

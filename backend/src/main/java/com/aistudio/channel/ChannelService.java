@@ -160,6 +160,15 @@ public class ChannelService {
         return get(id);
     }
 
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.MANDATORY)
+    public ChannelConfig configSnapshot(long channelId, long id) {
+        ChannelConfig config = mapper.findConfigById(channelId, id);
+        if (config == null) {
+            throw new ApiException(ErrorCode.RESOURCE_NOT_FOUND, "Channel configuration snapshot was not found.");
+        }
+        return config;
+    }
+
     @Transactional(readOnly = true)
     public ChannelConfig currentConfig(long channelId) {
         requireExists(channelId);
