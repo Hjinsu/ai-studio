@@ -41,6 +41,11 @@ final class InjectingDiscoveryPort implements DiscoveryExecutionPort {
     }
 
     @Override
+    public boolean manualMode(long requestId) {
+        return real.manualMode(requestId);
+    }
+
+    @Override
     public Input input(long requestId) {
         return real.input(requestId);
     }

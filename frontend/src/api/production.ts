@@ -43,6 +43,7 @@ export interface CandidateChoice {
   candidateId: number
   version: number
   batchToken: string
+  confirmReview?: boolean
 }
 export const chooseProductionCandidate = (id: string, choice: CandidateChoice) =>
   request<ProductionDiscovery>('POST', `${PATH}/${id}/selection`, { body: choice })

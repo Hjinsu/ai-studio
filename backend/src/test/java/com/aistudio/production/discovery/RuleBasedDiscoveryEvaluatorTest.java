@@ -66,13 +66,15 @@ class RuleBasedDiscoveryEvaluatorTest {
     }
 
     @Test
-    void sameQuestionWithADistinctAngleIsHeldAsUncertain() {
+    void sameQuestionWithAnIndependentlyValuableAngleIsPenalized() {
         Candidate otherAngle = DiscoveryFixtures.candidate("Rayleigh scattering",
                 "Why is the daytime sky blue instead of violet?", "Violet Light Is Hiding in Plain Sight",
                 "Contrast the common belief about sunsets with how human eyes weigh colors.");
         EvaluatedCandidate e = first(List.of(DiscoveryFixtures.entry("1", "Why the Sky Is Blue, Not Violet",
                 SKY_BRIEF)), otherAngle);
-        assertThat(e.blockCodes()).containsExactly(Block.SIMILARITY_UNCERTAIN);
+        assertThat(e.eligible()).isTrue();
+        assertThat(e.scores().originality()).isLessThan(20);
+        assertThat(e.comparisons()).anySatisfy(item -> assertThat(item.reason()).endsWith(" SIMILARITY_PENALTY"));
     }
 
     @Test
@@ -121,7 +123,7 @@ class RuleBasedDiscoveryEvaluatorTest {
     void repeatsInsideOneBatchBlockTheLaterCandidateOnly() {
         Candidate copy = DiscoveryFixtures.candidate("Rayleigh scattering",
                 "Why is the daytime sky blue instead of violet?", "Blue Sky Mystery",
-                "Compare it against familiar everyday scales.");
+                SKY.angle());
         Candidate paraphrase = DiscoveryFixtures.candidate("Rayleigh scattering",
                 "Why does the daytime atmosphere look azure rather than violet?", "The Azure Atmosphere",
                 "Walk through the scattering mechanism step by step with a simple diagram.");
@@ -130,7 +132,7 @@ class RuleBasedDiscoveryEvaluatorTest {
         assertThat(list.get(0).blockCodes()).isEmpty();
         assertThat(list.get(1).blockCodes()).containsExactly(Block.DUPLICATE);
         assertThat(list.get(1).comparisons()).singleElement()
-                .satisfies(c -> assertThat(c.reason()).startsWith("BATCH_CANDIDATE_1 EXACT_REPEAT"));
+                .satisfies(c -> assertThat(c.reason()).startsWith("BATCH_CANDIDATE_1 ").endsWith(" DUPLICATE"));
         assertThat(list.get(2).blockCodes()).containsExactly(Block.DUPLICATE);
     }
 

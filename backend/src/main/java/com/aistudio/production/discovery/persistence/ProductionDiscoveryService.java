@@ -79,6 +79,12 @@ class ProductionDiscoveryService implements DiscoveryExecutionPort {
     }
 
     @Override
+    public boolean manualMode(long requestId) {
+        var batch = batches.read(requestId);
+        return batch != null && batch.selectionMode() == ProductionDiscovery.Mode.MANUAL;
+    }
+
+    @Override
     public EffectResult discover(StepOwner owner, Input input) {
         if (input == null || !input.equals(transactions.execute(() -> input(owner.requestId())))) {
             throw new ApiException(ErrorCode.INVALID_STATE_TRANSITION, "Discovery input does not match its snapshot.");
@@ -183,7 +189,8 @@ class ProductionDiscoveryService implements DiscoveryExecutionPort {
             checkEvaluations(storedResponse(owner.requestId(), generated.operationId(), generated.responseHash()), rechecked);
         }
         var current = rechecked == null ? selection.candidates() : rechecked;
-        var candidate = current.stream().filter(item -> item.candidateId() == candidateId && item.eligible())
+        var candidate = current.stream().filter(item -> item.candidateId() == candidateId
+                && (selection.mode() == ProductionDiscovery.Mode.AUTO ? item.eligible() : selection.permitsManualChoice(item)))
                 .findFirst().orElseThrow(ProductionDiscoveryService::invalid);
         if (request.selectionHash() == null || selection.version() != version
                 || rationale == null || rationale.isBlank() || rationale.length() > 2000
@@ -201,7 +208,7 @@ class ProductionDiscoveryService implements DiscoveryExecutionPort {
         checkEvaluations(storedResponse(owner.requestId(), generated.operationId(), generated.responseHash()), evaluations);
         if (selection.chosenCandidateId() == null || selection.version() != version
                 || evaluations.stream().noneMatch(item -> item.candidateId() == selection.chosenCandidateId()
-                        && !item.eligible())
+                        && !selection.permitsManualChoice(item))
                 || batches.invalidateChoice(owner.requestId(), version, json.writeValueAsString(evaluations)) != 1) {
             throw invalid();
         }

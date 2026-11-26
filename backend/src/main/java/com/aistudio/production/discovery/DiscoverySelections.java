@@ -64,7 +64,8 @@ public final class DiscoverySelections {
                 merged.add(now);
                 continue;
             }
-            List<Block> blocks = new ArrayList<>(before.blockCodes());
+            List<Block> blocks = new ArrayList<>(before.blockCodes().stream()
+                    .filter(code -> code != Block.SIMILARITY_UNCERTAIN).toList());
             now.blockCodes().stream().filter(b -> !blocks.contains(b)).forEach(blocks::add);
             merged.add(new EvaluatedCandidate(now.candidateId(), now.candidate(), now.scores(), now.totalScore(),
                     List.copyOf(blocks), now.comparisons(), now.rationale()));

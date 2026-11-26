@@ -330,3 +330,11 @@ AI_STUDIO_IT_DB_HOST=127.0.0.1 AI_STUDIO_IT_DB_PORT=3307 AI_STUDIO_IT_DB_USER=ro
 - 종료 전 최소 수정 범위는 실질 중복 차단 유지, 독립 가치가 있는 일부 유사 소재 감점, 동일 분야 새 질문·관점 허용, 불확실 후보의 검수 필요 분류 및 자동 선정 제외, UI의 차단·감점·검수 필요와 근거 표시다. 기존 평가 JSON·비교 근거·묶음 버전을 우선 쓰고 기존 결합 검증에 해당 회귀를 추가한다. 이 커밋은 검증 브랜치에 이식할 문서 변경만 담는다.
 - 미검증 주장 인계는 V2-03, 최종 품질 점수 및 부분 개선은 V2-05에 배정한다. 재발굴과 비용·실행 안전성·기존 Migration 변경은 제외한다.
 - 문서 변경 범위와 공백은 `git diff --name-only`, `git diff --check`로 확인했다. 코드 테스트, 사용자 DB 접속, Migration 적용, 실제 유료 API 호출은 수행하지 않았다.
+
+## V2-02 — Final validation candidate
+
+- `v2/review-v2-02` fast-forwarded to Claude's `a820a42` and includes the policy documentation commit as `991aaec`.
+- Existing evaluation JSON stores the comparison reasons. Substantive duplicates remain blocked, independently valuable overlap reduces originality, and uncertain overlap is shown as review required. AUTO excludes uncertain candidates. MANUAL requires confirmation tied to the current batch token and rechecks for new reasons before linking.
+- The isolated MariaDB 11.8.2 instance at loopback 3323 used binlog ON. The full backend run passed 210 unit and 222 integration tests and bootJar. A complete rerun was started after extending the manual confirmation regression and moving the mode read inside the fenced transaction.
+- Frontend typecheck, lint, build, 88 Vitest and 13 Edge E2E passed. Live Edge used actual frontend/backend and FAKE effects against a separate database on the same isolated instance. AUTO 8, MANUAL 5 and 10, reload, history, cancellation, failure, and light/dark/mobile passed. The policy badge and confirmation display case used seeded evaluation fixtures read through the real API.
+- OpenAPI lint and generated type check passed with two pre-existing lint warnings. V1–V11 were applied to isolated databases only and match the safety baseline. The next step is independent review at the final validation commit and final user approval.

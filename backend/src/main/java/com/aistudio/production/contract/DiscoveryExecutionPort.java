@@ -14,7 +14,15 @@ import com.aistudio.production.contract.ProductionDiscovery.Response;
 /** Workflow seam for the fixed-stage executor and the discovery persistence/cost adapter. */
 public interface DiscoveryExecutionPort {
     record SelectionBatch(Mode mode, int version, Integer chosenCandidateId,
-            List<EvaluatedCandidate> candidates, String responseHash) {}
+            List<EvaluatedCandidate> candidates, String responseHash) {
+        public boolean permitsManualChoice(EvaluatedCandidate refreshed) {
+            return mode == Mode.MANUAL && chosenCandidateId != null && chosenCandidateId == refreshed.candidateId()
+                    && candidates.stream().anyMatch(previous -> previous.candidateId() == refreshed.candidateId()
+                            && previous.permitsManualRecheck(refreshed));
+        }
+    }
+
+    boolean manualMode(long requestId);
 
     Input input(long requestId);
 

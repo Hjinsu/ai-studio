@@ -1298,6 +1298,9 @@ paths:
                   type: string
                   pattern: '^[0-9a-f]{64}$'
                   description: Token returned with the discovery version being selected.
+                confirmReview:
+                  type: boolean
+                  description: Required as true when selecting a candidate marked SIMILARITY_UNCERTAIN. Other block codes cannot be overridden.
                 version: { type: integer, minimum: 0 }
       responses:
         '200': { $ref: '#/components/responses/ProductionDiscoveryDetail' }

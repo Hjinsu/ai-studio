@@ -132,7 +132,7 @@ class ProductionRequestService {
         return discoveryView(request, batch);
     }
 
-    ProductionRequestController.Discovery choose(long actorId, long id, int candidateId, int version, String token) {
+    ProductionRequestController.Discovery choose(long actorId, long id, int candidateId, int version, String token, boolean confirmReview) {
         return transactions.execute(() -> {
             var request = requireOwner(mapper.lock(id), actorId);
             var batch = requireBatch(id);
@@ -149,7 +149,8 @@ class ProductionRequestService {
                 throw new ApiException(ErrorCode.INVALID_STATE_TRANSITION);
             }
             if (evaluations(batch).stream().noneMatch(candidate ->
-                    candidate.candidateId() == candidateId && candidate.eligible())) {
+                    candidate.candidateId() == candidateId && candidate.manuallySelectable()
+                            && (!candidate.reviewRequired() || confirmReview))) {
                 throw new ApiException(ErrorCode.POLICY_VIOLATION, "The candidate is not eligible for selection.");
             }
             if (discovery.choose(id, candidateId, version, actorId) != 1) {

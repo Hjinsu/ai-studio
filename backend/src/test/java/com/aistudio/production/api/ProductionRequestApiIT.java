@@ -203,7 +203,7 @@ class ProductionRequestApiIT {
                 List.of(new EvidencePlan("TEXTBOOK", "orbital examples")), List.of(), scores, "Clear outline");
         var assessments = java.util.stream.IntStream.rangeClosed(1, 5)
                 .mapToObj(position -> new EvaluatedCandidate(position, candidate, scores, 100,
-                        position == 1 || position == 3 ? List.of() : List.of(Block.DUPLICATE),
+                        position == 3 ? List.of() : List.of(position == 1 ? Block.SIMILARITY_UNCERTAIN : Block.DUPLICATE),
                         List.of(), "Fixture evaluation")).toList();
         var input = discovery.input(id);
         org.mockito.Mockito.when(provider.generate(input)).thenReturn(new Response(1, java.util.Collections.nCopies(5, candidate)));
@@ -223,9 +223,13 @@ class ProductionRequestApiIT {
                         .content(choice(1, 1, foreignToken))).andExpect(status().isConflict());
         mvc.perform(post(detail + "/selection").with(ApiTestSupport.as(admin)).contentType(MediaType.APPLICATION_JSON)
                         .content(choice(2, 1, token))).andExpect(status().is(422));
+        mvc.perform(post(detail + "/selection").with(ApiTestSupport.as(admin)).contentType(MediaType.APPLICATION_JSON)
+                        .content(choice(1, 1, token))).andExpect(status().is(422));
+        mvc.perform(post(detail + "/selection").with(ApiTestSupport.as(admin)).contentType(MediaType.APPLICATION_JSON)
+                        .content(confirmedChoice(2, 1, token))).andExpect(status().is(422));
         for (int attempt = 0; attempt < 2; attempt++) {
             mvc.perform(post(detail + "/selection").with(ApiTestSupport.as(admin)).contentType(MediaType.APPLICATION_JSON)
-                            .content(choice(1, 1, token)))
+                            .content(confirmedChoice(1, 1, token)))
                     .andExpect(status().isOk()).andExpect(jsonPath("$.chosenCandidateId").value(1))
                     .andExpect(jsonPath("$.version").value(2)).andExpect(ApiTestSupport.matchesContract());
         }
@@ -274,6 +278,11 @@ class ProductionRequestApiIT {
         }
         mvc.perform(get(detail + "/discovery").with(ApiTestSupport.as(admin))).andExpect(status().isOk())
                 .andExpect(jsonPath("$.awaitingSelection").value(false));
+    }
+
+    private static String confirmedChoice(int candidateId, int version, String token) {
+        String choice = choice(candidateId, version, token);
+        return choice.substring(0, choice.length() - 1) + ",\"confirmReview\":true}";
     }
 
     private static String choice(int candidateId, int version, String token) {

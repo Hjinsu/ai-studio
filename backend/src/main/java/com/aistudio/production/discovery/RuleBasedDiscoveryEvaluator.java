@@ -91,7 +91,6 @@ public class RuleBasedDiscoveryEvaluator implements DiscoveryEvaluator {
         List<String> angle = TextSimilarity.concepts(c.angle());
         String title = TextSimilarity.normalized(c.title());
         String titleHash = TopicNormalizer.hash(TopicNormalizer.VERSION, title);
-        String normalizedQuestion = TextSimilarity.normalized(c.centralQuestion());
 
         for (CatalogEntry entry : catalog) {
             if (titleHash.equals(entry.normalizedTopicHash())
@@ -120,8 +119,7 @@ public class RuleBasedDiscoveryEvaluator implements DiscoveryEvaluator {
         for (int j = 0; j < earlier.size(); j++) {
             Candidate other = earlier.get(j);
             String ref = "BATCH_CANDIDATE_" + (j + 1);
-            if (title.equals(TextSimilarity.normalized(other.title()))
-                    || normalizedQuestion.equals(TextSimilarity.normalized(other.centralQuestion()))) {
+            if (title.equals(TextSimilarity.normalized(other.title()))) {
                 blocks.add(Block.DUPLICATE);
                 comparisons.add(new Comparison(null, null, null, ref + " EXACT_REPEAT"));
                 maxSimilarity = 1;
@@ -132,8 +130,9 @@ public class RuleBasedDiscoveryEvaluator implements DiscoveryEvaluator {
                     TextSimilarity.concepts(other.angle()));
             maxSimilarity = Math.max(maxSimilarity, s.question());
             if (s.block() != null) {
-                // inside one batch a borderline repeat is also a repeat: keep the first, block the later one
-                blocks.add(Block.DUPLICATE);
+                blocks.add(s.block());
+            }
+            if (s.block() != null || s.question() >= 0.40) {
                 comparisons.add(new Comparison(null, null, null, ref + " " + s.describe()));
             }
         }
@@ -159,7 +158,7 @@ public class RuleBasedDiscoveryEvaluator implements DiscoveryEvaluator {
     record Similarity(double question, double angle, boolean angleDistinct, Block block) {
         String describe() {
             return String.format(Locale.ROOT, "QUESTION_SIMILARITY %.2f ANGLE_OVERLAP %.2f%s", question, angle,
-                    block == null ? (angleDistinct ? " DISTINCT_ANGLE" : "") : " " + block.name());
+                    block == null ? (question >= 0.40 ? " SIMILARITY_PENALTY" : "") : " " + block.name());
         }
     }
 
@@ -172,10 +171,9 @@ public class RuleBasedDiscoveryEvaluator implements DiscoveryEvaluator {
         boolean distinct = a < DiscoveryRules.DISTINCT_ANGLE && !angle.isEmpty()
                 && !TextSimilarity.coveredBy(angle, question) && !TextSimilarity.coveredBy(angle, otherAngle);
         Block block = null;
-        if (q >= DiscoveryRules.DUPLICATE_QUESTION
+        if ((q >= DiscoveryRules.DUPLICATE_QUESTION && !distinct && a >= DiscoveryRules.DISTINCT_ANGLE)
                 || (q >= DiscoveryRules.BORDERLINE_QUESTION && a >= DiscoveryRules.SAME_ANGLE)) {
-            // the same question, or a reworded question explained the same way, is a duplicate
-            block = distinct ? Block.SIMILARITY_UNCERTAIN : Block.DUPLICATE;
+            block = Block.DUPLICATE;
         } else if (q >= DiscoveryRules.BORDERLINE_QUESTION && !distinct) {
             block = Block.SIMILARITY_UNCERTAIN;
         }

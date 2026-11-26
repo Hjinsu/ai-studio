@@ -44,7 +44,7 @@ export const SELECTION_MODE: Record<string, { text: string; help: string }> = {
 
 export const BLOCK: Record<string, Label & { help: string }> = {
   DUPLICATE: { ...of('중복', 'danger'), help: '기존 소재·콘텐츠 또는 같은 묶음의 후보와 질문·설명 관점이 사실상 같습니다.' },
-  SIMILARITY_UNCERTAIN: { ...of('유사성 판단 보류', 'warning'), help: '기존 소재와 비슷해 차별성을 확인할 수 없어 선택할 수 없습니다.' },
+  SIMILARITY_UNCERTAIN: { ...of('검수 필요', 'warning'), help: '중복 여부가 불확실합니다. 직접 선택하려면 비교 근거를 확인해야 합니다.' },
   CHANNEL_PROHIBITED: { ...of('금지 소재', 'danger'), help: '채널 설정의 금지 주제 또는 기본 금지 주제에 해당합니다.' },
   UNSUPPORTED_ASSERTION: { ...of('근거 없는 주장', 'danger'), help: '승인된 근거 없이 사실을 단정하거나 확인되지 않은 출처를 제시했습니다.' },
 }

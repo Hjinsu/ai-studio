@@ -254,12 +254,17 @@ function DiscoveryCandidates({
                   candidate={candidate}
                   selected={candidate.candidateId === discovery.selectedCandidateId}
                   chosen={candidate.candidateId === discovery.chosenCandidateId}
-                  canChoose={discovery.awaitingSelection && candidate.blockCodes.length === 0}
+                  canChoose={discovery.awaitingSelection && !isBlocked(candidate)}
                   onChoose={() => {
                     choose.reset()
                     setPicking({
                       candidate,
-                      choice: { candidateId: candidate.candidateId, version: discovery.version, batchToken: discovery.batchToken },
+                      choice: {
+                        candidateId: candidate.candidateId,
+                        version: discovery.version,
+                        batchToken: discovery.batchToken,
+                        ...(requiresReview(candidate) ? { confirmReview: true } : {}),
+                      },
                     })
                   }}
                 />
@@ -271,7 +276,7 @@ function DiscoveryCandidates({
       <ConfirmDialog
         open={picking != null}
         title="이 소재로 진행할까요?"
-        confirmLabel="이 소재 선택"
+        confirmLabel={picking && requiresReview(picking.candidate) ? "검수 근거를 확인하고 선택" : "이 소재 선택"}
         tone="primary"
         busy={choose.isPending}
         confirmDisabled={batchChanged}
@@ -281,6 +286,15 @@ function DiscoveryCandidates({
         {picking && (
           <>
             <p className="font-medium">{picking.candidate.candidate.title}</p>
+            {requiresReview(picking.candidate) && (
+              <InlineNotice tone="warning">
+                <p>검수 필요. 비교 근거를 확인하고 이 소재에 독립적인 가치가 있는지 판단해 주세요.</p>
+                <ul className="mt-1 list-disc pl-5">
+                  {picking.candidate.comparisons.filter((item) => item.reason.endsWith(' SIMILARITY_UNCERTAIN'))
+                    .map((item, index) => <li key={index}>{item.reason}</li>)}
+                </ul>
+              </InlineNotice>
+            )}
             <p className="text-sm text-muted">
               선정 직전에 최신 소재·콘텐츠와 다시 비교합니다. 그사이 중복이 생기면 선택이 해제되고 다시 고를 수 있습니다.
             </p>
@@ -302,6 +316,14 @@ function rank(candidate: EvaluatedCandidate): number {
   return (candidate.blockCodes.length === 0 ? 1000 : 0) + candidate.totalScore
 }
 
+function requiresReview(candidate: EvaluatedCandidate): boolean {
+  return candidate.blockCodes.includes('SIMILARITY_UNCERTAIN')
+}
+
+function isBlocked(candidate: EvaluatedCandidate): boolean {
+  return candidate.blockCodes.some((code) => code !== 'SIMILARITY_UNCERTAIN')
+}
+
 function CandidateCard({
   candidate,
   selected,
@@ -316,7 +338,9 @@ function CandidateCard({
   onChoose: () => void
 }) {
   const c = candidate.candidate
-  const blocked = candidate.blockCodes.length > 0
+  const blocked = isBlocked(candidate)
+  const review = requiresReview(candidate)
+  const penalized = candidate.comparisons.some((item) => item.reason.endsWith(' SIMILARITY_PENALTY'))
   const headingId = `candidate-${candidate.candidateId}`
   return (
     <li
@@ -337,7 +361,9 @@ function CandidateCard({
         <div className="flex flex-wrap items-center gap-2">
           {selected && <StatusBadge tone="primary" icon={<CheckCircle2 aria-hidden className="size-3" />}>선정됨</StatusBadge>}
           {chosen && !selected && <StatusBadge tone="primary">선택함</StatusBadge>}
-          {blocked ? (
+          {penalized && <StatusBadge tone="warning">독창성 감점</StatusBadge>}
+          {blocked && <StatusBadge tone="danger">차단</StatusBadge>}
+          {blocked || review ? (
             candidate.blockCodes.map((code) => <LabelBadge key={code} value={BLOCK[code] ?? label({}, code)} />)
           ) : (
             <StatusBadge tone="success">적격</StatusBadge>

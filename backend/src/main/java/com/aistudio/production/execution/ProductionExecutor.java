@@ -439,9 +439,11 @@ public class ProductionExecutor implements AutoCloseable {
             park(lease, step, "DISCOVERY_EVALUATION_FAILED");
             return false;
         }
-        boolean eligible = evaluations.stream().anyMatch(EvaluatedCandidate::eligible);
         try {
             fenced(lease, locked -> {
+                boolean manual = discovery.port().manualMode(owner.requestId());
+                boolean eligible = evaluations.stream().anyMatch(candidate ->
+                        manual ? candidate.manuallySelectable() : candidate.eligible());
                 discovery.port().applyEvaluation(owner, receipt, evaluations);
                 resumeRequest(locked);
                 // R03: no eligible candidate fails DISCOVER; no further discovery or regeneration is attempted
@@ -525,11 +527,11 @@ public class ProductionExecutor implements AutoCloseable {
                 awaitChoice(locked, step);
                 return SelectOutcome.WAITING;
             }
-            chosen = ranked.stream().filter(c -> c.candidateId() == batch.chosenCandidateId()).findFirst()
-                    .orElse(null);
+            chosen = fresh.stream().filter(c -> c.candidateId() == batch.chosenCandidateId())
+                    .filter(c -> batch.permitsManualChoice(c)).findFirst().orElse(null);
             if (chosen == null) {
                 discovery.port().invalidateManualChoice(owner, batch.version(), fresh);
-                if (!ranked.isEmpty()) {
+                if (fresh.stream().anyMatch(EvaluatedCandidate::manuallySelectable)) {
                     awaitChoice(locked, step); // remaining eligible candidates: the requester chooses again
                     return SelectOutcome.WAITING;
                 }

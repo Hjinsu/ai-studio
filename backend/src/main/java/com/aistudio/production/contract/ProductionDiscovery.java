@@ -43,5 +43,20 @@ public final class ProductionDiscovery {
         public boolean eligible() {
             return blockCodes.isEmpty();
         }
+
+        public boolean reviewRequired() {
+            return blockCodes.contains(Block.SIMILARITY_UNCERTAIN);
+        }
+
+        public boolean manuallySelectable() {
+            return blockCodes.stream().allMatch(code -> code == Block.SIMILARITY_UNCERTAIN);
+        }
+
+        public boolean permitsManualRecheck(EvaluatedCandidate refreshed) {
+            return manuallySelectable() && refreshed.manuallySelectable()
+                    && (!refreshed.reviewRequired() || (reviewRequired() && comparisons.containsAll(
+                            refreshed.comparisons().stream()
+                                    .filter(item -> item.reason().endsWith(" SIMILARITY_UNCERTAIN")).toList())));
+        }
     }
 }

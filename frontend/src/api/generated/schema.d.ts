@@ -3139,6 +3139,8 @@ export interface operations {
                     candidateId: number;
                     /** @description Token returned with the discovery version being selected. */
                     batchToken: string;
+                    /** @description Required as true when selecting a candidate marked SIMILARITY_UNCERTAIN. Other block codes cannot be overridden. */
+                    confirmReview?: boolean;
                     version: number;
                 };
             };
