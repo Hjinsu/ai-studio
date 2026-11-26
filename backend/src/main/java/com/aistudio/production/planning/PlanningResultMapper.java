@@ -78,4 +78,33 @@ public interface PlanningResultMapper {
                 AND o.applied_at IS NOT NULL AND r.validation_json IS NOT NULL
             """)
     Applied accepted(long requestId, ProductionStage stage);
+
+    @Select("""
+            SELECT r.operation_id, r.request_id, r.step_id, r.schema_version, r.input_hash, r.input_json,
+                   r.body_hash, r.body_json, r.validation_json
+            FROM production_stage_result r
+            JOIN production_step s ON s.id = r.step_id AND s.production_request_id = r.request_id
+            WHERE r.request_id = #{requestId} AND s.stage = #{stage} AND s.target_key = 'video'
+            ORDER BY s.input_generation DESC LIMIT 1
+            """)
+    Stored fixedInput(long requestId, ProductionStage stage);
+
+    @Select("SELECT stage FROM production_step WHERE production_request_id = #{requestId} AND id = #{stepId}")
+    ProductionStage stage(long requestId, long stepId);
+
+    @Select("""
+            SELECT r.operation_id, s.stage, r.body_hash, r.body_json, r.validation_json
+            FROM production_request current_request
+            JOIN production_request p ON p.channel_id = current_request.channel_id
+                AND p.id != current_request.id
+            JOIN production_step s ON s.production_request_id = p.id AND s.stage = 'SCRIPT'
+            JOIN production_stage_result r ON r.step_id = s.id AND r.request_id = p.id
+            JOIN provider_operation o ON o.id = r.operation_id
+            WHERE current_request.id = #{requestId} AND s.status = 'SUCCEEDED'
+                AND s.result_ref = CONCAT('planning:', o.id) AND o.status = 'SETTLED'
+                AND o.receipt_outcome = 'RESULT_ADOPTED' AND o.applied_at IS NOT NULL
+                AND r.validation_json IS NOT NULL
+            ORDER BY o.applied_at DESC, o.id DESC LIMIT #{limit}
+            """)
+    List<Applied> recentScripts(long requestId, int limit);
 }

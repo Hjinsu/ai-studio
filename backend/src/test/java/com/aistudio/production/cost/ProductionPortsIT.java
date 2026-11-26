@@ -7,7 +7,9 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.math.BigDecimal;
@@ -47,6 +49,10 @@ import com.aistudio.channel.ChannelService;
 import com.aistudio.channel.ChannelSettings;
 import com.aistudio.production.contract.DiscoveryExecutionPort;
 import com.aistudio.production.contract.DiscoveryProvider;
+import com.aistudio.production.contract.PlanningExecutionPort;
+import com.aistudio.production.contract.PlanningProvider;
+import com.aistudio.production.contract.ProductionPlanning;
+import com.aistudio.production.contract.ProductionCostPort.Disposition;
 import com.aistudio.production.contract.ProductionDiscovery.Candidate;
 import com.aistudio.production.contract.ProductionDiscovery.Block;
 import com.aistudio.production.contract.ProductionDiscovery.EvaluatedCandidate;
@@ -94,8 +100,10 @@ class ProductionPortsIT {
     @Autowired LockRetryingTransactions transactions;
     @Autowired DiscoveryExecutionPort discovery;
     @Autowired ProductionSelectionPort selection;
+    @Autowired PlanningExecutionPort planning;
     @MockitoSpyBean FakeProvider provider;
     @MockitoBean DiscoveryProvider discoveryProvider;
+    @MockitoBean PlanningProvider planningProvider;
 
     @BeforeAll
     void enableIsolatedBudgets() {
@@ -273,6 +281,150 @@ class ProductionPortsIT {
         assertThat(jdbc.queryForObject("""
                 SELECT evaluation_json <> recheck_json FROM production_discovery WHERE production_request_id = ?
                 """, Boolean.class, second)).isTrue();
+    }
+
+    @Test
+    void planningPersistsEvidenceBeforeSettlementAndReplaysWithoutAnotherSend() throws Exception {
+        long request = newPlanningRequest();
+        var owner = own(request, "RESEARCH", 3);
+        var input = planning.researchInput(request);
+        var output = new ProductionPlanning.Research(input.question(),
+                input.angle(), List.of(), List.of(), List.of(), List.of(), List.of());
+        org.mockito.Mockito.when(planningProvider.research(input)).thenReturn(output);
+        jdbc.execute("""
+                CREATE TRIGGER it_interrupt_planning_settle BEFORE UPDATE ON provider_operation FOR EACH ROW
+                BEGIN
+                  IF NEW.status = 'SETTLED' AND NEW.production_step_id = %d THEN
+                    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'planning settlement interrupted';
+                  END IF;
+                END
+                """.formatted(owner.stepId()));
+        try {
+            assertThatThrownBy(() -> planning.research(owner, input, BigDecimal.ONE))
+                    .isInstanceOf(DataAccessException.class);
+            assertThat(jdbc.queryForObject("""
+                    SELECT COUNT(*) FROM production_stage_result r JOIN provider_operation o ON o.id = r.operation_id
+                    WHERE r.step_id = ? AND r.body_hash IS NOT NULL AND o.evidence_hash IS NOT NULL
+                    """, Integer.class, owner.stepId())).isEqualTo(1);
+            assertThat(costs.readCostState(request).unresolved()).isTrue();
+        } finally {
+            jdbc.execute("DROP TRIGGER it_interrupt_planning_settle");
+        }
+        var restarted = own(request, "RESEARCH", 4);
+        assertThat(planning.researchInput(request)).isEqualTo(input);
+        var receipt = planning.research(restarted, input, BigDecimal.ONE).receipt();
+        assertThat(receipt.outcome()).isEqualTo(Outcome.RESULT_ADOPTED);
+        assertThat(planning.response(restarted, receipt).body()).isEqualTo(output);
+        verify(planningProvider).research(input);
+        var validation = new ProductionPlanning.Validation(List.of());
+        assertThatThrownBy(() -> transactions.run(() -> planning.apply(owner, receipt, validation)))
+                .isInstanceOf(ApiException.class);
+        assertThatThrownBy(() -> transactions.run(() -> {
+            planning.apply(restarted, receipt, validation);
+            throw new IllegalStateException("Step commit interrupted");
+        })).hasMessage("Step commit interrupted");
+        assertThat(costs.readCostState(request).unappliedReceipts()).containsExactly(receipt);
+        transactions.run(() -> {
+            planning.apply(restarted, receipt, validation);
+            jdbc.update("UPDATE production_step SET status = 'SUCCEEDED', result_ref = ? WHERE id = ?",
+                    receipt.resultRef(), restarted.stepId());
+        });
+        assertThat(costs.readCostState(request).unappliedReceipts()).isEmpty();
+        var scriptInput = planning.scriptInput(request);
+        assertThat(scriptInput.research()).isEqualTo(output);
+        assertThat(scriptInput.researchRef().bodyHash()).isEqualTo(receipt.resultHash());
+        assertThatThrownBy(() -> jdbc.update("UPDATE production_stage_result SET body_json = '{}' WHERE operation_id = ?",
+                receipt.operationId())).isInstanceOf(DataAccessException.class);
+
+        var scriptOwner = own(request, "SCRIPT", 5);
+        var script = new ProductionPlanning.Script("en", List.of(
+                new ProductionPlanning.Segment("s1", "Light changes direction as it enters glass.", List.of())),
+                List.of("s1"), 39_000, "test", "Compare the ray directions");
+        var entered = new CountDownLatch(1);
+        var exit = new CountDownLatch(1);
+        doAnswer(call -> {
+            entered.countDown();
+            if (!exit.await(10, TimeUnit.SECONDS)) {
+                throw new TimeoutException();
+            }
+            return script;
+        }).when(planningProvider).writeScript(scriptInput);
+        ProductionCostPort.Receipt scriptReceipt;
+        try (var pool = Executors.newSingleThreadExecutor()) {
+            var first = pool.submit(() -> planning.script(scriptOwner, scriptInput, BigDecimal.ONE));
+            try {
+                assertThat(entered.await(10, TimeUnit.SECONDS)).isTrue();
+                assertThat(planning.script(scriptOwner, scriptInput, BigDecimal.ONE).disposition())
+                        .isEqualTo(Disposition.RECOVERY_REQUIRED);
+                long operation = operation(request, "SCRIPT");
+                var unsupported = new Evidence(Outcome.RESULT_ADOPTED, "fake:" + operation, "KRW", BigDecimal.ONE,
+                        "planning:" + operation, "0".repeat(64), "Missing response body");
+                assertThatThrownBy(() -> costs.reconcile(operation, "manual-missing-body", unsupported))
+                        .isInstanceOf(ApiException.class);
+            } finally {
+                exit.countDown();
+            }
+            scriptReceipt = first.get(10, TimeUnit.SECONDS).receipt();
+        }
+        verify(planningProvider).writeScript(scriptInput);
+        var recommendation = new ProductionPlanning.Validation(List.of(new ProductionPlanning.Finding(
+                ProductionPlanning.Severity.RECOMMENDATION, "TIMING", "s1", List.of(), "Adjust delivery")));
+        transactions.run(() -> {
+            planning.apply(scriptOwner, scriptReceipt, recommendation);
+            jdbc.update("UPDATE production_step SET status = 'SUCCEEDED', result_ref = ? WHERE id = ?",
+                    scriptReceipt.resultRef(), scriptOwner.stepId());
+        });
+
+        var scenesOwner = own(request, "SCENES", 6);
+        var scenesInput = planning.scenesInput(request);
+        org.mockito.Mockito.when(planningProvider.planScenes(scenesInput)).thenReturn(
+                new ProductionPlanning.ScenePlan("diagram", List.of(new ProductionPlanning.SceneDraft(
+                        "v1", 1, List.of("s1"), 39_000, "Prism", "Prism", "Closeup", null))));
+        var sceneReceipt = planning.scenes(scenesOwner, scenesInput, BigDecimal.ONE).receipt();
+        var scene = ((ProductionPlanning.Scenes) planning.response(scenesOwner, sceneReceipt).body()).scenes().getFirst();
+        assertThat(scene.narration()).isEqualTo(script.segments().getFirst().narration());
+        assertThat(scene.subtitleText()).isEqualTo(scene.narration());
+        transactions.run(() -> {
+            planning.apply(scenesOwner, sceneReceipt, validation);
+            jdbc.update("UPDATE production_step SET status = 'SUCCEEDED', result_ref = ? WHERE id = ?",
+                    sceneReceipt.resultRef(), scenesOwner.stepId());
+        });
+        var actor = ApiTestSupport.admin(accounts, jdbc);
+        mvc.perform(get("/api/v1/production-requests/" + request + "/planning").with(ApiTestSupport.as(actor)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.executionMode").value("FAKE"))
+                .andExpect(jsonPath("$.results[1].validation.findings[0].severity").value("RECOMMENDATION"))
+                .andExpect(jsonPath("$.results[2].body.scenes[0].subtitleText").value(scene.narration()));
+    }
+
+    @Test
+    void fakePlanningCannotClaimARealVerifiedSource() throws Exception {
+        long request = newPlanningRequest();
+        var owner = own(request, "RESEARCH", 3);
+        var input = planning.researchInput(request);
+        var fabricated = new ProductionPlanning.Source("fixture", ProductionPlanning.SourceOrigin.FIXTURE,
+                ProductionPlanning.SourceStatus.VERIFIED, null, "Fixture", null, null, null);
+        org.mockito.Mockito.when(planningProvider.research(input)).thenReturn(new ProductionPlanning.Research(
+                input.question(), input.angle(), List.of(), List.of(), List.of(fabricated), List.of(), List.of()));
+        var receipt = planning.research(owner, input, BigDecimal.ONE).receipt();
+        assertThat(receipt.outcome()).isEqualTo(Outcome.EXECUTED_FAILED);
+        assertThat(jdbc.queryForObject("SELECT body_json FROM production_stage_result WHERE operation_id = ?",
+                String.class, receipt.operationId())).isNull();
+    }
+
+    private long newPlanningRequest() throws Exception {
+        long request = newDiscoveryRequest();
+        jdbc.update("UPDATE production_request SET pipeline_version = 'v2-planning-1' WHERE id = ?", request);
+        StepOwner selecting = prepareSelection(request);
+        transactions.run(() -> {
+            var batch = discovery.lockForSelection(selecting);
+            var candidate = batch.candidates().getFirst().candidate();
+            selection.link(selecting, new ProductionSelectionPort.Selection(batch.responseHash(),
+                    candidate.title(), candidate.centralQuestion(), 45, "en"));
+            discovery.recordSelection(selecting, batch.version(), 1, "First ranked");
+            jdbc.update("UPDATE production_step SET status = 'SUCCEEDED' WHERE id = ?", selecting.stepId());
+        });
+        return request;
     }
 
     private StepOwner prepareSelection(long request) {
