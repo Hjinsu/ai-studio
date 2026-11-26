@@ -176,7 +176,7 @@ class ScenesReviewTest {
     @Test
     void theVerticalFrameTokenInAFramingClauseIsNotAFact() {
         for (String framing : List.of("Flat infographic of Venus, vertical 9:16, large labels",
-                "Flat infographic of Venus in a 9:16 composition", "Flat infographic of Venus, aspect ratio 9:16",
+                "Flat infographic of Venus, in a 9:16 composition", "Flat infographic of Venus, aspect ratio 9:16",
                 "Flat infographic of Venus, 9:16 vertical frame", "Flat infographic of Venus, portrait 9 : 16")) {
             assertThat(prompt(0, framing).findings()).as(framing).isEmpty();
         }
@@ -202,20 +202,45 @@ class ScenesReviewTest {
 
     @Test
     void theFrameTokenDoesNotHideANewFactBesideIt() {
-        assertThat(newFacts(prompt(0, "Vertical 9:16 infographic, caption reading Venus has 16 moons")))
+        assertThat(newFacts(prompt(0, "Vertical 9:16, infographic caption reading Venus has 16 moons")))
                 .containsExactly("16");
         assertThat(newFacts(prompt(0, "Vertical 9:16, 9 moons around Venus"))).containsExactly("9");
-        assertThat(newFacts(prompt(0, "9:16 composition with 16 moons and 243 days"))).containsExactly("16");
+        assertThat(newFacts(prompt(0, "9:16 composition, 16 moons and 243 days"))).containsExactly("16");
         assertThat(blocks(prompt(0, "Vertical 9:16, 16 moons"))).containsExactly("SCENE_NEW_FACT");
+        // the same words without a clause break mix framing and content, so the token is kept as numbers too
+        assertThat(newFacts(prompt(0, "Vertical 9:16 infographic, caption reading Venus has 16 moons")))
+                .containsExactly("9", "16");
+        assertThat(newFacts(prompt(0, "9:16 composition with 16 moons and 243 days"))).containsExactly("9", "16");
     }
 
     @Test
     void explicitFramingInstructionsAreAllowed() {
         for (String framing : List.of("Vertical 9:16", "Aspect ratio 9:16", "9:16 composition",
-                "Portrait framing 9:16", "Flat infographic of Venus in a 9:16 aspect ratio",
-                "Flat infographic of Venus, vertical format 9:16")) {
+                "Portrait framing 9:16", "Vertical 9:16 frame", "9:16 vertical composition",
+                "A cinematic view of Venus. Aspect ratio 9:16.", "Aspect ratio: 9:16", "Venus (vertical 9:16)",
+                "Flat infographic of Venus, in a 9:16 aspect ratio", "Flat infographic of Venus, vertical format 9:16",
+                "Venus; portrait 9 : 16; soft light", "Venus horizon\nvertical 9:16 composition")) {
             assertThat(prompt(0, framing).findings()).as(framing).isEmpty();
         }
+    }
+
+    @Test
+    void onlyAWholeFramingClauseExemptsTheToken() {
+        for (String fact : List.of(
+                // reproduced by the V2-03 independent re-review
+                "The orbital resonance ratio is 9:16 vertical", "Orbital resonance ratio 9:16 composition",
+                "The tower's mass ratio is 9:16 frame", "Mass ratio of 9:16 composition",
+                // ratio or proportion words, verbs and content words in the token's clause
+                "The tower's vertical 9:16 proportion", "Planets settle into a 9:16 vertical alignment",
+                "Flat infographic of Venus in a 9:16 composition", "Flat infographic of Venus in a 9:16 aspect ratio",
+                "The aspect ratio is 9:16", "Venus shown at 9:16", "Venus, 9:16", "The ratio: 9:16 vertical",
+                "Vertical 9:16 and vertical 9:16")) {
+            Validation validation = prompt(0, fact);
+            assertThat(blocks(validation)).as(fact).containsExactly("SCENE_NEW_FACT");
+            assertThat(newFacts(validation)).as(fact).containsExactly("9", "16");
+        }
+        assertThat(newFacts(prompt(0, "Vertical 9:16, 16 moons"))).containsExactly("16");
+        assertThat(blocks(prompt(0, "Vertical 9:16, 16 moons"))).containsExactly("SCENE_NEW_FACT");
     }
 
     @Test

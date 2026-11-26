@@ -38,16 +38,32 @@ public final class ScenesReview {
     /** The vertical frame token, not part of a longer number, time or ratio (19:16, 9:160, 9:16:2, 9:16.5). */
     private static final Pattern FRAME_RATIO = Pattern.compile(
             "(?<![\\p{Nd}.,:])9\\s?:\\s?16(?!\\p{Nd}|[.,:]\\p{Nd})");
-    private static final Pattern CLAUSE_END = Pattern.compile("[,.;:!?()\\[\\]]");
-    /** Frame adjectives that may stand right before the token ("vertical 9:16", "portrait framing 9:16"). */
-    private static final Set<String> FRAME_ADJECTIVES = Set.of("vertical", "portrait");
-    /** Nouns that may follow a frame adjective before the token ("vertical format 9:16"). */
-    private static final Set<String> FRAME_NOUNS = Set.of("frame", "framing", "format", "orientation");
-    /** Words that may stand right after the token ("9:16 composition", "9:16 vertical frame"). */
-    private static final Set<String> FRAME_FOLLOWERS = Set.of("vertical", "portrait", "composition", "frame",
-            "framing", "format", "orientation", "crop", "canvas");
-    /** The only words that may precede "aspect ratio 9:16"; any other word may name the ratio of a thing. */
-    private static final Set<String> ASPECT_LEAD_INS = Set.of("a", "an", "in", "at", "with", "using");
+    /**
+     * Where one instruction clause ends: , . ; ! ? | ( ) [ ] en/em dashes and line breaks. A comma or full stop
+     * between two digits (1,000 or 2.5) is part of the number. A colon ends a clause unless a digit stands right
+     * after it, so "Composition: the mass ratio is 9:16" splits but "Aspect ratio: 9:16" and the token do not.
+     */
+    private static final Pattern CLAUSE_SEPARATOR = Pattern.compile(
+            "(?<!\\p{Nd})[,.]|[,.](?!\\p{Nd})|:(?!\\s*\\p{Nd})|[;!?|()\\[\\]\\u2013\\u2014\\r\\n]");
+    /** Stands for the frame token in the word form of a clause. */
+    private static final String TOKEN = "#";
+    /**
+     * The only framing instructions: the whole clause, as lower-case words with the token as {@code #}, must be an
+     * optional "in/at/with/using" and "a/an", then the token with a framing phrase before it ("vertical",
+     * "portrait framing", "aspect ratio", "vertical aspect ratio") and/or after it ("vertical", "composition",
+     * "frame", "vertical frame", "aspect ratio"). Anything else in the clause keeps the token as numbers.
+     */
+    private static final Pattern FRAMING_CLAUSE;
+
+    static {
+        String adjective = "(?:vertical|portrait)";
+        String noun = "(?:frame|framing|format|orientation|composition|crop|canvas|aspect ratio)";
+        String before = "(?:" + adjective + "(?: (?:frame|framing|format|orientation|aspect ratio))?|aspect ratio)";
+        String after = "(?:" + adjective + "(?: " + noun + ")?|" + noun + ")";
+        String lead = "(?:(?:in|at|with|using) )?(?:(?:a|an) )?";
+        FRAMING_CLAUSE = Pattern.compile(lead + "(?:" + before + " " + TOKEN + "(?: " + after + ")?|"
+                + TOKEN + " " + after + ")");
+    }
 
     public Validation review(ScenesInput input, Scenes scenes) {
         Findings findings = new Findings();
@@ -161,69 +177,43 @@ public final class ScenesReview {
     }
 
     /**
-     * Numbers a visual field uses, except a 9:16 frame token written as an explicit framing instruction: directly
-     * after "vertical" or "portrait" (optionally followed by frame/framing/format/orientation) or after a leading
-     * "aspect ratio", or directly before a framing word ("9:16 composition", "9:16 aspect ratio"). A framing word
-     * elsewhere in the clause does not count, so "the orbital resonance ratio is 9:16" or "the aspect ratio of the
-     * planet is 9:16" keeps 9 and 16 as numbers compared with the narration. When in doubt, the numbers are kept.
+     * Numbers a visual field uses, except a 9:16 frame token that is a separate framing instruction. The text is
+     * split into clauses at punctuation, and the token is left out only when its clause is nothing but one of the
+     * {@link #FRAMING_CLAUSE} forms ("Vertical 9:16", "Aspect ratio 9:16", "9:16 vertical composition"). A token
+     * in a clause that says anything else ("the orbital resonance ratio is 9:16 vertical", "mass ratio of 9:16
+     * composition", "the tower's vertical 9:16 proportion") stays two numbers compared with the narration.
      */
     static Set<String> visualNumbers(String text) {
         if (text == null) {
             return Set.of();
         }
         StringBuilder kept = new StringBuilder(text.length());
-        Matcher ratio = FRAME_RATIO.matcher(text);
-        int last = 0;
-        while (ratio.find()) {
-            kept.append(text, last, ratio.start());
-            kept.append(framing(text, ratio.start(), ratio.end()) ? " " : ratio.group());
-            last = ratio.end();
+        Matcher separator = CLAUSE_SEPARATOR.matcher(text);
+        int from = 0;
+        while (separator.find()) {
+            kept.append(withoutFrameToken(text.substring(from, separator.start()))).append(separator.group());
+            from = separator.end();
         }
-        kept.append(text, last, text.length());
+        kept.append(withoutFrameToken(text.substring(from)));
         return Statements.numbers(kept.toString());
     }
 
-    /** The token is directly framed by an explicit framing phrase in the same clause. */
-    private static boolean framing(String text, int start, int end) {
-        String before = text.substring(0, start);
-        Matcher boundary = CLAUSE_END.matcher(before);
-        int from = 0;
-        while (boundary.find()) {
-            from = boundary.end();
+    /** A blank in place of the clause's frame token when the clause is only framing; otherwise the clause as is. */
+    private static String withoutFrameToken(String clause) {
+        Matcher ratio = FRAME_RATIO.matcher(clause);
+        if (!ratio.find()) {
+            return clause;
         }
-        String after = text.substring(end);
-        Matcher next = CLAUSE_END.matcher(after);
-        int to = next.find() ? next.start() : after.length();
-        List<String> right = words(after.substring(0, to));
-        // A ratio that describes an object or measurement can follow even an apparent framing adjective.
-        if (!right.isEmpty() && right.getFirst().equals("ratio")
-                || right.size() >= 2 && right.get(1).equals("ratio")
-                    && (!right.getFirst().equals("aspect") || right.size() >= 3 && right.get(2).equals("of"))) {
-            return false;
+        int start = ratio.start();
+        int end = ratio.end();
+        if (ratio.find()) {
+            return clause;
         }
-        return framedBefore(words(before.substring(from))) || framedAfter(right);
-    }
-
-    private static boolean framedBefore(List<String> left) {
-        int n = left.size();
-        if (n >= 1 && FRAME_ADJECTIVES.contains(left.get(n - 1))) {
-            return true;
-        }
-        if (n >= 2 && FRAME_ADJECTIVES.contains(left.get(n - 2)) && FRAME_NOUNS.contains(left.get(n - 1))) {
-            return true;
-        }
-        if (n >= 2 && left.get(n - 2).equals("aspect") && left.get(n - 1).equals("ratio")) {
-            return n == 2 || ASPECT_LEAD_INS.contains(left.get(n - 3));
-        }
-        return false;
-    }
-
-    private static boolean framedAfter(List<String> right) {
-        if (right.isEmpty()) {
-            return false;
-        }
-        return FRAME_FOLLOWERS.contains(right.get(0))
-                || right.size() >= 2 && right.get(0).equals("aspect") && right.get(1).equals("ratio");
+        String form = String.join(" ", words(clause.substring(0, start))) + " " + TOKEN + " "
+                + String.join(" ", words(clause.substring(end)));
+        return FRAMING_CLAUSE.matcher(form.strip()).matches()
+                ? clause.substring(0, start) + " " + clause.substring(end)
+                : clause;
     }
 
     private static List<String> words(String text) {
