@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.BiFunction;
+import java.util.function.Supplier;
 
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
@@ -21,6 +22,9 @@ import com.aistudio.budget.BudgetReservationService.ReserveCommand;
 import com.aistudio.budget.Money;
 import com.aistudio.content.command.CanonicalJson;
 import com.aistudio.production.contract.EffectKey;
+import com.aistudio.production.contract.PlanningJson;
+import com.aistudio.production.contract.ProductionPlanning;
+import com.aistudio.production.planning.PlanningResultMapper;
 import com.aistudio.production.contract.DiscoveryProvider;
 import com.aistudio.production.contract.ProductionCostPort;
 import com.aistudio.production.contract.ProductionDiscovery;
@@ -54,10 +58,12 @@ public class ProductionCostService implements ProductionCostPort {
     private final JsonMapper json;
     private final ProductionDiscoveryMapper discovery;
     private final ObjectProvider<DiscoveryProvider> discoveryProvider;
+    private final PlanningResultMapper planning;
 
     ProductionCostService(ProductionCostMapper mapper, BudgetReservationService budget, BudgetControlLock control,
             LockRetryingTransactions transactions, FakeProvider provider, JsonMapper json,
-            ProductionDiscoveryMapper discovery, ObjectProvider<DiscoveryProvider> discoveryProvider) {
+            ProductionDiscoveryMapper discovery, ObjectProvider<DiscoveryProvider> discoveryProvider,
+            PlanningResultMapper planning) {
         this.mapper = mapper;
         this.budget = budget;
         this.control = control;
@@ -66,11 +72,12 @@ public class ProductionCostService implements ProductionCostPort {
         this.json = json;
         this.discovery = discovery;
         this.discoveryProvider = discoveryProvider;
+        this.planning = planning;
     }
 
     @Override
     public EffectResult executeEffect(StepOwner owner, String effectKey, String requestHash, PricedRequest request) {
-        return execute(owner, effectKey, requestHash, request, false,
+        return execute(owner, effectKey, requestHash, request, false, null,
                 (id, priced) -> new Completion(provider.send(id, priced), null));
     }
 
@@ -86,7 +93,7 @@ public class ProductionCostService implements ProductionCostPort {
         String key = EffectKey.forInput(owner.requestId(), step.stage(), step.targetKey(), step.inputGeneration());
         var price = new PricedRequest("KRW", maximumAmount, null);
         String hash = DiscoveryInputs.sha256(input);
-        return execute(owner, key, hash, price, true, (id, priced) -> {
+        return execute(owner, key, hash, price, true, null, (id, priced) -> {
             String body;
             try {
                 var response = generator.generate(input);
@@ -102,7 +109,7 @@ public class ProductionCostService implements ProductionCostPort {
     }
 
     private EffectResult execute(StepOwner owner, String effectKey, String requestHash, PricedRequest request,
-            boolean discoveryEffect, BiFunction<Long, PricedRequest, Completion> send) {
+            boolean discoveryEffect, PlanningJson.Encoded planningInput, BiFunction<Long, PricedRequest, Completion> send) {
         if (!hash(requestHash)) {
             throw ApiException.validation("requestHash", "must be a lowercase SHA-256");
         }
@@ -116,7 +123,7 @@ public class ProductionCostService implements ProductionCostPort {
                 "fakeScenario", Objects.toString(priced.fakeScenario(), "SUCCESS")));
         Operation operation;
         try {
-            operation = transactions.execute(() -> reserve(owner, effectKey, pricedHash, priced, discoveryEffect));
+            operation = transactions.execute(() -> reserve(owner, effectKey, pricedHash, priced, discoveryEffect, planningInput));
         } catch (ApiException e) {
             if (e.errorCode() == ErrorCode.BUDGET_EXCEEDED || e.errorCode() == ErrorCode.POLICY_VIOLATION
                     || e.errorCode() == ErrorCode.PREREQUISITE_NOT_MET) {
@@ -137,7 +144,7 @@ public class ProductionCostService implements ProductionCostPort {
             completion = send.apply(operation.id(), dispatch.send());
         } catch (RuntimeException e) {
             quarantine(operation);
-            if (discoveryEffect) {
+            if (discoveryEffect || planningInput != null) {
                 return result(Disposition.RECOVERY_REQUIRED);
             }
             throw e;
@@ -148,6 +155,80 @@ public class ProductionCostService implements ProductionCostPort {
         }
         return new EffectResult(Disposition.RECEIPT,
                 reconcile(operation.id(), "fake-response", completion.evidence(), completion.body()));
+    }
+
+    public EffectResult executePlanning(StepOwner owner, ProductionStage stage, PlanningJson.Encoded input,
+            BigDecimal maximumKrw, Supplier<Object> generate) {
+        Step step = mapper.step(owner.requestId(), owner.stepId());
+        if (step == null || step.stage() != stage || !isPlanningStage(stage)) {
+            throw new ApiException(ErrorCode.INVALID_STATE_TRANSITION);
+        }
+        String key = EffectKey.forInput(owner.requestId(), stage, step.targetKey(), step.inputGeneration());
+        return execute(owner, key, input.hash(), new PricedRequest("KRW", maximumKrw, null), false, input,
+                (id, priced) -> {
+                    Object response = generate.get();
+                    PlanningJson.Encoded body;
+                    try {
+                        Class<?> resultType = switch (stage) {
+                            case RESEARCH -> ProductionPlanning.Research.class;
+                            case SCRIPT -> ProductionPlanning.Script.class;
+                            case SCENES -> ProductionPlanning.Scenes.class;
+                            default -> throw new IllegalStateException("Unsupported planning step");
+                        };
+                        if (!resultType.isInstance(response)) {
+                            throw new IllegalArgumentException("Unexpected planning response type");
+                        }
+                        if (response instanceof ProductionPlanning.Research research && research.sources() != null
+                                && research.sources().stream().filter(Objects::nonNull)
+                                        .anyMatch(source -> source.status() == ProductionPlanning.SourceStatus.VERIFIED)) {
+                            throw new IllegalArgumentException("FAKE planning cannot record a verified source");
+                        }
+                        body = PlanningJson.body(response);
+                    } catch (IllegalArgumentException invalid) {
+                        return new Completion(new Evidence(Outcome.EXECUTED_FAILED, "fake:" + id, "KRW",
+                                priced.maximumAmount(), null, null, "FAKE planning response format rejected"), null);
+                    }
+                    return new Completion(new Evidence(Outcome.RESULT_ADOPTED, "fake:" + id, "KRW",
+                            priced.maximumAmount(), "planning:" + id, body.hash(), "FAKE planning response"),
+                            body.json());
+                });
+    }
+
+    public PlanningResultMapper.Stored planningResponse(StepOwner owner, Receipt expected) {
+        Step step = requireStep(owner);
+        Operation operation = mapper.operation(expected.operationId());
+        var result = planning.get(expected.operationId());
+        if (!isPlanningStage(step.stage()) || operation == null || result == null
+                || operation.productionRequestId() != owner.requestId() || operation.productionStepId() != step.id()
+                || !"SETTLED".equals(operation.status()) || operation.reservationOpen()
+                || expected.outcome() != Outcome.RESULT_ADOPTED || !receipt(operation).equals(expected)
+                || !("planning:" + operation.id()).equals(expected.resultRef())
+                || !expected.resultHash().equals(result.bodyHash())
+                || !PlanningJson.matches(result.bodyJson(), result.bodyHash())) {
+            throw new ApiException(ErrorCode.INVALID_STATE_TRANSITION, "Planning receipt does not match its result.");
+        }
+        return result;
+    }
+
+    private void savePlanningResponse(Operation operation, Evidence evidence, String body) {
+        if (!("planning:" + operation.id()).equals(evidence.resultRef())) {
+            throw new ApiException(ErrorCode.INVALID_STATE_TRANSITION);
+        }
+        if (operation.evidenceHash() == null) {
+            if (!PlanningJson.matches(body, evidence.resultHash())
+                    || planning.saveBody(operation.id(), evidence.resultHash(), body) != 1) {
+                throw new ApiException(ErrorCode.INVALID_STATE_TRANSITION, "Planning response cannot be stored.");
+            }
+        }
+        var stored = planning.get(operation.id());
+        if (stored == null || !evidence.resultHash().equals(stored.bodyHash())
+                || !PlanningJson.matches(stored.bodyJson(), stored.bodyHash())) {
+            throw new ApiException(ErrorCode.INVALID_STATE_TRANSITION, "Planning response is required.");
+        }
+    }
+
+    private static boolean isPlanningStage(ProductionStage stage) {
+        return stage == ProductionStage.RESEARCH || stage == ProductionStage.SCRIPT || stage == ProductionStage.SCENES;
     }
 
     public boolean ownsDiscoveryReceipt(StepOwner owner, Receipt expected) {
@@ -171,12 +252,18 @@ public class ProductionCostService implements ProductionCostPort {
                 && ("discovery:" + requestId).equals(receipt.resultRef()) && responseHash.equals(receipt.resultHash());
     }
 
-    private Operation reserve(StepOwner owner, String key, String hash, PricedRequest priced, boolean discoveryEffect) {
+    private Operation reserve(StepOwner owner, String key, String hash, PricedRequest priced, boolean discoveryEffect,
+            PlanningJson.Encoded planningInput) {
         control.shared();
         Request request = requireRequest(owner.requestId());
         Step step = requireStep(owner);
         if (discoveryEffect != (ProductionDiscovery.supportsPipeline(request.pipelineVersion())
                 && step.stage() == ProductionStage.DISCOVER)) {
+            throw new ApiException(ErrorCode.INVALID_STATE_TRANSITION);
+        }
+        boolean planningEffect = ProductionPlanning.PIPELINE.equals(request.pipelineVersion())
+                && isPlanningStage(step.stage());
+        if (planningEffect != (planningInput != null)) {
             throw new ApiException(ErrorCode.INVALID_STATE_TRANSITION);
         }
         if (!EffectKey.forInput(request.id(), step.stage(), step.targetKey(), step.inputGeneration()).equals(key)) {
@@ -187,6 +274,13 @@ public class ProductionCostService implements ProductionCostPort {
             if (!previous.requestHash().equals(hash) || !previous.originalCurrency().equals(priced.currency())
                     || previous.estimateOriginal().compareTo(priced.maximumAmount()) != 0) {
                 throw new ApiException(ErrorCode.RESOURCE_CONFLICT, "The effect request changed.");
+            }
+            if (planningEffect) {
+                var fixed = planning.get(previous.id());
+                if (fixed == null || !planningInput.hash().equals(fixed.inputHash())
+                        || !planningInput.json().equals(fixed.inputJson())) {
+                    throw new ApiException(ErrorCode.INVALID_STATE_TRANSITION, "Fixed planning input mismatch.");
+                }
             }
             return previous;
         }
@@ -207,7 +301,12 @@ public class ProductionCostService implements ProductionCostPort {
         }
         requireStep(owner);
         mapper.reserve(request.id(), step.id(), key, hash, reservation);
-        return mapper.byEffect(key);
+        Operation operation = mapper.byEffect(key);
+        if (planningEffect) {
+            planning.begin(operation.id(), request.id(), step.id(), ProductionPlanning.VERSION,
+                    planningInput.hash(), planningInput.json());
+        }
+        return operation;
     }
 
     private Dispatch permit(StepOwner owner, long id, PricedRequest priced) {
@@ -314,6 +413,10 @@ public class ProductionCostService implements ProductionCostPort {
                         || !("discovery:" + requestId).equals(normalized.resultRef())) {
                     throw new ApiException(ErrorCode.INVALID_STATE_TRANSITION, "Discovery evidence does not match.");
                 }
+            }
+            if (ProductionPlanning.PIPELINE.equals(request.pipelineVersion()) && isPlanningStage(step.stage())
+                    && normalized.outcome() == Outcome.RESULT_ADOPTED) {
+                savePlanningResponse(operation, normalized, body);
             }
             if (operation.evidenceHash() == null) {
                 save(operation, evidenceKey, normalized);
