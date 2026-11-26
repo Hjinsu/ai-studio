@@ -207,7 +207,7 @@ describe('Production request detail', () => {
     expect(calls.some((call) => call.method === 'POST')).toBe(false)
     await user.click(within(dialog).getByRole('button', { name: '검수 근거를 확인하고 선택' }))
     await waitFor(() => expect(calls.find((call) => call.method === 'POST')?.body)
-      .toEqual({ candidateId: 1, version: 1, batchToken: TOKEN_1, confirmReview: true }))
+      .toEqual({ candidateId: 2, version: 1, batchToken: TOKEN_1, confirmReview: true }))
   })
 
   it('keeps the dialog open with the conflict when the batch changed meanwhile', async () => {
