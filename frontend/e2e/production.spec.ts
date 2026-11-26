@@ -91,3 +91,37 @@ test('production screens in dark mode and on mobile have no page overflow', asyn
   await page.getByRole('list', { name: '소재 후보 목록' }).getByText('설명 관점·구성안·근거 계획').first().click()
   await expectNoHorizontalOverflow(page)
 })
+
+test('completed FAKE request shows research, script and scenes read-only with FIXTURE sources (V2-03)', async ({ page }) => {
+  await installMockApi(page, { signedIn: true })
+  await page.goto('/production/41')
+  const section = page.getByRole('region', { name: '자료 조사·대본·장면' })
+  await expect(section.getByText('FAKE 실행 결과입니다. 실제 제작 결과가 아닙니다.')).toBeVisible()
+  await expect(section.getByRole('list', { name: '사실 주장' })).toContainText('1.4 times the mass of the Sun')
+  await expect(section.getByRole('list', { name: '가설 주장' })).toContainText('free quarks')
+  await expect(section.getByRole('list', { name: '가상 시나리오 주장' })).toContainText('Thought experiment')
+  const sources = section.getByRole('list', { name: '출처' })
+  await expect(sources.getByText('FIXTURE 시험 자료')).toHaveCount(2)
+  await expect(sources.getByRole('link')).toHaveCount(0)
+  await expect(section.getByRole('list', { name: '대본 구간' }).getByRole('listitem')).toHaveCount(5)
+  const scenes = section.getByRole('list', { name: '장면 목록' })
+  await expect(scenes.getByRole('listitem')).toHaveCount(4)
+  await expect(section.getByText('장면 4개 · 합계 41.4초')).toBeVisible()
+  await expect(scenes.getByRole('listitem').nth(2)).toContainText('자막 원문')
+  await shot(page, 'v2-03-planning-light')
+
+  await page.getByRole('button', { name: '다크 모드' }).click()
+  await expect(page.locator('html')).toHaveClass(/dark/)
+  await expect(section.getByRole('list', { name: '장면 목록' })).toBeVisible()
+  await shot(page, 'v2-03-planning-dark')
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('/production/41')
+  await page.waitForLoadState('networkidle')
+  for (const summary of await page.getByText('검수 결과', { exact: true }).all()) {
+    await summary.click()
+  }
+  await expect(page.getByRole('list', { name: '검수 지적' }).first()).toBeVisible()
+  await expectNoHorizontalOverflow(page)
+  await shot(page, 'v2-03-planning-mobile')
+})

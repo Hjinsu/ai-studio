@@ -1,0 +1,110 @@
+{
+  "key": "neutron-star",
+  "match": ["neutron star"],
+  "structure": "PREDICTION_SCALE",
+  "documents": [
+    {
+      "id": "d1",
+      "url": "https://fixtures.ai-studio.invalid/neutron-star/basics",
+      "title": "Neutron star basics (offline fixture)",
+      "publisher": "AI Studio offline fixture, not a real publication",
+      "text": "A neutron star is the collapsed core left behind when a massive star explodes as a supernova. A typical neutron star holds about 1.4 times the mass of the Sun in a sphere only about 20 kilometers across. That makes neutron star matter one of the densest forms of matter known."
+    },
+    {
+      "id": "d2",
+      "url": "https://fixtures.ai-studio.invalid/neutron-star/density",
+      "title": "Neutron star matter density (offline fixture)",
+      "publisher": "AI Studio offline fixture, not a real publication",
+      "text": "A piece of neutron star matter the size of a sugar cube would weigh about a billion tons on Earth. The matter only stays this dense because of the star's enormous gravity; removed from the star, it would decompress violently. What exists in the innermost core is still unknown, and some models suggest exotic states such as free quarks."
+    }
+  ],
+  "claims": [
+    {
+      "id": "c1", "kind": "FACT",
+      "text": "A neutron star is the collapsed core left behind when a massive star explodes as a supernova.",
+      "evidence": [{ "document": "d1", "locator": "paragraph 1, sentence 1", "excerpt": "the collapsed core left behind when a massive star explodes as a supernova", "relation": "SUPPORTS" }]
+    },
+    {
+      "id": "c2", "kind": "FACT",
+      "text": "A typical neutron star holds about 1.4 times the mass of the Sun in a sphere about 20 kilometers across.",
+      "evidence": [{ "document": "d1", "locator": "paragraph 1, sentence 2", "excerpt": "about 1.4 times the mass of the Sun in a sphere only about 20 kilometers across", "relation": "SUPPORTS" }]
+    },
+    {
+      "id": "c3", "kind": "FACT",
+      "text": "A sugar-cube-sized piece of neutron star matter would weigh about a billion tons on Earth.",
+      "evidence": [{ "document": "d2", "locator": "paragraph 1, sentence 1", "excerpt": "the size of a sugar cube would weigh about a billion tons on Earth", "relation": "SUPPORTS" }]
+    },
+    {
+      "id": "c4", "kind": "SCENARIO",
+      "text": "If a sugar cube of neutron star matter were brought to Earth, it would not stay compact; without the star's gravity it would decompress violently.",
+      "uncertainty": "Thought experiment: the matter cannot actually be removed from the star, and the scenario stops at the moment of release.",
+      "evidence": [{ "document": "d2", "locator": "paragraph 1, sentence 2", "excerpt": "removed from the star, it would decompress violently", "relation": "SUPPORTS" }]
+    },
+    {
+      "id": "c5", "kind": "HYPOTHESIS",
+      "text": "The innermost core may contain exotic matter such as free quarks.",
+      "uncertainty": "Model-based idea; the state of the core is still unknown.",
+      "evidence": [{ "document": "d2", "locator": "paragraph 1, sentence 3", "excerpt": "some models suggest exotic states such as free quarks", "relation": "SUPPORTS" }]
+    },
+    {
+      "id": "c6", "kind": "FACT",
+      "text": "Neutron stars are the densest objects in the universe.",
+      "evidence": [{ "document": "d1", "locator": "paragraph 1, sentence 3", "excerpt": "one of the densest forms of matter known", "relation": "INSUFFICIENT" }]
+    }
+  ],
+  "scriptClaimIds": ["c1", "c2", "c3", "c4", "c5"],
+  "limitations": [
+    "The teaspoon or sugar cube on Earth is a thought experiment; the matter only exists inside the star.",
+    "Whether neutron stars are the single densest objects is not supported by the held documents and is left out.",
+    "The state of the innermost core is a model-based hypothesis."
+  ],
+  "editorialIntent": "Let viewers guess the weight of a sugar cube, reveal the neutron star scale, then flip it with the thought experiment that the cube would burst apart outside the star.",
+  "hookSegmentIds": ["s1"],
+  "segments": [
+    { "id": "s1", "narration": "Guess what this sugar cube weighs?", "claimIds": [] },
+    { "id": "s2", "narration": "It is not sugar. It is a scrap of a neutron star, the collapsed core left behind when a massive star explodes as a supernova.", "claimIds": ["c1"] },
+    { "id": "s3", "narration": "Now squeeze about 1.4 times the mass of our Sun into a ball only 20 kilometers across.", "claimIds": ["c2"] },
+    { "id": "s4", "narration": "Packed that tightly, a piece the size of a sugar cube would weigh about a billion tons on Earth.", "claimIds": ["c3"] },
+    { "id": "s5", "narration": "But if you could carry it home, it would not stay small. Without the star's gravity holding it together, it would burst apart violently.", "claimIds": ["c4"] },
+    { "id": "s6", "narration": "And deeper inside, nobody knows for sure what the matter becomes. Some models suggest it might even break down into free quarks.", "claimIds": ["c5"] },
+    { "id": "s7", "narration": "A spoonful of star you can only weigh with math. What question would you ask it? Follow IFNOVA for more strange science.", "claimIds": [] }
+  ],
+  "visualStyle": "Clean cinematic science illustration, dark space palette with warm highlights",
+  "scenes": [
+    {
+      "segmentIds": ["s1"],
+      "visualDescription": "A single glowing sugar cube resting on a matte black kitchen scale against a dark background.",
+      "imagePrompt": "Close-up illustration of a softly glowing sugar cube on a matte black kitchen scale, dark background, warm rim light, vertical 9:16 composition, cube centered in the upper safe area",
+      "direction": "Static close-up with a slow push-in; eye-level camera, low-key lighting.",
+      "transition": "Hard cut on the question"
+    },
+    {
+      "segmentIds": ["s2"],
+      "visualDescription": "A massive star blowing off its outer layers while a small bright core remains at the center.",
+      "imagePrompt": "Stylized illustration of a massive star exploding as a supernova, expanding orange shell, small blue-white core at the center, deep space background, vertical 9:16",
+      "direction": "Wide shot; the camera pulls back as the shell expands, core stays centered.",
+      "transition": "Flash to white"
+    },
+    {
+      "segmentIds": ["s3", "s4"],
+      "visualDescription": "A glowing sphere shrinking down, then the sugar cube back on the scale with its readout spinning.",
+      "imagePrompt": "Animated compression of a glowing sphere into a tiny dense ball, then a glowing sugar cube on a kitchen scale with a blurred spinning readout, vertical 9:16, dramatic contrast",
+      "direction": "Animated compression shot, then match cut to the scale; slight camera shake as the readout spins.",
+      "transition": "Match cut from sphere to cube"
+    },
+    {
+      "segmentIds": ["s5"],
+      "visualDescription": "Illustrated thought experiment: the tiny cube on a lab bench bursting outward into a bright expanding cloud.",
+      "imagePrompt": "Illustrated thought experiment, small dense cube on a lab bench bursting outward into a bright expanding cloud, corner label reading thought experiment, vertical 9:16, dramatic lighting",
+      "direction": "Slow-motion burst from a low angle; label stays on screen to mark the scene as imagined.",
+      "transition": "Smoke wipe"
+    },
+    {
+      "segmentIds": ["s6", "s7"],
+      "visualDescription": "Cross-section of a neutron star with layered crust and a glowing core marked with a question mark.",
+      "imagePrompt": "Cross-section infographic of a neutron star, layered crust, glowing core marked with a large question mark, clean diagram style, vertical 9:16",
+      "direction": "Slow zoom toward the core, then hold for the end card.",
+      "transition": "Fade to end card"
+    }
+  ]
+}

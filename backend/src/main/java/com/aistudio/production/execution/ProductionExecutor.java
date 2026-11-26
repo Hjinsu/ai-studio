@@ -17,6 +17,12 @@ import org.slf4j.LoggerFactory;
 import com.aistudio.production.contract.DiscoveryEvaluator.CatalogEntry;
 import com.aistudio.production.contract.DiscoveryExecutionPort.SelectionBatch;
 import com.aistudio.production.contract.EffectKey;
+import com.aistudio.production.contract.PlanningExecutionPort;
+import com.aistudio.production.contract.ProductionPlanning;
+import com.aistudio.production.contract.ProductionPlanning.ResearchInput;
+import com.aistudio.production.contract.ProductionPlanning.ScenesInput;
+import com.aistudio.production.contract.ProductionPlanning.ScriptInput;
+import com.aistudio.production.contract.ProductionPlanning.Validation;
 import com.aistudio.production.contract.ProductionDiscovery.EvaluatedCandidate;
 import com.aistudio.production.contract.ProductionDiscovery.Input;
 import com.aistudio.production.contract.ProductionDiscovery.Mode;
@@ -76,6 +82,7 @@ public class ProductionExecutor implements AutoCloseable {
     private final ExecutionProperties properties;
     private final ScheduledExecutorService heartbeats;
     private final DiscoveryFlow discovery;
+    private final PlanningFlow planning;
 
     public ProductionExecutor(ExecutionMapper mapper, BudgetControlLock control, LockRetryingTransactions transactions,
             ProductionCostPort cost, ProductionSelectionPort selection, StageWork work,
@@ -87,8 +94,22 @@ public class ProductionExecutor implements AutoCloseable {
     public ProductionExecutor(ExecutionMapper mapper, BudgetControlLock control, LockRetryingTransactions transactions,
             ProductionCostPort cost, ProductionSelectionPort selection, StageWork work,
             ExecutionProperties properties, DiscoveryFlow discovery) {
+        this(mapper, control, transactions, cost, selection, work, properties, discovery, null);
+    }
+
+    /**
+     * @param planning V2-03 planning flow; {@code null} (the default) never claims {@code v2-planning-1} requests.
+     *        It needs the discovery flow, because planning requests discover and select their topic first.
+     */
+    public ProductionExecutor(ExecutionMapper mapper, BudgetControlLock control, LockRetryingTransactions transactions,
+            ProductionCostPort cost, ProductionSelectionPort selection, StageWork work,
+            ExecutionProperties properties, DiscoveryFlow discovery, PlanningFlow planning) {
         StageWork.validate(work);
+        if (planning != null && discovery == null) {
+            throw new IllegalArgumentException("The planning flow requires the discovery flow");
+        }
         this.discovery = discovery;
+        this.planning = planning;
         this.mapper = mapper;
         this.control = control;
         this.transactions = transactions;
@@ -133,7 +154,7 @@ public class ProductionExecutor implements AutoCloseable {
             if (mapper.countValidLeases() >= properties.maxLeases()) {
                 return Optional.<Lease>empty();
             }
-            Long id = mapper.nextClaimable(discovery != null);
+            Long id = mapper.nextClaimable(discovery != null, planning != null);
             if (id == null || mapper.claim(id, owner, leaseMicros()) != 1) {
                 return Optional.<Lease>empty();
             }
@@ -154,13 +175,21 @@ public class ProductionExecutor implements AutoCloseable {
                 release(lease);
                 return;
             }
+            if (snapshot.request().planning() && planning == null) {
+                log.error("Production request {} needs the planning flow, which is not wired; releasing",
+                        lease.requestId());
+                release(lease);
+                return;
+            }
             StepPlanner.Action action = StepPlanner.next(snapshot.steps(), snapshot.request().cancelRequested(),
                     snapshot.awaitingChoice(), work::kind);
             switch (action) {
                 case StepPlanner.Recover recover -> {
                     boolean more = isDiscover(snapshot.request(), recover.step())
                             ? runDiscover(lease, snapshot.request(), recover.step(), 0)
-                            : presentEffect(lease, snapshot.request(), recover.step(), 0);
+                            : isPlanning(snapshot.request(), recover.step())
+                                    ? runPlanning(lease, snapshot.request(), recover.step(), 0)
+                                    : presentEffect(lease, snapshot.request(), recover.step(), 0);
                     if (!more) {
                         return;
                     }
@@ -194,6 +223,9 @@ public class ProductionExecutor implements AutoCloseable {
         }
         if (request.discovery() && step.stage() == ProductionStage.SELECT) {
             return runDiscoverySelect(lease, request, step);
+        }
+        if (isPlanning(request, step)) {
+            return runPlanning(lease, request, step, 1);
         }
         return switch (work.kind(step.stage())) {
             case EFFECT -> presentEffect(lease, request, step, 1);
@@ -577,6 +609,115 @@ public class ProductionExecutor implements AutoCloseable {
     }
 
     static final String NO_ELIGIBLE = "DISCOVERY_NO_ELIGIBLE_CANDIDATE";
+
+    // ------------------------------------------------------------------ V2-03 planning
+
+    private static boolean isPlanning(RequestRow request, StepRow step) {
+        return request.planning() && (step.stage() == ProductionStage.RESEARCH
+                || step.stage() == ProductionStage.SCRIPT || step.stage() == ProductionStage.SCENES);
+    }
+
+    /**
+     * RESEARCH, SCRIPT or SCENES of a planning request. The fixed input comes from the planning port (first built
+     * from the applied previous step, then the stored copy), and the effect is presented only through the port,
+     * which owns reservation, the single dispatch, response storage and settlement. A recovery presentation reuses
+     * the stored input and does not count an attempt. The executor never calls a provider itself.
+     */
+    private boolean runPlanning(Lease lease, RequestRow request, StepRow step, int attemptIncrement) {
+        int attempt = start(lease, step, attemptIncrement);
+        StepOwner owner = lease.stepOwner(step.id());
+        Object input;
+        try {
+            input = switch (step.stage()) {
+                case RESEARCH -> planning.port().researchInput(request.id());
+                case SCRIPT -> planning.port().scriptInput(request.id());
+                case SCENES -> planning.port().scenesInput(request.id());
+                default -> throw new IllegalStateException("Not a planning stage: " + step.stage());
+            };
+            if (input == null) {
+                throw new IllegalStateException("No planning input for step " + step.id());
+            }
+        } catch (RuntimeException e) {
+            if (attemptIncrement == 0) {
+                log.warn("Production step {} planning input unavailable for recovery", step.id(), e);
+                park(lease, step, "EFFECT_PRICE_UNAVAILABLE");
+                return false;
+            }
+            return localFailure(lease, step, attempt, e); // nothing was presented yet
+        }
+        return dispatch(lease, step, () -> switch (step.stage()) {
+            case RESEARCH -> planning.port().research(owner, (ResearchInput) input, planning.maximumKrw());
+            case SCRIPT -> planning.port().script(owner, (ScriptInput) input, planning.maximumKrw());
+            case SCENES -> planning.port().scenes(owner, (ScenesInput) input, planning.maximumKrw());
+            default -> throw new IllegalStateException("Not a planning stage: " + step.stage());
+        }, receipt -> applyPlanning(lease, step, input, receipt));
+    }
+
+    /**
+     * Adopted planning receipt: read the stored response through the port, review it against the fixed input, then
+     * in one fenced transaction store the review with the receipt (the port marks the receipt applied) and finish
+     * the step. A review with a required block fails the step with {@link ProductionPlanning#BLOCKED}, which stops
+     * the request before the next stage; a review with recommendations only is kept and the step succeeds. Nothing
+     * is regenerated. A response that cannot be read or reviewed keeps the receipt unapplied for a recheck.
+     */
+    private boolean applyPlanning(Lease lease, StepRow step, Object input, Receipt receipt) {
+        if (receipt == null || receipt.outcome() == null) {
+            park(lease, step, "RECEIPT_INVALID");
+            return false;
+        }
+        if (receipt.outcome() != ProductionCostPort.Outcome.RESULT_ADOPTED) {
+            return applyReceipt(lease, step, receipt); // executed-failed or not executed: no result to review
+        }
+        StepOwner owner = lease.stepOwner(step.id());
+        PlanningExecutionPort.CandidateResult candidate;
+        try {
+            candidate = planning.port().response(owner, receipt);
+        } catch (LeaseLostException lost) {
+            throw lost;
+        } catch (RuntimeException e) {
+            log.warn("Production step {} planning response unavailable", step.id(), e);
+            park(lease, step, "PLANNING_RESPONSE_UNAVAILABLE");
+            return false;
+        }
+        Validation validation;
+        try {
+            if (candidate == null || candidate.stage() != step.stage()) {
+                throw new IllegalStateException("Planning response belongs to another stage");
+            }
+            validation = planning.review().review(step.stage(), input, candidate.body());
+        } catch (RuntimeException e) {
+            log.warn("Production step {} planning review failed", step.id(), e);
+            park(lease, step, "PLANNING_REVIEW_FAILED");
+            return false;
+        }
+        try {
+            fenced(lease, locked -> {
+                planning.port().apply(owner, receipt, validation);
+                resumeRequest(locked);
+                int changed = validation.blocked()
+                        ? mapper.endStep(locked.id(), step.id(), StepStatus.FAILED, ProductionPlanning.BLOCKED)
+                        : mapper.succeedStep(locked.id(), step.id(), "planning:" + receipt.operationId());
+                if (changed != 1) {
+                    throw new IllegalStateException("Planning step " + step.id() + " could not finish");
+                }
+                return changed;
+            });
+            if (validation.blocked()) {
+                log.info("Production step {} {} blocked by review: {}", step.id(), step.stage(),
+                        validation.findings().stream()
+                                .filter(finding -> finding.severity() == ProductionPlanning.Severity.BLOCK)
+                                .map(ProductionPlanning.Finding::code).distinct().toList());
+            }
+            return true;
+        } catch (LeaseLostException lost) {
+            throw lost;
+        } catch (RuntimeException e) {
+            log.warn("Production step {} planning receipt {} not applied; recheck later", step.id(),
+                    receipt.operationId(), e);
+            park(lease, step, "RECEIPT_APPLY_FAILED");
+            return false;
+        }
+    }
 
     // ------------------------------------------------------------------ finish
 

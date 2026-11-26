@@ -1,0 +1,116 @@
+{
+  "key": "tardigrade-tun",
+  "match": ["tardigrade"],
+  "structure": "IMMERSIVE_TIMELAPSE",
+  "documents": [
+    {
+      "id": "d1",
+      "url": "https://fixtures.ai-studio.invalid/tardigrade/biology",
+      "title": "Tardigrade biology (offline fixture)",
+      "publisher": "AI Studio offline fixture, not a real publication",
+      "text": "Tardigrades are tiny animals, most less than a millimeter long, that live in moss, soil and water films. When their surroundings dry out, many species curl into a dormant state called a tun, and their metabolism drops to almost nothing. Given water again, a tun can revive and walk away, in some cases after years."
+    },
+    {
+      "id": "d2",
+      "url": "https://fixtures.ai-studio.invalid/tardigrade/drying-proteins",
+      "title": "Drying protection in tardigrades (offline fixture)",
+      "publisher": "AI Studio offline fixture, not a real publication",
+      "text": "Some tardigrade species make unusual proteins when they dry out. These proteins form a glass-like material that is thought to hold cell parts in place until water returns. How long a tun can survive is still debated, and record claims vary widely between studies."
+    }
+  ],
+  "claims": [
+    {
+      "id": "c1", "kind": "FACT",
+      "text": "Tardigrades are tiny animals, most less than a millimeter long, living in moss, soil and water films.",
+      "evidence": [{ "document": "d1", "locator": "paragraph 1, sentence 1", "excerpt": "Tardigrades are tiny animals, most less than a millimeter long", "relation": "SUPPORTS" }]
+    },
+    {
+      "id": "c2", "kind": "FACT",
+      "text": "When their surroundings dry out, many tardigrades curl into a dormant tun and their metabolism drops to almost nothing.",
+      "evidence": [{ "document": "d1", "locator": "paragraph 1, sentence 2", "excerpt": "many species curl into a dormant state called a tun, and their metabolism drops to almost nothing", "relation": "SUPPORTS" }]
+    },
+    {
+      "id": "c3", "kind": "FACT",
+      "text": "Given water again, a tun can revive, in some cases after years.",
+      "evidence": [{ "document": "d1", "locator": "paragraph 1, sentence 3", "excerpt": "Given water again, a tun can revive and walk away, in some cases after years", "relation": "SUPPORTS" }]
+    },
+    {
+      "id": "c4", "kind": "HYPOTHESIS",
+      "text": "Glass-like proteins made during drying may hold cell parts in place until water returns.",
+      "uncertainty": "Proposed protective mechanism, studied in some species only.",
+      "evidence": [{ "document": "d2", "locator": "paragraph 1, sentence 2", "excerpt": "form a glass-like material that is thought to hold cell parts in place until water returns", "relation": "SUPPORTS" }]
+    },
+    {
+      "id": "c5", "kind": "SCENARIO",
+      "text": "Imagine shrinking to tardigrade size on a drying moss leaf.",
+      "uncertainty": "Imagined point of view to illustrate scale and setting; not an observation.",
+      "evidence": [{ "document": "d1", "locator": "paragraph 1, sentence 1", "excerpt": "live in moss, soil and water films", "relation": "SUPPORTS" }]
+    },
+    {
+      "id": "c6", "kind": "FACT",
+      "text": "Tardigrades can survive for more than 100 years in a tun.",
+      "evidence": [{ "document": "d2", "locator": "paragraph 1, sentence 3", "excerpt": "How long a tun can survive is still debated", "relation": "INSUFFICIENT" }]
+    }
+  ],
+  "scriptClaimIds": ["c1", "c2", "c3", "c4", "c5"],
+  "limitations": [
+    "Record survival times are debated in the held documents and are left out of the script.",
+    "The glass-like protein mechanism is presented as a hypothesis.",
+    "The first-person point of view is an imagined scenario."
+  ],
+  "editorialIntent": "Put the viewer inside a drying puddle as a tardigrade and follow the tun through drought and revival, ending on the open question of how long it can wait.",
+  "hookSegmentIds": ["s1"],
+  "segments": [
+    { "id": "s1", "narration": "Imagine your whole world drying up.", "claimIds": ["c5"] },
+    { "id": "s2", "narration": "You are a tardigrade, a tiny animal less than a millimeter long, living in a film of water on moss.", "claimIds": ["c1", "c5"] },
+    { "id": "s3", "narration": "As the water vanishes, you pull in your legs, curl into a dry little barrel called a tun, and your metabolism drops to almost nothing.", "claimIds": ["c2"] },
+    { "id": "s4", "narration": "Inside your cells, special proteins might set into something like glass, holding everything in place.", "claimIds": ["c4"] },
+    { "id": "s5", "narration": "Days pass. Then a raindrop lands. Given water again, a tun can revive and walk away, in some cases after years.", "claimIds": ["c3"] },
+    { "id": "s6", "narration": "How long can a tun really wait? That question is still open. Follow IFNOVA for more strange science.", "claimIds": [] }
+  ],
+  "visualStyle": "Macro nature illustration, soft green moss tones and shallow depth of field",
+  "scenes": [
+    {
+      "segmentIds": ["s1"],
+      "visualDescription": "Macro view of a moss leaf where a water droplet shrinks away.",
+      "imagePrompt": "Macro illustration of a bright green moss leaf with a shrinking water droplet, soft morning light, shallow depth of field, vertical 9:16",
+      "direction": "Time-lapse feel, locked macro camera at leaf level.",
+      "transition": "Quick zoom in"
+    },
+    {
+      "segmentIds": ["s2"],
+      "visualDescription": "A chubby tardigrade walking through a thin film of water on moss.",
+      "imagePrompt": "Stylized illustration of a chubby tardigrade walking through a thin film of water on a moss leaf, translucent body, soft green tones, vertical 9:16, subject centered",
+      "direction": "Tracking shot at the animal's eye level, gentle handheld drift.",
+      "transition": "Light rack focus"
+    },
+    {
+      "segmentIds": ["s3"],
+      "visualDescription": "The tardigrade pulling in its legs and curling into a dry barrel-shaped tun as the moss browns.",
+      "imagePrompt": "Illustrated tardigrade pulling in its legs and curling into a dry barrel-shaped tun on browning moss, warm dry light, vertical 9:16",
+      "direction": "Time-lapse transformation, slow push-in as colors drain.",
+      "transition": "Dissolve"
+    },
+    {
+      "segmentIds": ["s4"],
+      "visualDescription": "Stylized cell interior where a glassy mesh forms around cell parts.",
+      "imagePrompt": "Stylized cutaway of a cell interior with a translucent glassy mesh forming around cell parts, labelled possible mechanism, cool blue highlights, vertical 9:16",
+      "direction": "Slow orbit inside the cell; on-screen label marks the mechanism as a hypothesis.",
+      "transition": "Cut to rain"
+    },
+    {
+      "segmentIds": ["s5"],
+      "visualDescription": "A raindrop splashing onto dry moss; the tun swells and the tardigrade walks away.",
+      "imagePrompt": "Illustrated raindrop splashing onto dry moss, a barrel-shaped tun swelling back into a tardigrade that starts walking, fresh green tones, vertical 9:16",
+      "direction": "Slow-motion splash, then real-time walk out of frame.",
+      "transition": "Whip pan"
+    },
+    {
+      "segmentIds": ["s6"],
+      "visualDescription": "An hourglass beside a tun on moss with a question card.",
+      "imagePrompt": "Illustrated hourglass beside a tiny barrel-shaped tun on moss, large question mark title card, soft vignette, vertical 9:16",
+      "direction": "Static hold for the end card.",
+      "transition": "Fade to end card"
+    }
+  ]
+}

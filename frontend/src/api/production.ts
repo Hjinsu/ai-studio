@@ -1,7 +1,7 @@
 import type { components } from './generated/schema'
 import { request } from './http'
 
-/** 제작 요청·소재 발굴 API (docs/api/openapi.yaml, V2-01·V2-02). 타입은 생성 타입만 사용한다. */
+/** 제작 요청·소재 발굴·기획 결과 API (docs/api/openapi.yaml, V2-01~V2-03). 타입은 생성 타입만 사용한다. */
 type Schemas = components['schemas']
 export type ProductionRequestDetail = Schemas['ProductionRequestDetail']
 export type ProductionRequestSummary = Schemas['ProductionRequestSummary']
@@ -15,6 +15,15 @@ export type SelectionMode = ProductionDiscovery['selectionMode']
 export type ContentType = ProductionRequestDetail['contentType']
 export type ProductionRequestPage = Schemas['ProductionRequestPage']
 export type ProductionRequestListItem = Schemas['ProductionRequestListItem']
+export type ProductionPlanning = Schemas['ProductionPlanning']
+export type PlanningResult = Schemas['PlanningResult']
+export type PlanningFinding = Schemas['PlanningFinding']
+export type PlanningResearch = Schemas['PlanningResearch']
+export type PlanningClaim = Schemas['PlanningClaim']
+export type PlanningSource = Schemas['PlanningSource']
+export type PlanningScript = Schemas['PlanningScript']
+export type PlanningScenes = Schemas['PlanningScenes']
+export type PlanningScene = Schemas['PlanningScene']
 
 export interface CreateProductionRequest {
   channelId: string
@@ -35,6 +44,8 @@ export const createProductionRequest = (idempotencyKey: string, body: CreateProd
 export const getProductionRequest = (id: string) => request<ProductionRequestDetail>('GET', `${PATH}/${id}`)
 export const cancelProductionRequest = (id: string) => request<ProductionRequestDetail>('POST', `${PATH}/${id}/cancel`)
 export const getProductionDiscovery = (id: string) => request<ProductionDiscovery>('GET', `${PATH}/${id}/discovery`)
+/** 적용된 조사·대본·장면 본문과 검수 지적(V2-03). 과거 요청과 미실행 단계는 결과가 비어 있다. */
+export const getProductionPlanning = (id: string) => request<ProductionPlanning>('GET', `${PATH}/${id}/planning`)
 export const listProductionRequests = (page: number, size = 20) =>
   request<ProductionRequestPage>('GET', PATH, { query: { page, size } })
 
@@ -51,6 +62,7 @@ export const chooseProductionCandidate = (id: string, choice: CandidateChoice) =
 export const productionListKey = (page: number) => ['production-requests', page] as const
 export const productionKey = (id: string) => ['production-request', id] as const
 export const discoveryKey = (id: string) => ['production-request', id, 'discovery'] as const
+export const planningKey = (id: string) => ['production-request', id, 'planning'] as const
 
 export function isTerminal(status: ProductionStatus): boolean {
   return status === 'SUCCEEDED' || status === 'FAILED' || status === 'CANCELLED'
