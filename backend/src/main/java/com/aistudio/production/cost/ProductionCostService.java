@@ -10,6 +10,7 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Propagation;
@@ -23,6 +24,13 @@ import com.aistudio.budget.BudgetReservationService.ReserveCommand;
 import com.aistudio.budget.Money;
 import com.aistudio.content.command.CanonicalJson;
 import com.aistudio.production.contract.EffectKey;
+import com.aistudio.production.contract.MediaEffectPort;
+import com.aistudio.production.media.storage.MediaMetadata;
+import com.aistudio.production.contract.MediaProfile;
+import com.aistudio.production.contract.MediaStore;
+import com.aistudio.production.media.storage.WorkspaceMediaStore;
+import com.aistudio.production.media.MediaAvailability;
+import java.io.IOException;
 import com.aistudio.production.contract.PlanningJson;
 import com.aistudio.production.contract.ProductionPlanning;
 import com.aistudio.production.planning.PlanningResultMapper;
@@ -46,7 +54,7 @@ import com.aistudio.shared.db.LockRetryingTransactions;
 import tools.jackson.databind.json.JsonMapper;
 
 @Service
-public class ProductionCostService implements ProductionCostPort {
+public class ProductionCostService implements ProductionCostPort, MediaEffectPort {
     private record Dispatch(EffectResult replay, PricedRequest send) {}
     private record EvidenceRecord(String key, Evidence evidence) {}
     private record Completion(Evidence evidence, String body) {}
@@ -55,16 +63,27 @@ public class ProductionCostService implements ProductionCostPort {
     private final BudgetReservationService budget;
     private final BudgetControlLock control;
     private final LockRetryingTransactions transactions;
-    private final FakeProvider provider;
+    private final com.aistudio.production.cost.FakeProvider provider;
     private final JsonMapper json;
     private final ProductionDiscoveryMapper discovery;
     private final ObjectProvider<DiscoveryProvider> discoveryProvider;
     private final PlanningResultMapper planning;
+    private final MediaCostMapper media;
+    private final String mediaRoot;
+    private final MediaAvailability mediaAvailability;
+
+    private record StoredMediaProof(String effectKey, String requestHash, String providerRequestId,
+            String providerResultId, String amount,
+            String currency, String evidenceReference) {}
+
+    private record MediaRecovery(MediaCostMapper.Item item, boolean cancelled, Operation operation,
+            List<MediaCostMapper.Asset> assets) {}
 
     ProductionCostService(ProductionCostMapper mapper, BudgetReservationService budget, BudgetControlLock control,
-            LockRetryingTransactions transactions, FakeProvider provider, JsonMapper json,
+            LockRetryingTransactions transactions, com.aistudio.production.cost.FakeProvider provider, JsonMapper json,
             ProductionDiscoveryMapper discovery, ObjectProvider<DiscoveryProvider> discoveryProvider,
-            PlanningResultMapper planning) {
+            PlanningResultMapper planning, MediaCostMapper media,
+            @Value("${ai-studio.production.media.storage-root:}") String mediaRoot, MediaAvailability mediaAvailability) {
         this.mapper = mapper;
         this.budget = budget;
         this.control = control;
@@ -74,6 +93,9 @@ public class ProductionCostService implements ProductionCostPort {
         this.discovery = discovery;
         this.discoveryProvider = discoveryProvider;
         this.planning = planning;
+        this.media = media;
+        this.mediaRoot = mediaRoot;
+        this.mediaAvailability = mediaAvailability;
     }
 
     @Override
@@ -119,12 +141,10 @@ public class ProductionCostService implements ProductionCostPort {
         }
         PricedRequest priced = new PricedRequest(Money.currency("currency", request.currency()),
                 Money.original(request.maximumAmount()), request.fakeScenario());
-        String pricedHash = CanonicalJson.sha256(Map.of("requestHash", requestHash, "currency", priced.currency(),
-                "maximumAmount", priced.maximumAmount().toPlainString(),
-                "fakeScenario", Objects.toString(priced.fakeScenario(), "SUCCESS")));
+        String pricedHash = pricedHash(requestHash, priced);
         Operation operation;
         try {
-            operation = transactions.execute(() -> reserve(owner, effectKey, pricedHash, priced, discoveryEffect, planningInput));
+            operation = transactions.execute(() -> reserve(owner, effectKey, pricedHash, priced, discoveryEffect, planningInput, null));
         } catch (ApiException e) {
             if (e.errorCode() == ErrorCode.BUDGET_EXCEEDED || e.errorCode() == ErrorCode.POLICY_VIOLATION
                     || e.errorCode() == ErrorCode.PREREQUISITE_NOT_MET) {
@@ -255,7 +275,7 @@ public class ProductionCostService implements ProductionCostPort {
     }
 
     private Operation reserve(StepOwner owner, String key, String hash, PricedRequest priced, boolean discoveryEffect,
-            PlanningJson.Encoded planningInput) {
+            PlanningJson.Encoded planningInput, MediaCostMapper.Item mediaItem) {
         control.shared();
         Request request = requireRequest(owner.requestId());
         Step step = requireStep(owner);
@@ -263,17 +283,25 @@ public class ProductionCostService implements ProductionCostPort {
                 && step.stage() == ProductionStage.DISCOVER)) {
             throw new ApiException(ErrorCode.INVALID_STATE_TRANSITION);
         }
-        boolean planningEffect = ProductionPlanning.PIPELINE.equals(request.pipelineVersion())
+        boolean planningEffect = ProductionPlanning.supportsPipeline(request.pipelineVersion())
                 && isPlanningStage(step.stage());
         if (planningEffect != (planningInput != null)) {
             throw new ApiException(ErrorCode.INVALID_STATE_TRANSITION);
         }
-        if (!EffectKey.forInput(request.id(), step.stage(), step.targetKey(), step.inputGeneration()).equals(key)) {
+        boolean mediaEffect = MediaProfile.PIPELINE.equals(request.pipelineVersion())
+                && (step.stage() == ProductionStage.IMAGE || step.stage() == ProductionStage.TTS);
+        if (mediaEffect != (mediaItem != null) || (mediaItem != null
+                && (mediaItem.kind() != step.stage() || mediaItem.generation() != step.inputGeneration()))) {
+            throw new ApiException(ErrorCode.INVALID_STATE_TRANSITION);
+        }
+        String target = mediaItem == null ? step.targetKey() : mediaItem.targetKey();
+        if (!EffectKey.forInput(request.id(), step.stage(), target, step.inputGeneration()).equals(key)) {
             throw ApiException.validation("effectKey", "does not identify the owned step input");
         }
         Operation previous = mapper.byEffect(key);
         if (previous != null) {
-            if (!previous.requestHash().equals(hash) || !previous.originalCurrency().equals(priced.currency())
+            if ((mediaItem != null && !Objects.equals(mediaItem.operationId(), previous.id()))
+                    || !previous.requestHash().equals(hash) || !previous.originalCurrency().equals(priced.currency())
                     || previous.estimateOriginal().compareTo(priced.maximumAmount()) != 0) {
                 throw new ApiException(ErrorCode.RESOURCE_CONFLICT, "The effect request changed.");
             }
@@ -290,7 +318,7 @@ public class ProductionCostService implements ProductionCostPort {
                 || !"RUNNING".equals(step.status()) || !mapper.outstanding(request.id()).isEmpty()) {
             return null;
         }
-        if (mapper.releasedGenerations(request.id(), step.stage(), step.targetKey(), step.inputGeneration())
+        if (mapper.releasedGenerations(request.id(), step.stage(), target, step.inputGeneration())
                 != step.inputGeneration() - 1) {
             return null;
         }
@@ -304,6 +332,9 @@ public class ProductionCostService implements ProductionCostPort {
         requireStep(owner);
         mapper.reserve(request.id(), step.id(), key, hash, reservation);
         Operation operation = mapper.byEffect(key);
+        if (mediaItem != null && media.bind(mediaItem.id(), operation.id(), owner.leaseEpoch()) != 1) {
+            throw new ApiException(ErrorCode.INVALID_STATE_TRANSITION);
+        }
         if (planningEffect) {
             planning.begin(operation.id(), request.id(), step.id(), ProductionPlanning.VERSION,
                     planningInput.hash(), planningInput.json());
@@ -395,6 +426,14 @@ public class ProductionCostService implements ProductionCostPort {
             control.shared();
             Request request = requireRequest(requestId);
             Operation operation = mapper.operation(operationId);
+            Long mediaItemId = media.byOperation(operationId);
+            if (mediaItemId != null) {
+                var frozen = media.lock(requestId, operation.productionStepId(), mediaItemId);
+                if (evidence == null || evidence.outcome() == Outcome.RESULT_ADOPTED
+                        || frozen.executionProofSha256() != null) {
+                    throw new ApiException(ErrorCode.INVALID_STATE_TRANSITION, "Use the media recovery path.");
+                }
+            }
             Evidence normalized = normalize(operation, evidenceKey, evidence);
             if (operation.evidenceHash() != null && !operation.evidenceHash().equals(evidenceHash(normalized))) {
                 mapper.blockSpending(requestId);
@@ -416,7 +455,7 @@ public class ProductionCostService implements ProductionCostPort {
                     throw new ApiException(ErrorCode.INVALID_STATE_TRANSITION, "Discovery evidence does not match.");
                 }
             }
-            if (ProductionPlanning.PIPELINE.equals(request.pipelineVersion()) && isPlanningStage(step.stage())
+            if (ProductionPlanning.supportsPipeline(request.pipelineVersion()) && isPlanningStage(step.stage())
                     && normalized.outcome() == Outcome.RESULT_ADOPTED) {
                 savePlanningResponse(operation, normalized, body);
             }
@@ -434,6 +473,302 @@ public class ProductionCostService implements ProductionCostPort {
             Request request = requireRequest(requestId);
             return finish(request, mapper.operation(operationId));
         });
+    }
+
+    @Override
+    public EffectResult execute(MediaEffectPort.Item item, BigDecimal maximumKrw, MediaEffectPort.FakeProvider sender) {
+        StepOwner owner = item.owner();
+        if (!mediaAvailability.ready()) {
+            return recover(item);
+        }
+        Operation operation;
+        PricedRequest priced = new PricedRequest("KRW", Money.original(maximumKrw), null);
+        if (priced.maximumAmount().signum() <= 0) {
+            throw ApiException.validation("maximumAmount", "must be greater than zero");
+        }
+        try {
+            operation = transactions.execute(() -> {
+                control.shared();
+                Request request = requireRequest(owner.requestId());
+                Step step = requireStep(owner);
+                MediaCostMapper.Item frozen = requireMediaItem(item);
+                String key = EffectKey.forInput(request.id(), step.stage(), frozen.targetKey(), frozen.generation());
+                String hash = pricedHash(frozen.inputSha256(), priced);
+                return reserve(owner, key, hash, priced, false, null, frozen);
+            });
+        } catch (ApiException e) {
+            if (e.errorCode() == ErrorCode.BUDGET_EXCEEDED || e.errorCode() == ErrorCode.POLICY_VIOLATION
+                    || e.errorCode() == ErrorCode.PREREQUISITE_NOT_MET) {
+                return result(Disposition.REJECTED);
+            }
+            throw e;
+        }
+        if (operation == null) {
+            return result(Disposition.REJECTED);
+        }
+        Dispatch dispatch = transactions.execute(() -> permit(owner, operation.id(), priced));
+        if (dispatch.replay() != null) {
+            return dispatch.replay().disposition() == Disposition.RECEIPT ? dispatch.replay() : recover(item);
+        }
+        MediaEffectPort.ProviderResult returned;
+        try {
+            returned = sender.send(operation.id());
+            recordMediaProof(item, operation, returned.proof());
+        } catch (RuntimeException e) {
+            quarantine(operation);
+            return result(Disposition.RECOVERY_REQUIRED);
+        }
+        try {
+            stageMedia(item, returned.payloads());
+        } catch (IOException e) {
+            return result(Disposition.RECOVERY_REQUIRED);
+        } catch (IllegalArgumentException e) {
+            return finalizeMedia(item, List.of(), true);
+        }
+        return recover(item);
+    }
+
+    private MediaCostMapper.Item requireMediaItem(MediaEffectPort.Item item) {
+        StepOwner owner = item.owner();
+        var found = media.lock(owner.requestId(), owner.stepId(), item.itemId());
+        if (found == null || found.contentId() == null || found.runId() == null
+                || !PlanningJson.matches(found.inputJson(), found.inputSha256())) {
+            throw new ApiException(ErrorCode.INVALID_STATE_TRANSITION, "Media item input is unavailable.");
+        }
+        return found;
+    }
+
+    private void recordMediaProof(MediaEffectPort.Item item, Operation operation, MediaEffectPort.ExecutionProof proof) {
+        transactions.run(() -> {
+            control.shared();
+            Request request = requireRequest(item.owner().requestId());
+            var frozen = requireMediaItem(item);
+            if (!MediaProfile.PIPELINE.equals(request.pipelineVersion()) || !Objects.equals(frozen.operationId(), operation.id())
+                    || proof.providerResultId() == null || proof.providerResultId().isBlank()
+                    || proof.providerResultId().length() > 128) {
+                throw new ApiException(ErrorCode.INVALID_STATE_TRANSITION);
+            }
+            Evidence normalized = normalize(mapper.operation(operation.id()), "media-proof",
+                    new Evidence(Outcome.EXECUTED_FAILED, proof.providerRequestId(), proof.currency(),
+                            proof.amount(), null, null, proof.evidenceReference()));
+            var encoded = PlanningJson.encode(new StoredMediaProof(mediaKey(item, frozen), operation.requestHash(),
+                    normalized.externalRef(),
+                    proof.providerResultId(), normalized.amount().toPlainString(), normalized.currency(), normalized.proof()));
+            if (media.prove(frozen.id(), encoded.json(), encoded.hash()) != 1) {
+                throw new ApiException(ErrorCode.RESOURCE_CONFLICT, "Media execution proof already recorded.");
+            }
+            if (normalized.amount().compareTo(operation.estimateOriginal()) > 0) {
+                mapper.blockSpending(request.id());
+            }
+        });
+    }
+
+    private void stageMedia(MediaEffectPort.Item item, List<MediaEffectPort.Payload> payloads) throws IOException {
+        var frozen = transactions.execute(() -> {
+            Request request = requireRequest(item.owner().requestId());
+            requireStep(item.owner());
+            if (request.cancelled()) {
+                throw new ApiException(ErrorCode.INVALID_STATE_TRANSITION);
+            }
+            return requireMediaItem(item);
+        });
+        if (payloads == null || !roles(frozen.kind()).equals(payloads.stream()
+                .map(MediaEffectPort.Payload::role).collect(java.util.stream.Collectors.toSet()))
+                || payloads.size() != roles(frozen.kind()).size()) {
+            throw new IllegalArgumentException("Incomplete media bundle");
+        }
+        var store = mediaStore();
+        var attempt = attempt(frozen);
+        List<MediaStore.FileIdentity> identities = new ArrayList<>();
+        for (var payload : payloads) {
+            MediaMetadata.require(payload, json);
+            try (var stream = payload.content().open()) {
+                identities.add(store.stage(attempt, payload.role(), stream, payload.byteLimit()));
+            }
+        }
+        transactions.run(() -> {
+            Request request = requireRequest(item.owner().requestId());
+            requireStep(item.owner());
+            var current = requireMediaItem(item);
+            if (request.cancelled() || !"PROVEN".equals(current.state()) || !media.assets(current.id()).isEmpty()) {
+                throw new ApiException(ErrorCode.INVALID_STATE_TRANSITION);
+            }
+            for (int i = 0; i < payloads.size(); i++) {
+                var payload = payloads.get(i);
+                var identity = identities.get(i);
+                media.stage(current.id(), payload.role(), item.owner().leaseEpoch(), attempt.relativePath(payload.role()),
+                        payload.mimeType(), identity.bytes(), identity.sha256(), payload.lineageJson(), payload.rightsJson());
+            }
+        });
+    }
+
+    @Override
+    public EffectResult recover(MediaEffectPort.Item item) {
+        StepOwner owner = item.owner();
+        var snapshot = transactions.execute(() -> {
+            control.shared();
+            Request request = requireRequest(owner.requestId());
+            requireStep(owner);
+            var frozen = requireMediaItem(item);
+            Operation op = frozen.operationId() == null ? null : mapper.operation(frozen.operationId());
+            return new MediaRecovery(frozen, request.cancelled(), op, media.assets(frozen.id()));
+        });
+        Operation op = snapshot.operation();
+        if (op == null) {
+            return result(Disposition.REJECTED);
+        }
+        if (op.evidenceHash() != null || (!op.dispatched() && snapshot.cancelled())) {
+            Dispatch dispatch = transactions.execute(() -> permit(owner, op.id(),
+                    new PricedRequest(op.originalCurrency(), op.estimateOriginal(), null)));
+            // Recover has no provider payload and must not acquire permission to dispatch.
+            return dispatch.replay() == null ? result(Disposition.RECOVERY_REQUIRED) : dispatch.replay();
+        }
+        if (snapshot.item().executionProofSha256() == null) {
+            return result(Disposition.RECOVERY_REQUIRED);
+        }
+        if (snapshot.cancelled()) {
+            return finalizeMedia(item, List.of(), true);
+        }
+        var assets = snapshot.assets();
+        if (!roles(snapshot.item().kind()).equals(assets.stream()
+                .map(MediaCostMapper.Asset::role).collect(java.util.stream.Collectors.toSet()))) {
+            return snapshot.item().expired() ? finalizeMedia(item, List.of(), true) : result(Disposition.RECOVERY_REQUIRED);
+        }
+        try {
+            var store = mediaStore();
+            var attempt = attempt(snapshot.item());
+            for (var asset : assets) {
+                if (!attempt.relativePath(asset.role()).equals(asset.relativePath())) {
+                    return finalizeMedia(item, List.of(), true);
+                }
+                store.commit(attempt, asset.role(), identity(asset));
+            }
+        } catch (IOException e) {
+            return snapshot.item().expired() ? finalizeMedia(item, List.of(), true) : result(Disposition.RECOVERY_REQUIRED);
+        }
+        return finalizeMedia(item, assets, false);
+    }
+
+    private EffectResult finalizeMedia(MediaEffectPort.Item item, List<MediaCostMapper.Asset> assets, boolean failed) {
+        StepOwner owner = item.owner();
+        long operationId = transactions.execute(() -> {
+            control.shared();
+            Request request = requireRequest(owner.requestId());
+            requireStep(owner);
+            var frozen = requireMediaItem(item);
+            Operation operation = mapper.operation(frozen.operationId());
+            if (operation.evidenceHash() != null) {
+                return operation.id();
+            }
+            if (!PlanningJson.matches(frozen.executionProofJson(), frozen.executionProofSha256())) {
+                throw new ApiException(ErrorCode.INVALID_STATE_TRANSITION, "Media proof integrity check failed.");
+            }
+            var proof = json.readValue(frozen.executionProofJson(), StoredMediaProof.class);
+            if (!operation.requestHash().equals(proof.requestHash()) || !mediaKey(item, frozen).equals(proof.effectKey())) {
+                throw new ApiException(ErrorCode.INVALID_STATE_TRANSITION, "Media proof owner mismatch.");
+            }
+            boolean rejected = failed || request.cancelled();
+            if (!rejected && (!assets.equals(media.assets(frozen.id()))
+                    || media.finalizeAssets(frozen.id()) != assets.size())) {
+                throw new ApiException(ErrorCode.INVALID_STATE_TRANSITION);
+            }
+            if (rejected) {
+                media.abandon(frozen.id());
+            }
+            String key = "media-result";
+            Evidence evidence = new Evidence(rejected ? Outcome.EXECUTED_FAILED : Outcome.RESULT_ADOPTED,
+                    proof.providerRequestId(), proof.currency(), new BigDecimal(proof.amount()),
+                    rejected ? null : "media:" + frozen.id(), rejected ? null : PlanningJson.encode(assets).hash(),
+                    proof.evidenceReference());
+            if (media.transition(frozen.id(), rejected ? "FAILED" : "FINALIZED", owner.leaseEpoch()) != 1) {
+                throw new ApiException(ErrorCode.INVALID_STATE_TRANSITION);
+            }
+            save(operation, key, normalize(operation, key, evidence));
+            return operation.id();
+        });
+        return transactions.execute(() -> {
+            control.shared();
+            Request request = requireRequest(owner.requestId());
+            return new EffectResult(Disposition.RECEIPT, finish(request, mapper.operation(operationId)));
+        });
+    }
+
+    @Override
+    public void apply(MediaEffectPort.Item item, long operationId) {
+        StepOwner owner = item.owner();
+        var snapshot = transactions.execute(() -> {
+            Request request = requireRequest(owner.requestId());
+            requireStep(owner);
+            var frozen = requireMediaItem(item);
+            return new MediaRecovery(frozen, request.cancelled(), mapper.operation(operationId), media.assets(frozen.id()));
+        });
+        if (snapshot.operation() == null || !Objects.equals(snapshot.item().operationId(), operationId)
+                || !"SETTLED".equals(snapshot.operation().status())) {
+            throw new ApiException(ErrorCode.INVALID_STATE_TRANSITION);
+        }
+        boolean adopt = snapshot.operation().receiptOutcome().equals(Outcome.RESULT_ADOPTED.name());
+        if (adopt && !snapshot.cancelled() && !snapshot.operation().applied()) {
+            try {
+                var store = mediaStore();
+                for (var asset : snapshot.assets()) {
+                    try (var input = store.openVerified(attempt(snapshot.item()), asset.role(), identity(asset))) {
+                        // Full verification happens on open.
+                    }
+                }
+            } catch (IOException e) {
+                throw new ApiException(ErrorCode.INVALID_STATE_TRANSITION, "Settled media files are unavailable.");
+            }
+        }
+        transactions.run(() -> {
+            Request request = requireRequest(owner.requestId());
+            requireStep(owner);
+            var frozen = requireMediaItem(item);
+            Operation fresh = mapper.operation(operationId);
+            if (fresh.applied()) {
+                return;
+            }
+            if (adopt && !request.cancelled()) {
+                if (snapshot.cancelled() || !"FINALIZED".equals(frozen.state())
+                        || !storedEvidence(fresh).resultHash().equals(PlanningJson.encode(media.assets(frozen.id())).hash())
+                        || media.transition(frozen.id(), "APPLIED", owner.leaseEpoch()) != 1) {
+                    throw new ApiException(ErrorCode.INVALID_STATE_TRANSITION);
+                }
+            } else {
+                media.transition(frozen.id(), request.cancelled() ? "CANCELLED" : "FAILED", owner.leaseEpoch());
+            }
+            markReceiptApplied(owner, operationId);
+        });
+    }
+
+    private WorkspaceMediaStore mediaStore() throws IOException {
+        if (mediaRoot.isBlank()) {
+            throw new IOException("Media storage is not configured");
+        }
+        return new WorkspaceMediaStore(java.nio.file.Path.of(mediaRoot));
+    }
+
+    private static String mediaKey(MediaEffectPort.Item item, MediaCostMapper.Item frozen) {
+        return EffectKey.forInput(item.owner().requestId(), frozen.kind(), frozen.targetKey(), frozen.generation());
+    }
+
+    private static MediaStore.Attempt attempt(MediaCostMapper.Item item) {
+        return new MediaStore.Attempt(item.channelId(), item.contentId(), item.runId(), item.id(), item.attemptNo());
+    }
+
+    private static MediaStore.FileIdentity identity(MediaCostMapper.Asset asset) {
+        return new MediaStore.FileIdentity(asset.byteLength(), asset.sha256());
+    }
+
+    private static java.util.Set<MediaStore.Role> roles(ProductionStage stage) {
+        return stage == ProductionStage.IMAGE
+                ? java.util.Set.of(MediaStore.Role.SOURCE_IMAGE, MediaStore.Role.NORMALIZED_IMAGE)
+                : java.util.Set.of(MediaStore.Role.SOURCE_AUDIO, MediaStore.Role.PCM_AUDIO, MediaStore.Role.ALIGNMENT);
+    }
+
+    private static String pricedHash(String requestHash, PricedRequest priced) {
+        return CanonicalJson.sha256(Map.of("requestHash", requestHash, "currency", priced.currency(),
+                "maximumAmount", priced.maximumAmount().toPlainString(),
+                "fakeScenario", Objects.toString(priced.fakeScenario(), "SUCCESS")));
     }
 
     private void save(Operation operation, String key, Evidence evidence) {

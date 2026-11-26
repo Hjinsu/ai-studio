@@ -60,6 +60,11 @@ import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.util.AopTestUtils;
 import org.springframework.web.bind.annotation.GetMapping;
 
+import com.aistudio.production.contract.MediaAssets;
+import com.aistudio.production.contract.MediaEffectPort;
+import com.aistudio.production.contract.MediaProcessRunner;
+import com.aistudio.production.contract.MediaStageWork;
+import com.aistudio.production.contract.MediaStore.Role;
 import com.aistudio.production.contract.PlanningExecutionPort;
 import com.aistudio.production.contract.PlanningJson;
 import com.aistudio.production.contract.ProductionPlanning.ScenePlan;
@@ -117,12 +122,18 @@ import tools.jackson.databind.json.JsonMapper;
         "logging.level.org.springframework.security.web.csrf.CsrfFilter=DEBUG",
         "spring.web.resources.static-locations=file:../frontend/dist/",
         "ai-studio.production.executor.recovery-recheck=PT1H",
-        "ai-studio.production.planning-enabled=true" })
+        "ai-studio.production.planning-enabled=true",
+        "ai-studio.production.media.enabled=true",
+        "ai-studio.production.media.fixture-catalog=it-fixture-1",
+        "ai-studio.production.media.voice-id=it-voice" })
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @Import({PlanningExecutionIT.Ports.class, PlanningExecutionIT.FrontendRoutes.class})
 class PlanningExecutionIT {
+    private static final java.util.concurrent.atomic.AtomicBoolean failMediaWrite = new java.util.concurrent.atomic.AtomicBoolean();
+    private static final java.util.concurrent.atomic.AtomicBoolean mediaProcessReady = new java.util.concurrent.atomic.AtomicBoolean(true);
+    private static final AtomicInteger mediaDispatches = new AtomicInteger();
     private static final String PATH = "/api/v1/production-requests";
     private static final TestDatabases.TestDatabase DB = TestDatabases.create();
     private static final String APP_USER = "it_planning_" + ProcessHandle.current().pid();
@@ -142,10 +153,112 @@ class PlanningExecutionIT {
         registry.add("spring.datasource.password", () -> APP_PASSWORD);
         registry.add("spring.flyway.user", () -> DB.server().user());
         registry.add("spring.flyway.password", () -> DB.server().password());
+        String mediaRoot = isolatedMediaRoot();
+        registry.add("ai-studio.production.media.storage-root", () -> mediaRoot);
+    }
+
+    private static String isolatedMediaRoot() {
+            try {
+                return java.nio.file.Files.createTempDirectory("ai-studio-it-media-").toRealPath().toString();
+            } catch (IOException ex) {
+                throw new UncheckedIOException(ex);
+            }
     }
 
     @TestConfiguration
     static class Ports {
+        @Bean
+        @Primary
+        MediaProcessRunner testMediaRunner() {
+            return new MediaProcessRunner() {
+                @Override
+                public boolean ready() { return mediaProcessReady.get(); }
+
+                @Override
+                public Path prepare(Scratch scratch) { throw new UnsupportedOperationException(); }
+
+                @Override
+                public Result run(Command command, java.util.function.BooleanSupplier cancelled) {
+                    throw new UnsupportedOperationException();
+                }
+            };
+        }
+
+        @Bean
+        MediaStageWork testMediaWork(MediaEffectPort costs, MediaAssets assets) {
+            return new MediaStageWork() {
+                @Override
+                public Result execute(Context context) {
+                    return process(context);
+                }
+
+                @Override
+                public Result recover(Context context) {
+                    return process(context);
+                }
+
+                private Result process(Context context) {
+                    try {
+                        if (context.stage() == ProductionStage.IMAGE || context.stage() == ProductionStage.TTS) {
+                            for (var frozen : context.items()) {
+                                if ("APPLIED".equals(frozen.state())) {
+                                    continue;
+                                }
+                                var item = new MediaEffectPort.Item(context.owner(), frozen.id());
+                                var result = context.recoveryOnly() ? costs.recover(item)
+                                        : costs.execute(item, BigDecimal.ONE, id -> {
+                                            mediaDispatches.incrementAndGet();
+                                            return new MediaEffectPort.ProviderResult(
+                                                new MediaEffectPort.ExecutionProof("fixture-" + id, "result-" + id,
+                                                        BigDecimal.ONE, "KRW", "Isolated fixture proof"),
+                                                payloads(context.stage()));
+                                        });
+                                if (result.disposition() != ProductionCostPort.Disposition.RECEIPT) {
+                                    return new Result(result.disposition() == ProductionCostPort.Disposition.REJECTED
+                                            ? Outcome.BLOCKED : Outcome.RECOVERY_REQUIRED, "FIXTURE_EFFECT");
+                                }
+                                costs.apply(item, result.receipt().operationId());
+                                if (result.receipt().outcome() != ProductionCostPort.Outcome.RESULT_ADOPTED) {
+                                    return new Result(Outcome.BLOCKED, "FIXTURE_EFFECT");
+                                }
+                            }
+                        } else {
+                            assets.publish(context, payloads(context.stage()));
+                        }
+                        return new Result(Outcome.APPLIED, null);
+                    } catch (IOException ex) {
+                        throw new UncheckedIOException(ex);
+                    }
+                }
+            };
+        }
+
+        private static List<MediaEffectPort.Payload> payloads(ProductionStage stage) {
+            return switch (stage) {
+                case IMAGE -> List.of(payload(Role.SOURCE_IMAGE, "image/png"),
+                        payload(Role.NORMALIZED_IMAGE, "image/png"));
+                case TTS -> List.of(payload(Role.SOURCE_AUDIO, "audio/wav"), payload(Role.PCM_AUDIO, "audio/wav"),
+                        payload(Role.ALIGNMENT, "application/json"));
+                case SUBTITLE -> List.of(payload(Role.ASS, "text/plain"), payload(Role.SRT, "text/plain"));
+                case RENDER -> List.of(payload(Role.MP4, "video/mp4"));
+                case METADATA -> List.of(payload(Role.MEDIA_METADATA, "application/json"));
+                case QC -> List.of(payload(Role.QC_REPORT, "application/json"), payload(Role.MANIFEST, "application/json"));
+                default -> throw new IllegalArgumentException("Unexpected media stage");
+            };
+        }
+
+        private static MediaEffectPort.Payload payload(Role role, String type) {
+            return new MediaEffectPort.Payload(role, type, 1024, "{}", """
+                    {"source":"fixture","provider":"FAKE","license":"test-only","evidenceRef":"fixture-catalog",
+                    "commercialUse":true,"publish":true,"redistribution":false,"conditions":"",
+                    "verifiedBy":"itest","verifiedAt":"2026-11-27T00:00:00Z"}
+                    """, () -> {
+                        if (failMediaWrite.get()) {
+                            throw new IOException("Fixture lost after the provider response");
+                        }
+                        return new java.io.ByteArrayInputStream("fixture bytes".getBytes(StandardCharsets.UTF_8));
+                    });
+        }
         @Bean
         @Primary
         ScriptedDiscoveryProvider scriptedDiscoveryProvider() {
@@ -209,6 +322,7 @@ class PlanningExecutionIT {
     void isolate() {
         newChannel();
         discovery.reset();
+        mediaDispatches.set(0);
         jdbc.update("""
                 UPDATE production_request SET status = 'FAILED', lease_owner = NULL, lease_until = NULL
                 WHERE status IN ('QUEUED', 'RUNNING', 'RECOVERY_REQUIRED')
@@ -854,6 +968,83 @@ class PlanningExecutionIT {
     private static ScenePlan invalidSceneStructure() {
         List rawDrafts = List.of("untyped draft");
         return new ScenePlan("diagram", rawDrafts);
+    }
+
+    @Test
+    void persistedMediaProofSettlesOnceWhenFileWriteFailsAndCancellationRecovers() throws Exception {
+        discover(VENUS);
+        failMediaWrite.set(true);
+        try {
+            long id = create("SHORTS", ",\"candidateCount\":5,\"mediaEnabled\":true");
+            drain();
+            assertStatus(id, "RECOVERY_REQUIRED");
+            var proof = jdbc.queryForMap("""
+                    SELECT i.operation_id, i.execution_proof_sha256, o.receipt_event_id
+                    FROM production_media_item i JOIN provider_operation o ON o.id = i.operation_id
+                    WHERE i.production_request_id = ? AND i.kind = 'IMAGE'
+                    """, id);
+            assertThat(proof.get("execution_proof_sha256")).isNotNull();
+            assertThat(proof.get("receipt_event_id")).isNull();
+            long operationId = ((Number) proof.get("operation_id")).longValue();
+
+            // Simulate application restart with render preparation unavailable during cancel/recovery.
+            mediaProcessReady.set(false);
+            jdbc.update("UPDATE production_request SET cancel_requested_at = UTC_TIMESTAMP(6) WHERE id = ?", id);
+            makeDue(id);
+            drain();
+            assertStatus(id, "CANCELLED");
+            assertThat(mediaDispatches).hasValue(1);
+            assertThat(jdbc.queryForMap("""
+                    SELECT receipt_outcome, applied_at IS NOT NULL AS applied FROM provider_operation WHERE id = ?
+                    """, operationId)).containsEntry("receipt_outcome", "EXECUTED_FAILED");
+            assertThat(jdbc.queryForObject("""
+                    SELECT COUNT(*) FROM provider_operation WHERE id = ? AND applied_at IS NOT NULL
+                    """, Integer.class, operationId)).isEqualTo(1);
+            assertThat(jdbc.queryForObject("""
+                    SELECT COUNT(*) FROM cost_log WHERE event_key = CONCAT('production:settle:', ?)
+                    """, Integer.class, operationId)).isEqualTo(1);
+        } finally {
+            failMediaWrite.set(false);
+            mediaProcessReady.set(true);
+        }
+    }
+
+    @Test
+    void optedInMediaFreezesCharacterlessProfileAndStreamsFinalAsset() throws Exception {
+        discover(NEUTRON);
+        long id = create("SHORTS", ",\"candidateCount\":5,\"mediaEnabled\":true");
+        var profile = jdbc.queryForMap("""
+                SELECT input_json, input_sha256 FROM production_media_item
+                WHERE production_request_id = ? AND kind = 'PROFILE'
+                """, id);
+        String snapshot = profile.get("input_json").toString();
+        assertThat(PlanningJson.matches(snapshot, profile.get("input_sha256").toString())).isTrue();
+        assertThat(json.readTree(snapshot).get("characterProfiles").size()).isZero();
+        drain();
+        assertStatus(id, "SUCCEEDED");
+        assertThat(jdbc.queryForObject("""
+                SELECT COUNT(*) FROM production_media_item
+                WHERE production_request_id = ? AND kind IN ('IMAGE', 'TTS')
+                  AND operation_id IS NOT NULL AND execution_proof_sha256 IS NOT NULL AND state = 'APPLIED'
+                """, Integer.class, id)).isGreaterThan(2);
+        long video = jdbc.queryForObject("""
+                SELECT a.id FROM production_media_asset a JOIN production_media_item i ON i.id = a.item_id
+                WHERE i.production_request_id = ? AND a.role = 'MP4' AND a.state = 'FINAL'
+                """, Long.class, id);
+        String path = PATH + "/" + id + "/media/" + video;
+        mvc.perform(get(path).with(ApiTestSupport.as(admin)).header("Range", "bytes=0-6"))
+                .andExpect(status().isPartialContent())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header()
+                        .string("Content-Range", "bytes 0-6/13"))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content().string("fixture"));
+        mvc.perform(get(path).with(ApiTestSupport.as(admin)).header("Range", "bytes=99-"))
+                .andExpect(status().isRequestedRangeNotSatisfiable());
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.head(path)
+                        .with(ApiTestSupport.as(admin)).header("Range", "bytes=0-2"))
+                .andExpect(status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header()
+                        .longValue("Content-Length", 13));
+        mvc.perform(get(path)).andExpect(status().isUnauthorized());
     }
 
     @Test

@@ -29,18 +29,19 @@ class MigrationConventionTest {
     private static final Pattern FILE_NAME = Pattern.compile("V\\d+__[a-z0-9_]+\\.sql");
 
     /** 적용된 migration은 수정 금지. 새 migration은 여기에 추가하고, 기존 값은 바꾸지 않는다. */
-    private static final Map<String, String> APPLIED_SHA256 = Map.of(
-            "V1__initial_baseline.sql", "ad01a05c036f7d63f690a1197e83706a67c83b0c0dd6652744cb481cbf8dbc79",
-            "V2__fix_database_collation.sql", "7e65c9546f7333d41c6611d5e9eccca75e7d936cc0572ac2d4796c687e977151",
-            "V3__create_admin_and_audit.sql", "4224b08f5e0149829b27e1dcef51fd7b7e3f33faa6720a975834eed23b1b6384",
-            "V4__create_channel.sql", "06d9de8f625d4575f9bc278263cd70a336535305a018bc3e977dcfd2e47d98ec",
-            "V5__create_budget_and_ledger.sql", "a5d798c38c636d56d1974d8eb4494db46e9fcd8916ebd65d8ac3de325aa9ea5d",
+    private static final Map<String, String> APPLIED_SHA256 = Map.ofEntries(
+            Map.entry("V1__initial_baseline.sql", "ad01a05c036f7d63f690a1197e83706a67c83b0c0dd6652744cb481cbf8dbc79"),
+            Map.entry("V2__fix_database_collation.sql", "7e65c9546f7333d41c6611d5e9eccca75e7d936cc0572ac2d4796c687e977151"),
+            Map.entry("V3__create_admin_and_audit.sql", "4224b08f5e0149829b27e1dcef51fd7b7e3f33faa6720a975834eed23b1b6384"),
+            Map.entry("V4__create_channel.sql", "06d9de8f625d4575f9bc278263cd70a336535305a018bc3e977dcfd2e47d98ec"),
+            Map.entry("V5__create_budget_and_ledger.sql", "a5d798c38c636d56d1974d8eb4494db46e9fcd8916ebd65d8ac3de325aa9ea5d"),
             // V6: T03-B-FIX(RV-B-01/03) 미배포 보완, 사용자 예외 승인(2026-11-25). 이전 값 4fa717cc…0c9b(a2500a8)
-            "V6__create_content_domain.sql", "304900fda20821c83a9f3f3a56c9568f4215544158020569bd6f36e9d2412588",
-            "V9__create_production_contract.sql", "ad1a8974d010afe54d5215174e1cc9ca8661a0ee30817e52ed122913afbc9957",
-            "V10__create_production_discovery.sql", "83878c9553675f259e14421462f183f7bfb99bcdcfe3d3f4508785fe85debccc",
-            "V11__preserve_discovery_rechecks.sql", "f124242b3a3ae274528a811a015b375a2f202a9e45d59440fb17e07f9f8a3e32",
-            "V12__create_production_stage_result.sql", "ddb685a9df80db7adc38d5e1d65eac2d3b3385594b659a37ebaf7555787ec7fc");
+            Map.entry("V6__create_content_domain.sql", "304900fda20821c83a9f3f3a56c9568f4215544158020569bd6f36e9d2412588"),
+            Map.entry("V9__create_production_contract.sql", "ad1a8974d010afe54d5215174e1cc9ca8661a0ee30817e52ed122913afbc9957"),
+            Map.entry("V10__create_production_discovery.sql", "83878c9553675f259e14421462f183f7bfb99bcdcfe3d3f4508785fe85debccc"),
+            Map.entry("V11__preserve_discovery_rechecks.sql", "f124242b3a3ae274528a811a015b375a2f202a9e45d59440fb17e07f9f8a3e32"),
+            Map.entry("V12__create_production_stage_result.sql", "ddb685a9df80db7adc38d5e1d65eac2d3b3385594b659a37ebaf7555787ec7fc"),
+            Map.entry("V13__create_production_media.sql", "ef17f6be6104c5a9f46b37e98d696e45c87ac3cf456b740eb653bbe38fdf770c"));
 
     /** V1은 ADR-014 이전 기준선이므로 collation 규칙 검사에서 제외한다 (수정 금지). */
     private static final List<String> COLLATION_RULE_EXEMPT = List.of("V1__initial_baseline.sql");
@@ -88,7 +89,7 @@ class MigrationConventionTest {
                     .filter(statement -> statement.contains("charset") || statement.contains("character set"))
                     .forEach(statement -> assertThat(statement)
                             .as("%s: CHARSET 지정 시 COLLATE utf8mb4_unicode_ci 명시", name)
-                            .containsPattern("collate\\s*=?\\s*utf8mb4_unicode_ci"));
+                            .containsPattern("collate\\s*=?\\s*(utf8mb4_unicode_ci|ascii_bin)"));
             assertThat(sql).as("%s: uca1400 collation 사용 금지", name).doesNotContain("uca1400");
         });
     }
@@ -146,6 +147,11 @@ class MigrationConventionTest {
                                 .as("%s: utf8mb4_bin 허용 목록에 없는 컬럼 %s", name, qualified)
                                 .contains(qualified);
                         binaryColumnsFound.add(qualified);
+                    } else if (collation.equals("ascii_bin")) {
+                        assertThat(qualified).isIn("production_media_item.target_key",
+                                "production_media_item.input_sha256", "production_media_item.execution_proof_sha256",
+                                "production_media_asset.role", "production_media_asset.relative_path",
+                                "production_media_asset.sha256", "production_media_asset.final_role");
                     } else {
                         assertThat(collation).as("%s: %s collation", name, qualified).isEqualTo("utf8mb4_unicode_ci");
                     }

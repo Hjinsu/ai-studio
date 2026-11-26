@@ -53,8 +53,8 @@ class DatabaseUpgradeIT {
                 request);
         var latest = Flyway.configure().dataSource(old.dataSource()).locations("classpath:db/migration")
                 .cleanDisabled(true).load();
-        assertThat(latest.migrate().migrationsExecuted).isEqualTo(1);
-        assertThat(latest.info().current().getVersion().getVersion()).isEqualTo("12");
+        assertThat(latest.migrate().migrationsExecuted).isEqualTo(2);
+        assertThat(latest.info().current().getVersion().getVersion()).isEqualTo("13");
         assertThat(jdbc.queryForMap("SELECT * FROM production_request WHERE id = ?", request)).isEqualTo(requestBefore);
         assertThat(jdbc.queryForList("SELECT * FROM production_step WHERE production_request_id = ?", request))
                 .isEqualTo(stepsBefore);
@@ -101,7 +101,7 @@ class DatabaseUpgradeIT {
         DatabaseGuardTestAccess.guardedMigrate(flyway(null), DB.name());
         List<String> versions = jdbc.queryForList(
                 "SELECT version FROM flyway_schema_history WHERE success = 1 ORDER BY installed_rank", String.class);
-        assertThat(versions).containsExactly("1", "2", "3", "4", "5", "6", "9", "10", "11", "12");
+        assertThat(versions).containsExactly("1", "2", "3", "4", "5", "6", "9", "10", "11", "12", "13");
         assertThat(databaseCollation(jdbc)).isEqualTo("utf8mb4_unicode_ci");
         assertThat(flyway(null).info().pending()).isEmpty();
         // V6(T03-B): 기존 channel_config에 소유권 대체 키 추가, 도메인 테이블 생성. T02 데이터 보존은 ContentUpgradeIT

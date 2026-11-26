@@ -50,7 +50,7 @@ class DatabaseBootstrapIT {
     void allMigrationsAreAppliedOnCleanDatabase() {
         List<String> versions = jdbcTemplate.queryForList(
                 "SELECT version FROM flyway_schema_history WHERE success = 1 ORDER BY installed_rank", String.class);
-        assertThat(versions).containsExactly("1", "2", "3", "4", "5", "6", "9", "10", "11", "12");
+        assertThat(versions).containsExactly("1", "2", "3", "4", "5", "6", "9", "10", "11", "12", "13");
         assertThat(flyway.info().pending()).isEmpty();
     }
 
@@ -68,7 +68,7 @@ class DatabaseBootstrapIT {
                 "budget_control", "exchange_rate", "budget_policy", "budget_policy_revision", "budget_bucket",
                 "budget_reservation", "budget_reservation_bucket", "cost_log");
         // T03-B(V6) 콘텐츠 도메인. 큐 실행·비용 테이블은 V7 이후(C/D) 범위라 아직 없다
-        assertThat(tables).contains("topic", "content", "content_revision", "content_run", "queue_command_log", "production_request", "production_step", "provider_operation")
+        assertThat(tables).contains("topic", "content", "content_revision", "content_run", "queue_command_log", "production_request", "production_step", "provider_operation", "production_media_item", "production_media_asset")
                 .doesNotContain("automation_job", "job_attempt", "queue_control", "job_operation");
         List<String> binaryColumns = jdbcTemplate.queryForList(
                 "SELECT CONCAT(table_name, '.', column_name) FROM information_schema.columns "
@@ -84,7 +84,7 @@ class DatabaseBootstrapIT {
                 "topic.normalized_hash");
         Integer otherCollations = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() "
-                        + "AND collation_name NOT IN ('utf8mb4_unicode_ci', 'utf8mb4_bin')", Integer.class);
+                        + "AND collation_name NOT IN ('utf8mb4_unicode_ci', 'utf8mb4_bin', 'ascii_bin')", Integer.class);
         assertThat(otherCollations).isZero();
         assertThat(jdbcTemplate.queryForObject("SELECT spending_enabled FROM budget_control WHERE id = 1", Boolean.class))
                 .isFalse();

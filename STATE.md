@@ -16,6 +16,15 @@
 ## 인수인계 기록
 작업 ID / 상태 / 변경 파일 / 테스트 명령 및 실제 결과 / 미해결 문제 / 다음 작업 / 필요 환경변수. 커밋 해시는 생성된 경우만 기록.
 
+### V2-04-COMMON — 공통 계약 구현 (2026-11-27 KST, IMPLEMENTED)
+
+- 사용자 착수 승인 기준 `715893fa47a955be399492ddc362b169b528dae3`, 설계 승인 `18c9b9484d6bc6637252732adb0063e7808ca960`, Codex `v2/04-common` / `../ai-studio-v2-04-common`. 공통 검증 커밋은 `origin/v2/04-common`에서 확인한다.
+- V13 및 격리 스키마 테스트, 캐릭터 없는 PROFILE snapshot, 미디어 port·저장·실행/정산·복구, Windows Job Object, HTTP Range 및 OpenAPI 생성 타입을 추가했다. 주요 경로는 `backend/src/main/java/com/aistudio/production/{api,contract,cost,execution,media,planning}`, 신규 migration 및 권한 템플릿, `docs/api/openapi.yaml`, `frontend/src/api/generated/schema.d.ts`, 대응 테스트다. 미디어 기능은 기본 비활성이다.
+- `gradlew.bat :backend:test :backend:integrationTest :backend:bootJar` 및 `AI_STUDIO_REVIEW_EDGE=true`: 단위 296건, 격리 MariaDB 11.8 통합 257건, 실패·건너뜀 0. V13 신규·기존 스키마, 운영 최소권한, 기본 11단계, 캐릭터 없는 옵트인, FAKE 파일 저장 실패 뒤 렌더 준비 불가 상태의 한 번 정산, HTTP 206/416/HEAD/401, 실제 Edge 회귀를 확인했다. Windows Job Object의 생성·출력, timeout 종료, JVM 강제 종료 후 자식 종료를 확인했다.
+- 프런트 lint/typecheck/Vitest 97건/build, Edge 모의 E2E 14건, OpenAPI lint/생성 타입 일치 및 `git diff --cached --check`·Gitleaks 통과. OpenAPI의 기존 CSRF 4XX·미사용 PageMeta 경고 2건 유지. V13은 격리 테스트 DB에만 적용했다. 기존 Migration 변경, 사용자 DB 접속, 실제 유료 호출, 게시, 통합 병합 없음.
+- 다음 worktree는 동일 공통 SHA의 Codex `v2/04-safety` / `../ai-studio-v2-04-safety`, Claude `v2/04-product` / `../ai-studio-v2-04-product`다. Codex는 Linux 보호 검증 및 안전 회귀를 이어가고, Claude는 [착수 지시서](docs/v2/V2-04_CLAUDE_HANDOFF.md)에 따라 실제 렌더·제품 QC·미리보기를 구현한다. Linux 미디어 실행은 안전 차단 상태다. 권리 확인된 실제 낭독·글꼴·FFmpeg로 서로 다른 두 편을 만드는 제품 인수와 독립 리뷰는 후속이다.
+- 최신 제품 결정에 따라 고정 캐릭터 모델링·복수 화자·캐릭터 레퍼런스 생성·일관성 검수·Blender는 [V2-05 BACKLOG](docs/v2/V2-05_IFNOVA_CONTENT.md)에 기록했다.
+
 ### V2-03 — 최종 승인 및 종료 (2026-11-27 KST, DONE)
 
 - 사용자가 최종 집중 리뷰 APPROVE를 수용하고 [PR #6](https://github.com/Hjinsu/ai-studio/pull/6) 병합을 승인했다. 승인 SHA `42cbbcfd2762306e3cd6ec7dced8c6b864325cda`의 [CI](https://github.com/Hjinsu/ai-studio/actions/runs/45830743931) 7/7과 병합 가능 상태를 확인했다. Draft 해제 후 `v2/integration`에 `0aa11d0ea2eec7333cb901bc0ac140a8b414d82d`로 병합했고 Git 트리가 승인 SHA와 일치한다.

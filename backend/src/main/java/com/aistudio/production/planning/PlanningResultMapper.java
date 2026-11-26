@@ -63,7 +63,7 @@ public interface PlanningResultMapper {
             JOIN content_run r ON r.id = p.run_id AND r.content_id = p.content_id
             JOIN content_revision v ON v.id = r.content_revision_id AND v.content_id = r.content_id
             JOIN channel_config c ON c.id = p.channel_config_id AND c.channel_id = p.channel_id
-            WHERE p.id = #{requestId} AND p.pipeline_version = 'v2-planning-1'
+            WHERE p.id = #{requestId} AND p.pipeline_version IN ('v2-planning-1', 'v2-media-1')
             """)
     Snapshot snapshot(long requestId);
 

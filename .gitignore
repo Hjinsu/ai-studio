@@ -6,6 +6,7 @@
 **/dist/
 **/.gradle/
 **/storage/
+!/backend/src/main/java/com/aistudio/production/media/storage/
 **/secrets/
 *.log
 *.mp4

@@ -1214,6 +1214,7 @@ paths:
                 contentType: { type: string, enum: [SHORTS, LONGFORM] }
                 selectionMode: { type: string, enum: [AUTO, MANUAL], default: AUTO, description: 'SHORTS 소재 설정' }
                 candidateCount: { type: integer, minimum: 5, maximum: 10, default: 8, description: 'SHORTS 소재 후보 수' }
+                mediaEnabled: { type: boolean, default: false, description: Explicit SHORTS media opt-in }
       responses:
         '200':
           description: 기존 요청 재생
@@ -1272,6 +1273,90 @@ paths:
       tags: [Production]
       responses:
         '200': { $ref: '#/components/responses/ProductionDiscoveryDetail' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/production-requests/{id}/media:
+    parameters:
+      - $ref: '#/components/parameters/ProductionRequestId'
+    get:
+      operationId: listProductionMedia
+      summary: List published-to-request media assets and technical QC status
+      tags: [Production]
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Media assets available to the request owner
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductionMedia'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/production-requests/{id}/media/{assetId}:
+    parameters:
+      - $ref: '#/components/parameters/ProductionRequestId'
+      - in: path
+        name: assetId
+        required: true
+        schema:
+          type: string
+          pattern: '^[1-9][0-9]{0,18}$'
+      - in: query
+        name: download
+        schema: { type: boolean, default: false }
+    get:
+      operationId: getProductionMediaAsset
+      summary: Stream an owned media asset or a single byte range
+      tags: [Production]
+      security:
+        - sessionCookie: []
+      parameters:
+        - in: header
+          name: Range
+          schema: { type: string }
+        - in: header
+          name: If-Range
+          description: Presence causes a full response
+          schema: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/ProductionMediaBinary' }
+        '206':
+          description: Single range of the media asset
+          headers:
+            Content-Range:
+              schema: { type: string }
+            Accept-Ranges:
+              schema: { type: string, enum: [bytes] }
+          content:
+            '*/*':
+              schema: { type: string, format: binary }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '416':
+          description: The byte range cannot be satisfied
+          headers:
+            Content-Range:
+              schema: { type: string }
+    head:
+      operationId: headProductionMediaAsset
+      summary: Read metadata headers of an owned media asset
+      tags: [Production]
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Media metadata without a body
+          headers:
+            Content-Length:
+              schema: { type: integer, format: int64 }
+            Content-Type:
+              schema: { type: string }
+            Accept-Ranges:
+              schema: { type: string, enum: [bytes] }
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -1397,6 +1482,16 @@ components:
       schema: { $ref: '#/components/schemas/IdempotencyKey' }
 
   responses:
+    ProductionMediaBinary:
+      description: Complete media asset
+      headers:
+        Content-Length:
+          schema: { type: integer, format: int64 }
+        Accept-Ranges:
+          schema: { type: string, enum: [bytes] }
+      content:
+        '*/*':
+          schema: { type: string, format: binary }
     ProductionDiscoveryDetail:
       description: 현재 소재 발굴 및 선정 상태
       content:
@@ -1462,6 +1557,29 @@ components:
           schema: { $ref: '#/components/schemas/BudgetPolicy' }
 
   schemas:
+    ProductionMedia:
+      type: object
+      required: [mode, qc, assets]
+      properties:
+        mode: { type: string, enum: [FAKE] }
+        qc:
+          type: object
+          required: [status]
+          properties:
+            status: { type: string }
+        assets:
+          type: array
+          items:
+            type: object
+            required: [id, stage, role, contentType, byteLength, sha256]
+            properties:
+              id: { type: string, pattern: '^[1-9][0-9]{0,18}$' }
+              stage: { type: string, enum: [IMAGE, TTS, SUBTITLE, RENDER, QC] }
+              role: { type: string, enum: [NORMALIZED_IMAGE, PCM_AUDIO, SRT, MP4, QC_REPORT, MANIFEST] }
+              contentType: { type: string }
+              byteLength: { type: string, pattern: '^[1-9][0-9]*$' }
+              sha256: { type: string, pattern: '^[0-9a-f]{64}$' }
+
     ProductionPlanning:
       type: object
       required: [executionMode, results]

@@ -213,3 +213,9 @@ ChatGPT APPROVE WITH MINOR FIXES 및 사용자 승인. V10의 `production_discov
 ## V2-03 — 최종 승인 및 v2/integration 병합
 
 2026-11-27 KST · 사용자가 최종 집중 리뷰 APPROVE를 수용하고 [PR #6](https://github.com/Hjinsu/ai-studio/pull/6) 병합을 승인했다. 승인 SHA `42cbbcfd2762306e3cd6ec7dced8c6b864325cda`의 [CI](https://github.com/Hjinsu/ai-studio/actions/runs/45830743931) 7/7을 확인했다. 병합 커밋 `0aa11d0ea2eec7333cb901bc0ac140a8b414d82d`의 Git 트리가 승인 SHA와 일치한다. V2-03은 DONE이다. 공급자·소재 발굴 문서 병합은 제안의 기록이며 실제 연동과 유료 호출은 별도 승인 대상이다.
+
+## V2-04 공통 계약 착수 및 고정 캐릭터 보류 (2026-11-27 KST)
+
+사용자는 승인 설계 `18c9b9484d6bc6637252732adb0063e7808ca960`에 따라 `715893fa47a955be399492ddc362b169b528dae3`에서 V2-04 공통 계약 구현, 검증, 공통 SHA 커밋·푸시 및 두 후속 브랜치 분기를 승인했다. V13에서만 신규 미디어 DB 계약을 적용한다.
+
+고정 마스코트 모델링, 복수 화자, 레퍼런스 기반 생성, 캐릭터 일관성 검수와 Blender는 BACKLOG다. 캐릭터 프로필이 비어도 제작 가능해야 하며 스토리텔링·농담·상황 코미디·카메라·자막 강조·음악·효과음은 유지한다. [V2-05 요구사항](docs/v2/V2-05_IFNOVA_CONTENT.md)

@@ -18,7 +18,10 @@ import com.aistudio.production.contract.ProductionDiscovery;
 import com.aistudio.production.contract.ProductionDiscovery.EvaluatedCandidate;
 import com.aistudio.production.contract.ProductionDiscovery.Mode;
 import com.aistudio.production.contract.ProductionStage;
+import com.aistudio.production.contract.MediaProfile;
 import com.aistudio.production.contract.PlanningJson;
+import com.aistudio.production.media.MediaAvailability;
+import com.aistudio.production.media.storage.MediaProfileMapper;
 import com.aistudio.production.contract.ProductionPlanning;
 import com.aistudio.production.planning.PlanningResultMapper;
 import com.aistudio.production.planning.PlanningAvailability;
@@ -47,11 +50,13 @@ class ProductionRequestService {
     private final LockRetryingTransactions transactions;
     private final PlanningResultMapper planningResults;
     private final String shortsPipeline;
+    private final MediaAvailability media;
+    private final MediaProfileMapper profiles;
 
     ProductionRequestService(ProductionRequestMapper mapper, ChannelService channels,
             BudgetControlLock control, LockRetryingTransactions transactions, ProductionDiscoveryMapper discovery,
             JsonMapper json, PlanningResultMapper planningResults,
-            PlanningAvailability planningAvailability) {
+            PlanningAvailability planningAvailability, MediaAvailability media, MediaProfileMapper profiles) {
         this.mapper = mapper;
         this.channels = channels;
         this.control = control;
@@ -59,6 +64,8 @@ class ProductionRequestService {
         this.discovery = discovery;
         this.json = json;
         this.planningResults = planningResults;
+        this.media = media;
+        this.profiles = profiles;
         this.shortsPipeline = planningAvailability.ready() ? ProductionPlanning.PIPELINE : ProductionDiscovery.PIPELINE;
     }
 
@@ -82,21 +89,30 @@ class ProductionRequestService {
         return new ProductionRequestController.Planning("FAKE", results);
     }
 
-    Created create(long actorId, long channelId, String type, String key, Mode selectionMode, Integer candidateCount) {
+    Created create(long actorId, long channelId, String type, String key, Mode selectionMode, Integer candidateCount,
+            boolean mediaEnabled) {
         Mode mode = selectionMode == null ? Mode.AUTO : selectionMode;
         int count = candidateCount == null ? ProductionDiscovery.DEFAULT_CANDIDATES : candidateCount;
         boolean isDefault = mode == Mode.AUTO && count == ProductionDiscovery.DEFAULT_CANDIDATES;
         boolean discoveryEnabled = "SHORTS".equals(type);
+        if (mediaEnabled && !discoveryEnabled) {
+            throw ApiException.validation("mediaEnabled", "Media is available for SHORTS only.");
+        }
         if (!discoveryEnabled && !isDefault) {
             throw ApiException.validation("selectionMode", "Discovery options are available for SHORTS only.");
         }
         String hash = fingerprint(actorId + ":" + channelId + ":" + type
-                + (isDefault ? "" : ":discovery:" + mode.name() + ":" + count));
+                + (isDefault ? "" : ":discovery:" + mode.name() + ":" + count)
+                + (mediaEnabled ? ":media:" + MediaProfile.PIPELINE : ""));
+        boolean mediaReady = !mediaEnabled || media.ready();
         try {
             return transactions.execute(() -> {
                 ProductionRequestMapper.Request previous = mapper.byKey(key);
                 if (previous != null) {
                     return replay(previous, hash);
+                }
+                if (!mediaReady) {
+                    throw new ApiException(ErrorCode.PREREQUISITE_NOT_MET, "Media production is not ready.");
                 }
                 control.shared();
                 Channel channel = channels.lockShared(channelId);
@@ -108,14 +124,19 @@ class ProductionRequestService {
                     throw new ApiException(ErrorCode.PREREQUISITE_NOT_MET, "An active video budget is required.");
                 }
                 long configId = channels.latestConfigInTransaction(channelId).id();
-                mapper.insert(channelId, configId, actorId, type,
-                        discoveryEnabled ? shortsPipeline : "v2-fixed-1", key, hash, limit);
+                String pipeline = mediaEnabled ? MediaProfile.PIPELINE
+                        : discoveryEnabled ? shortsPipeline : "v2-fixed-1";
+                mapper.insert(channelId, configId, actorId, type, pipeline, key, hash, limit);
                 ProductionRequestMapper.Request request = mapper.byKey(key);
                 for (ProductionStage stage : ProductionStage.values()) {
                     mapper.addStep(request.id(), stage);
                 }
                 if (discoveryEnabled) {
                     discovery.initialize(request.id(), mode, count, channel.language());
+                }
+                if (mediaEnabled && profiles.insert(request.id(),
+                        PlanningJson.encode(media.snapshot(configId, channel.language()))) != 1) {
+                    throw new IllegalStateException("Cannot freeze the request media profile");
                 }
                 return new Created(request, false);
             });

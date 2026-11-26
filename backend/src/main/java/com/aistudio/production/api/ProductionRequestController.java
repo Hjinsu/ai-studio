@@ -34,7 +34,7 @@ import com.aistudio.shared.api.PageResponse.PageQuery;
 class ProductionRequestController {
     record Create(@NotNull @Pattern(regexp = ApiId.PATTERN) String channelId,
             @NotNull @Pattern(regexp = "SHORTS|LONGFORM") String contentType,
-            Mode selectionMode, @Min(5) @Max(10) Integer candidateCount) {}
+            Mode selectionMode, @Min(5) @Max(10) Integer candidateCount, Boolean mediaEnabled) {}
 
     record Choose(@NotNull @Min(1) @Max(10) Integer candidateId, @NotNull @Min(0) Integer version,
             @NotNull @Pattern(regexp = "[0-9a-f]{64}") String batchToken, Boolean confirmReview) {}
@@ -74,7 +74,7 @@ class ProductionRequestController {
             @RequestHeader("Idempotency-Key") @Pattern(regexp = IdempotentCommands.KEY_PATTERN) String key,
             @Valid @RequestBody Create body) {
         var result = service.create(CurrentActor.principal().id(), ApiId.parse("channelId", body.channelId()),
-                body.contentType(), key, body.selectionMode(), body.candidateCount());
+                body.contentType(), key, body.selectionMode(), body.candidateCount(), Boolean.TRUE.equals(body.mediaEnabled()));
         String id = Long.toString(result.request().id());
         Summary summary = new Summary(id, result.request().status());
         return result.replayed() ? ResponseEntity.ok(summary)

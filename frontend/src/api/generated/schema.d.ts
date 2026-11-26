@@ -808,6 +808,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/production-requests/{id}/media": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ProductionRequestId"];
+            };
+            cookie?: never;
+        };
+        /** List published-to-request media assets and technical QC status */
+        get: operations["listProductionMedia"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/production-requests/{id}/media/{assetId}": {
+        parameters: {
+            query?: {
+                download?: boolean;
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["ProductionRequestId"];
+                assetId: string;
+            };
+            cookie?: never;
+        };
+        /** Stream an owned media asset or a single byte range */
+        get: operations["getProductionMediaAsset"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        /** Read metadata headers of an owned media asset */
+        head: operations["headProductionMediaAsset"];
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/production-requests/{id}/planning": {
         parameters: {
             query?: never;
@@ -850,6 +892,23 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        ProductionMedia: {
+            /** @enum {string} */
+            mode: "FAKE";
+            qc: {
+                status: string;
+            };
+            assets: {
+                id: string;
+                /** @enum {string} */
+                stage: "IMAGE" | "TTS" | "SUBTITLE" | "RENDER" | "QC";
+                /** @enum {string} */
+                role: "NORMALIZED_IMAGE" | "PCM_AUDIO" | "SRT" | "MP4" | "QC_REPORT" | "MANIFEST";
+                contentType: string;
+                byteLength: string;
+                sha256: string;
+            }[];
+        };
         ProductionPlanning: {
             /** @enum {string} */
             executionMode: "FAKE";
@@ -1601,6 +1660,17 @@ export interface components {
         };
     };
     responses: {
+        /** @description Complete media asset */
+        ProductionMediaBinary: {
+            headers: {
+                "Content-Length"?: number;
+                "Accept-Ranges"?: "bytes";
+                [name: string]: unknown;
+            };
+            content: {
+                "*/*": string;
+            };
+        };
         /** @description 현재 소재 발굴 및 선정 상태 */
         ProductionDiscoveryDetail: {
             headers: {
@@ -3156,6 +3226,11 @@ export interface operations {
                      * @default 8
                      */
                     candidateCount?: number;
+                    /**
+                     * @description Explicit SHORTS media opt-in
+                     * @default false
+                     */
+                    mediaEnabled?: boolean;
                 };
             };
         };
@@ -3234,6 +3309,103 @@ export interface operations {
         requestBody?: never;
         responses: {
             200: components["responses"]["ProductionDiscoveryDetail"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listProductionMedia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ProductionRequestId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Media assets available to the request owner */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductionMedia"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getProductionMediaAsset: {
+        parameters: {
+            query?: {
+                download?: boolean;
+            };
+            header?: {
+                Range?: string;
+                /** @description Presence causes a full response */
+                "If-Range"?: string;
+            };
+            path: {
+                id: components["parameters"]["ProductionRequestId"];
+                assetId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["ProductionMediaBinary"];
+            /** @description Single range of the media asset */
+            206: {
+                headers: {
+                    "Content-Range"?: string;
+                    "Accept-Ranges"?: "bytes";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": string;
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            /** @description The byte range cannot be satisfied */
+            416: {
+                headers: {
+                    "Content-Range"?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    headProductionMediaAsset: {
+        parameters: {
+            query?: {
+                download?: boolean;
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["ProductionRequestId"];
+                assetId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Media metadata without a body */
+            200: {
+                headers: {
+                    "Content-Length"?: number;
+                    "Content-Type"?: string;
+                    "Accept-Ranges"?: "bytes";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];

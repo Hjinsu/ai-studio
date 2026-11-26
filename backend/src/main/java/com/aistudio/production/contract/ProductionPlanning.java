@@ -5,6 +5,10 @@ import java.util.List;
 /** Versioned inputs and results for the three fixed planning steps. */
 public final class ProductionPlanning {
     public static final String PIPELINE = "v2-planning-1";
+
+    public static boolean supportsPipeline(String version) {
+        return PIPELINE.equals(version) || MediaProfile.PIPELINE.equals(version);
+    }
     public static final int VERSION = 1;
     public static final int MAX_BODY_BYTES = 128 * 1024;
     public static final int SCRIPT_COMPARISON_LIMIT = 20;

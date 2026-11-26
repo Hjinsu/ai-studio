@@ -31,7 +31,11 @@ interface ExecutionMapper {
 
         /** V2-03: RESEARCH, SCRIPT and SCENES run through the planning port. */
         boolean planning() {
-            return PLANNING_PIPELINE.equals(pipelineVersion);
+            return PLANNING_PIPELINE.equals(pipelineVersion) || media();
+        }
+
+        boolean media() {
+            return "v2-media-1".equals(pipelineVersion);
         }
     }
 
@@ -63,7 +67,13 @@ interface ExecutionMapper {
             SELECT r.id FROM production_request r
             WHERE (r.pipeline_version = 'v2-fixed-1'
                    OR (((#{discovery} AND r.pipeline_version = 'v2-discovery-1')
-                        OR (#{discovery} AND #{planning} AND r.pipeline_version = 'v2-planning-1'))
+                        OR (#{discovery} AND #{planning} AND r.pipeline_version = 'v2-planning-1')
+                        OR (r.pipeline_version = 'v2-media-1' AND (
+                            (#{discovery} AND #{planning} AND #{mediaReady})
+                            OR (#{mediaRecovery} AND (r.cancel_requested_at IS NOT NULL
+                                OR EXISTS (SELECT 1 FROM production_step m WHERE m.production_request_id = r.id
+                                    AND (m.status = 'RECOVERY_REQUIRED' OR
+                                         (m.status = 'RUNNING' AND m.stage IN ('IMAGE', 'TTS')))))))))
                        AND NOT (r.cancel_requested_at IS NULL AND r.status = 'RUNNING'
                            AND EXISTS (SELECT 1 FROM production_discovery d
                                WHERE d.production_request_id = r.id AND d.selection_mode = 'MANUAL'
@@ -84,7 +94,8 @@ interface ExecutionMapper {
             LIMIT 1
             FOR UPDATE
             """)
-    Long nextClaimable(@Param("discovery") boolean discovery, @Param("planning") boolean planning);
+    Long nextClaimable(@Param("discovery") boolean discovery, @Param("planning") boolean planning,
+            @Param("mediaReady") boolean mediaReady, @Param("mediaRecovery") boolean mediaRecovery);
 
     /** The wait condition of {@link #nextClaimable}: MANUAL, evaluated, and neither chosen nor selected yet. */
     @Select("""

@@ -35,7 +35,7 @@ class ProductionExecutionConfiguration {
             ObjectProvider<StageWork> work, ExecutionProperties properties,
             ObjectProvider<DiscoveryExecutionPort> discoveryPort, ObjectProvider<DiscoveryEvaluator> evaluator,
             ObjectProvider<PlanningExecutionPort> planningPort, ObjectProvider<PlanningReview> review,
-            PlanningAvailability planningAvailability, JdbcTemplate jdbc) {
+            PlanningAvailability planningAvailability, JdbcTemplate jdbc, MediaFlow media) {
         DiscoveryExecutionPort port = discoveryPort.getIfAvailable();
         // V2-02: discovery requests are claimed only when the discovery persistence/cost adapter is present
         DiscoveryFlow flow = port == null ? null
@@ -46,7 +46,7 @@ class ProductionExecutionConfiguration {
         return new ProductionExecutor(mapper, control, transactions, cost, selection,
                 work.getIfAvailable(() -> new FakeStageWork(properties.fakeEffectMaxKrw(),
                         FakeStageWork.frozenRanges(jdbc))), properties, flow,
-                planningFlow);
+                planningFlow, media);
     }
 
     @Bean

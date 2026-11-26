@@ -13,7 +13,7 @@ public final class ProductionDiscovery {
     private ProductionDiscovery() {}
 
     public static boolean supportsPipeline(String version) {
-        return PIPELINE.equals(version) || ProductionPlanning.PIPELINE.equals(version);
+        return PIPELINE.equals(version) || ProductionPlanning.supportsPipeline(version);
     }
 
     public enum Mode { AUTO, MANUAL }

@@ -17,6 +17,7 @@ import org.slf4j.LoggerFactory;
 import com.aistudio.production.contract.DiscoveryEvaluator.CatalogEntry;
 import com.aistudio.production.contract.DiscoveryExecutionPort.SelectionBatch;
 import com.aistudio.production.contract.EffectKey;
+import com.aistudio.production.contract.MediaStageWork;
 import com.aistudio.production.contract.PlanningExecutionPort;
 import com.aistudio.production.contract.ProductionPlanning;
 import com.aistudio.production.contract.ProductionPlanning.ResearchInput;
@@ -83,6 +84,7 @@ public class ProductionExecutor implements AutoCloseable {
     private final ScheduledExecutorService heartbeats;
     private final DiscoveryFlow discovery;
     private final PlanningFlow planning;
+    private final MediaFlow media;
 
     public ProductionExecutor(ExecutionMapper mapper, BudgetControlLock control, LockRetryingTransactions transactions,
             ProductionCostPort cost, ProductionSelectionPort selection, StageWork work,
@@ -104,12 +106,19 @@ public class ProductionExecutor implements AutoCloseable {
     public ProductionExecutor(ExecutionMapper mapper, BudgetControlLock control, LockRetryingTransactions transactions,
             ProductionCostPort cost, ProductionSelectionPort selection, StageWork work,
             ExecutionProperties properties, DiscoveryFlow discovery, PlanningFlow planning) {
+        this(mapper, control, transactions, cost, selection, work, properties, discovery, planning, null);
+    }
+
+    ProductionExecutor(ExecutionMapper mapper, BudgetControlLock control, LockRetryingTransactions transactions,
+            ProductionCostPort cost, ProductionSelectionPort selection, StageWork work,
+            ExecutionProperties properties, DiscoveryFlow discovery, PlanningFlow planning, MediaFlow media) {
         StageWork.validate(work);
         if (planning != null && discovery == null) {
             throw new IllegalArgumentException("The planning flow requires the discovery flow");
         }
         this.discovery = discovery;
         this.planning = planning;
+        this.media = media;
         this.mapper = mapper;
         this.control = control;
         this.transactions = transactions;
@@ -149,12 +158,14 @@ public class ProductionExecutor implements AutoCloseable {
         if (owner == null || owner.isBlank() || owner.length() > 128) {
             throw new IllegalArgumentException("Invalid lease owner");
         }
+        boolean mediaReady = media != null && media.ready();
         return transactions.execute(() -> {
             control.exclusive();
             if (mapper.countValidLeases() >= properties.maxLeases()) {
                 return Optional.<Lease>empty();
             }
-            Long id = mapper.nextClaimable(discovery != null, planning != null);
+            Long id = mapper.nextClaimable(discovery != null, planning != null,
+                    mediaReady, media != null);
             if (id == null || mapper.claim(id, owner, leaseMicros()) != 1) {
                 return Optional.<Lease>empty();
             }
@@ -182,14 +193,18 @@ public class ProductionExecutor implements AutoCloseable {
                 return;
             }
             StepPlanner.Action action = StepPlanner.next(snapshot.steps(), snapshot.request().cancelRequested(),
-                    snapshot.awaitingChoice(), work::kind);
+                    snapshot.awaitingChoice(), stage -> snapshot.request().media() && MediaFlow.stage(stage)
+                            ? (MediaFlow.paidStage(stage) ? StageWork.Kind.EFFECT : StageWork.Kind.LOCAL)
+                            : work.kind(stage));
             switch (action) {
                 case StepPlanner.Recover recover -> {
                     boolean more = isDiscover(snapshot.request(), recover.step())
                             ? runDiscover(lease, snapshot.request(), recover.step(), 0)
                             : isPlanning(snapshot.request(), recover.step())
                                     ? runPlanning(lease, snapshot.request(), recover.step(), 0)
-                                    : presentEffect(lease, snapshot.request(), recover.step(), 0);
+                                    : snapshot.request().media() && MediaFlow.stage(recover.step().stage())
+                                            ? runMedia(lease, snapshot.request(), recover.step(), true)
+                                            : presentEffect(lease, snapshot.request(), recover.step(), 0);
                     if (!more) {
                         return;
                     }
@@ -227,10 +242,102 @@ public class ProductionExecutor implements AutoCloseable {
         if (isPlanning(request, step)) {
             return runPlanning(lease, request, step, 1);
         }
+        if (request.media() && MediaFlow.stage(step.stage())) {
+            return runMedia(lease, request, step, false);
+        }
         return switch (work.kind(step.stage())) {
             case EFFECT -> presentEffect(lease, request, step, 1);
             case LOCAL -> runLocal(lease, request, step);
             case SELECT -> runSelect(lease, request, step);
+        };
+    }
+
+    private boolean runMedia(Lease lease, RequestRow request, StepRow step, boolean recover) {
+        if (media == null) {
+            park(lease, step, "MEDIA_UNAVAILABLE");
+            return false;
+        }
+        boolean recoveryOnly = !media.ready() || request.cancelRequested();
+        if (recoveryOnly && !recover) {
+            release(lease);
+            return false;
+        }
+        int attempt = start(lease, step, recover ? 0 : 1);
+        MediaStageWork.Result result;
+        try {
+            var frozen = fenced(lease, locked -> media.freeze(lease.stepOwner(step.id()), step.stage(), recoveryOnly));
+            var context = new MediaStageWork.Context(lease.stepOwner(step.id()), request.channelId(),
+                    request.contentId(), request.runId(), frozen.revisionId(), attempt, step.stage(),
+                    frozen.profile().json(), frozen.profile().hash(), frozen.items(), mediaCancellation(lease),
+                    recoveryOnly);
+            result = withHeartbeat(lease, () -> {
+                MediaStageWork.Result prepared = recoveryOnly ? media.recoverCosts(context)
+                        : recover ? media.work().recover(context) : media.work().execute(context);
+                if (step.stage() == ProductionStage.QC && prepared.outcome() == MediaStageWork.Outcome.APPLIED
+                        && !context.cancelled().getAsBoolean()) {
+                    try {
+                        media.verifyQc(context);
+                    } catch (java.io.IOException e) {
+                        return new MediaStageWork.Result(MediaStageWork.Outcome.BLOCKED, "MEDIA_QC_INTEGRITY");
+                    }
+                }
+                return prepared;
+            });
+        } catch (LeaseLostException e) {
+            throw e;
+        } catch (RuntimeException e) {
+            log.warn("Media step {} interrupted", step.id(), e);
+            result = new MediaStageWork.Result(MediaFlow.paidStage(step.stage())
+                    ? MediaStageWork.Outcome.RECOVERY_REQUIRED : MediaStageWork.Outcome.RETRY, "MEDIA_INTERRUPTED");
+        }
+        String code = result.code() == null || !result.code().matches("[A-Z0-9_]{1,64}") ? "MEDIA_FAILED" : result.code();
+        if (result.outcome() == MediaStageWork.Outcome.RECOVERY_REQUIRED && MediaFlow.paidStage(step.stage())) {
+            park(lease, step, code);
+            return false;
+        }
+        var outcome = result.outcome();
+        boolean applied = fenced(lease, locked -> {
+            CostState state = cost.readCostState(locked.id());
+            if (state.unresolved() || !state.unappliedReceipts().isEmpty()) {
+                return false;
+            }
+            if (locked.cancelRequested()) {
+                mapper.endStep(locked.id(), step.id(), StepStatus.CANCELLED, "CANCELLED");
+            } else if (outcome == MediaStageWork.Outcome.APPLIED) {
+                if (!media.applied(locked.id(), step.stage())) {
+                    return false;
+                }
+                mapper.succeedStep(locked.id(), step.id(), "media:" + step.id());
+            } else if (outcome == MediaStageWork.Outcome.RETRY && attempt < ExecutionProperties.MAX_ATTEMPTS) {
+                mapper.waitStep(locked.id(), step.id(), StepStatus.RETRY_WAIT, code, recheckMicros());
+            } else {
+                mapper.endStep(locked.id(), step.id(), StepStatus.FAILED, code);
+            }
+            resumeRequest(locked);
+            return true;
+        });
+        if (!applied) {
+            park(lease, step, "MEDIA_APPLY_PENDING");
+        }
+        return applied;
+    }
+
+    private java.util.function.BooleanSupplier mediaCancellation(Lease lease) {
+        return new java.util.function.BooleanSupplier() {
+            private long checkedAt;
+            private boolean stopped;
+
+            @Override
+            public synchronized boolean getAsBoolean() {
+                long now = System.nanoTime();
+                if (!stopped && (checkedAt == 0 || now - checkedAt >= TimeUnit.MILLISECONDS.toNanos(100))) {
+                    RequestRow current = mapper.read(lease.requestId());
+                    stopped = current == null || !current.leaseValid() || current.leaseEpoch() != lease.epoch()
+                            || !lease.owner().equals(current.leaseOwner()) || current.cancelRequested();
+                    checkedAt = now;
+                }
+                return stopped;
+            }
         };
     }
 
