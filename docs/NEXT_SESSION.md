@@ -1,6 +1,6 @@
 # 회사 PC 다음 세션 — AI Studio v2
 
-2026-11-26 KST · V2-00 사용자 승인 완료 · 다음 배정 V2-01, 별도 착수 승인 후 진행.
+2026-11-26 KST · V2-00 사용자 승인 완료 · V2-01 설계 및 착수 승인 완료.
 
 ## 기준과 보존
 
@@ -29,7 +29,9 @@ git worktree add --track -b v2/integration ../ai-studio-v2 origin/v2/integration
 git -C ../ai-studio-v2 status --short --branch
 ```
 
-착수 및 병렬 작업 승인 후에는 승인된 v2 커밋을 기준으로 별도 worktree의 `v2/product`(Claude)와 `v2/safety`(Codex)를 사용할 수 있다. Claude는 고정 단계 실행·무효과 테스트·취소·재시작 복구를, Codex는 소재 선정 전 제작 요청 ID·동일 제작 한도·단일 dispatch·불명 결과·정산/receipt 및 공유 DB/API를 맡는다. 신규 Migration 번호와 V7 이력 DB 호환은 V2-01에서 결정한다. 제품 목표는 채널 설정 후 소재 입력 없이 실제 IFNOVA 영어 Shorts(40~60초, 1080×1920)와 게시 정보·자동 품질 검사 결과·출처·비용·manifest를 완성하는 것이다. FAKE는 회귀 검증에 사용한다.
+검증된 공통 기준 v2/common 커밋을 기준으로 별도 worktree의 `v2/product`(Claude)와 `v2/safety`(Codex)를 사용할 수 있다. Claude는 고정 단계 실행·무효과 테스트·취소·재시작 복구를, Codex는 소재 선정 전 제작 요청 ID·동일 제작 한도·단일 dispatch·불명 결과·정산/receipt 및 공유 DB/API를 맡는다. V9을 사용한다. V7 이력 DB는 별도 호환 검증 대상이다. [승인된 공통 계약](v2/V2-01_IMPLEMENTATION_PLAN.md) 제품 목표는 채널 설정 후 소재 입력 없이 실제 IFNOVA 영어 Shorts(40~60초, 1080×1920)와 게시 정보·자동 품질 검사 결과·출처·비용·manifest를 완성하는 것이다. FAKE는 회귀 검증에 사용한다.
+
+병렬 작업 재개 시 `v2/common`은 공통 계약 기준으로 사용하고 `v2/product`와 `v2/safety`는 각각 이미 배정된 worktree에서 작업한다. 담당과 금지 경로는 [Claude 착수 지시](v2/V2-01_IMPLEMENTATION_PLAN.md#claude-착수-지시)와 구현 계획을 따른다.
 
 ## 환경 및 검증 상태
 

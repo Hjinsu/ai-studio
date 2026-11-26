@@ -295,3 +295,11 @@ AI_STUDIO_IT_DB_HOST=127.0.0.1 AI_STUDIO_IT_DB_PORT=3307 AI_STUDIO_IT_DB_USER=ro
 
 - V2-00 DONE 유지. [품질·수익화 요구사항](docs/v2/05_CONTENT_QUALITY_AND_MONETIZATION.md)과 제품·로드맵·인수인계 문서 갱신. 제품 테스트·DB 접속·Migration 적용 미수행.
 - 다음 작업은 V2-01 공통 계약 설계 검토 및 제품 착수 승인이다. FFmpeg·FFprobe 준비는 V2-04에 배정했다.
+
+## V2-01 — 공통 계약 인수인계
+
+- 상태 IN_PROGRESS, 사용자 착수 승인. 공통 기준은 `v2/common`의 공통 계약 커밋이며 `v2/product`와 `v2/safety`는 같은 SHA에서 시작한다.
+- 변경 범위는 V9의 세 테이블과 권한, Java 공통 포트·상태·효과 키, 제작 요청 생성·조회·취소 API, OpenAPI·생성 타입 및 계약 테스트다. V1~V6 원본과 C/D WIP는 보존한다.
+- 다음 작업은 Claude의 실행·lease·취소·복구와 Codex의 소재 연결·비용 포트·정산 구현이다. FAKE로 결합 검증한 뒤 독립 리뷰와 사용자 검토를 진행한다. [계약 및 착수 지시](docs/v2/V2-01_IMPLEMENTATION_PLAN.md)
+- JDK 21.0.13에서 `gradlew.bat :backend:test :backend:integrationTest :backend:bootJar` 성공. 단위 151/151, 격리 MariaDB 11.8.2 통합 154/154. V9은 격리 DB에서만 적용했으며 새 DB 및 기존 기준 업그레이드를 검증했다. OpenAPI lint(기존 경고 2건), 생성 타입 일치, diff 및 일반 비밀정보 패턴 검사 통과.
+- V7 이력 DB 이관과 실행·비용 결합 검증은 보류다. 사용자 DB 적용 이력은 조회하지 않았다.

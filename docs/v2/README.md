@@ -11,4 +11,6 @@
 | [05_CONTENT_QUALITY_AND_MONETIZATION](05_CONTENT_QUALITY_AND_MONETIZATION.md) | 독창성·품질·검수·수익화 요구사항 |
 | [V2-00 저장소 검토](V2-00_REPOSITORY_REVIEW.md) | 승인된 기준선 및 재사용 판단 |
 
+[V2-01 구현 계획](V2-01_IMPLEMENTATION_PLAN.md)은 승인된 실행·비용·공통 계약 기준이다.
+
 현재 회사 PC 재개 절차는 [확정 NEXT_SESSION](../NEXT_SESSION.md)을 따른다. 핵심 설계 변경과 V2-01 착수는 각각 승인 범위를 확인한다.

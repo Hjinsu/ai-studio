@@ -139,7 +139,7 @@ class ContentUpgradeIT {
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM cost_log", Integer.class)).isPositive();
 
         // 2) migration 계정으로 V6 적용
-        Flyway.configure().dataSource(DB.dataSource()).locations("classpath:db/migration").cleanDisabled(true).load()
+        Flyway.configure().dataSource(DB.dataSource()).locations("classpath:db/migration").target("6").cleanDisabled(true).load()
                 .migrate();
 
         // 3) 이력·데이터·기존 제약 보존
