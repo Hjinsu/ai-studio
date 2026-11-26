@@ -7,7 +7,10 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
 
+import com.aistudio.production.contract.DiscoveryEvaluator;
+import com.aistudio.production.contract.DiscoveryExecutionPort;
 import com.aistudio.production.contract.ProductionCostPort;
+import com.aistudio.production.discovery.RuleBasedDiscoveryEvaluator;
 import com.aistudio.production.contract.ProductionSelectionPort;
 import com.aistudio.shared.db.BudgetControlLock;
 import com.aistudio.shared.db.LockRetryingTransactions;
@@ -25,9 +28,14 @@ class ProductionExecutionConfiguration {
     @Bean
     ProductionExecutor productionExecutor(ExecutionMapper mapper, BudgetControlLock control,
             LockRetryingTransactions transactions, ProductionCostPort cost, ProductionSelectionPort selection,
-            ObjectProvider<StageWork> work, ExecutionProperties properties) {
+            ObjectProvider<StageWork> work, ExecutionProperties properties,
+            ObjectProvider<DiscoveryExecutionPort> discoveryPort, ObjectProvider<DiscoveryEvaluator> evaluator) {
+        DiscoveryExecutionPort port = discoveryPort.getIfAvailable();
+        // V2-02: discovery requests are claimed only when the discovery persistence/cost adapter is present
+        DiscoveryFlow flow = port == null ? null
+                : new DiscoveryFlow(port, evaluator.getIfAvailable(RuleBasedDiscoveryEvaluator::new));
         return new ProductionExecutor(mapper, control, transactions, cost, selection,
-                work.getIfAvailable(() -> new FakeStageWork(properties.fakeEffectMaxKrw())), properties);
+                work.getIfAvailable(() -> new FakeStageWork(properties.fakeEffectMaxKrw())), properties, flow);
     }
 
     @Bean

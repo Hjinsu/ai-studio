@@ -57,6 +57,51 @@ export async function installMockApi(pageObject: Page, options: { signedIn?: boo
   ]
   const recorded: Recorded[] = []
 
+  // V2-02 제작 요청: 직접 선택 모드에서 후보 평가가 끝나 선택을 기다리는 요청 #42
+  const stages = ['DISCOVER', 'SELECT', 'RESEARCH', 'SCRIPT', 'SCENES', 'IMAGE', 'TTS', 'SUBTITLE', 'RENDER', 'METADATA', 'QC']
+  const productionState = { chosen: null as number | null, version: 1 }
+  const scores = { interest: 25, channelFit: 20, originality: 15, visualPotential: 11, evidencePotential: 15, costEfficiency: 5 }
+  const candidate = (id: number, title: string, question: string, blockCodes: string[], total: number) => ({
+    candidateId: id,
+    candidate: {
+      coreTopic: title, centralQuestion: question, title, angle: 'Walk through the mechanism one step at a time with a simple diagram.',
+      outline: [`Hook: pose the question over a diagram of ${title.toLowerCase()}`, 'Step-by-step diagram of the mechanism', 'Close with one open question for viewers'],
+      evidencePlan: [{ sourceType: 'SPACE_AGENCY', searchQuestion: `What do current sources say about ${title.toLowerCase()}?` }, { sourceType: 'TEXTBOOK', searchQuestion: 'Which simple diagram explains it accurately?' }],
+      assertions: [], suggestedScores: scores, rationale: 'FAKE candidate',
+    },
+    scores, totalScore: total, blockCodes,
+    comparisons: blockCodes.length ? [{ topicId: '7', contentId: '8', revisionId: '9', reason: 'QUESTION_SIMILARITY 0.86 ANGLE_OVERLAP 0.71 DUPLICATE' }] : [],
+    rationale: `rules v1: total ${total}/100 (interest 25, channel fit 20, originality 15, visual 11, evidence 15, cost 5); max similarity 0.12`,
+  })
+  const productionDiscovery = () => ({
+    selectionMode: 'MANUAL', candidateCount: 5, version: productionState.version,
+    awaitingSelection: productionState.chosen === null, chosenCandidateId: productionState.chosen, selectedCandidateId: null, selectionReason: null,
+    candidates: [
+      candidate(1, 'Why the Sky Is Blue, Not Violet', 'Why is the daytime sky blue instead of violet?', ['DUPLICATE'], 76),
+      candidate(2, 'A Teaspoon of Neutron Star', 'How heavy would a teaspoon of neutron star be?', [], 91),
+      candidate(3, 'A Day on Venus Outlasts Its Year', 'Why is a day on Venus longer than its year?', [], 88),
+      candidate(4, 'How Tardigrades Survive Drying Out', 'How do tardigrades survive being completely dried out?', ['UNSUPPORTED_ASSERTION'], 85),
+      candidate(5, 'The Compass Inside a Bird', 'How do migrating birds sense the magnetic field?', [], 80),
+    ],
+  })
+  const productionDetail = () => ({
+    id: '42', channelId: '1', contentType: 'SHORTS', status: 'RUNNING', contentId: null, runId: null, cancelRequestedAt: null,
+    limitKrw: '2000.000000', reservedKrw: '0', recognizedKrw: '1.000000',
+    steps: stages.map((stage) => ({ stage, targetKey: 'video', inputGeneration: 1, status: stage === 'DISCOVER' ? 'SUCCEEDED' : 'PENDING', attempts: stage === 'DISCOVER' ? 1 : 0 })),
+  })
+  const handleProduction = (method: string, path: string, body: Record<string, unknown> | undefined): { status: number; body?: unknown } | null => {
+    if (path === '/api/v1/production-requests' && method === 'POST') return { status: 201, body: { id: '42', status: 'QUEUED' } }
+    if (path === '/api/v1/production-requests/42' && method === 'GET') return { status: 200, body: productionDetail() }
+    if (path === '/api/v1/production-requests/42/discovery') return { status: 200, body: productionDiscovery() }
+    if (path === '/api/v1/production-requests/42/selection' && method === 'POST') {
+      if (body?.version !== productionState.version) return { status: 409, body: error('RESOURCE_CONFLICT', 'stale version') }
+      productionState.chosen = Number(body?.candidateId)
+      productionState.version += 1
+      return { status: 200, body: productionDiscovery() }
+    }
+    return null
+  }
+
   const handle = async (request: Request): Promise<{ status: number; body?: unknown }> => {
     const url = new URL(request.url())
     const path = url.pathname
@@ -130,6 +175,8 @@ export async function installMockApi(pageObject: Page, options: { signedIn?: boo
     if (path === '/api/v1/exchange-rates' && method === 'POST') {
       return { status: 201, body: { id: '6', baseCurrency: body?.baseCurrency, quoteCurrency: 'KRW', rate: body?.rate, effectiveFrom: NOW, validUntil: NOW, source: 'MANUAL', note: null, createdBy: '1', createdAt: NOW } }
     }
+    const production = handleProduction(method, path, body)
+    if (production) return production
     return { status: 404, body: error('RESOURCE_NOT_FOUND', `No mock for ${method} ${path}`) }
   }
 

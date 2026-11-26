@@ -50,6 +50,28 @@ class StepPlannerTest {
     }
 
     @Test
+    void manualChoiceWaitReleasesAPendingSelectWithoutStartingIt() {
+        List<StepRow> rows = succeededUntil(ProductionStage.SELECT);
+        assertThat(StepPlanner.next(rows, false, true, KINDS)).isEqualTo(new StepPlanner.Release());
+        assertThat(StepPlanner.next(rows, false, false, KINDS))
+                .isEqualTo(new StepPlanner.Execute(rows.get(ProductionStage.SELECT.ordinal())));
+    }
+
+    @Test
+    void manualChoiceWaitNeverHoldsBackCancelRecoveryOrFailure() {
+        List<StepRow> rows = succeededUntil(ProductionStage.SELECT);
+        assertThat(StepPlanner.next(rows, true, true, KINDS)).isEqualTo(new StepPlanner.Finish(ProductionStatus.CANCELLED));
+        List<StepRow> recovering = with(succeededUntil(ProductionStage.SELECT), ProductionStage.DISCOVER,
+                StepStatus.RECOVERY_REQUIRED, 1, true);
+        assertThat(StepPlanner.next(recovering, false, true, KINDS))
+                .isEqualTo(new StepPlanner.Recover(recovering.get(0)));
+        List<StepRow> failed = with(steps(), ProductionStage.DISCOVER, StepStatus.FAILED, 1, true);
+        assertThat(StepPlanner.next(failed, false, true, KINDS)).isEqualTo(new StepPlanner.Finish(ProductionStatus.FAILED));
+        // the wait only concerns SELECT: DISCOVER itself still runs
+        assertThat(StepPlanner.next(steps(), false, true, KINDS)).isEqualTo(new StepPlanner.Execute(steps().get(0)));
+    }
+
+    @Test
     void runsTheFirstUnfinishedStageInFixedOrder() {
         assertThat(next(steps(), false)).isEqualTo(new StepPlanner.Execute(steps().get(0)));
         List<StepRow> rows = succeededUntil(ProductionStage.RENDER);

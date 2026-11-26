@@ -17,14 +17,22 @@ import com.aistudio.production.contract.StepStatus;
  */
 @Mapper
 interface ExecutionMapper {
-    record RequestRow(long id, long channelId, String contentType, ProductionStatus status, Long contentId, Long runId,
-            String leaseOwner, long leaseEpoch, boolean leaseValid, boolean cancelRequested) {}
+    String DISCOVERY_PIPELINE = "v2-discovery-1";
+
+    record RequestRow(long id, long channelId, String contentType, String pipelineVersion, ProductionStatus status,
+            Long contentId, Long runId, String leaseOwner, long leaseEpoch, boolean leaseValid,
+            boolean cancelRequested) {
+
+        boolean discovery() {
+            return DISCOVERY_PIPELINE.equals(pipelineVersion);
+        }
+    }
 
     record StepRow(long id, ProductionStage stage, String targetKey, int inputGeneration, StepStatus status,
             int attempts, boolean retryDue) {}
 
     String REQUEST_COLUMNS = """
-            id, channel_id, content_type, status, content_id, run_id, lease_owner, lease_epoch,
+            id, channel_id, content_type, pipeline_version, status, content_id, run_id, lease_owner, lease_epoch,
             COALESCE(lease_until > UTC_TIMESTAMP(6), FALSE) AS lease_valid,
             cancel_requested_at IS NOT NULL AS cancel_requested
             """;
@@ -37,10 +45,27 @@ interface ExecutionMapper {
      * Oldest non-terminal request without a valid lease that has work due now. A request waits while any step has
      * a future retry_at (local retry backoff or recovery recheck); a cancel intent skips a local retry wait but not
      * a recovery recheck.
+     *
+     * <p>V2-02: discovery requests are only claimed when the discovery flow is wired. A MANUAL request that
+     * finished DISCOVER and has no recorded choice waits for the requester without a lease and is not claimed;
+     * a committed choice or cancel makes it claimable again. Recovery (status RECOVERY_REQUIRED or a step in
+     * recovery) is never held back by the wait.
      */
     @Select("""
             SELECT r.id FROM production_request r
-            WHERE r.pipeline_version = 'v2-fixed-1'
+            WHERE (r.pipeline_version = 'v2-fixed-1'
+                   OR (#{discovery} AND r.pipeline_version = 'v2-discovery-1'
+                       AND NOT (r.cancel_requested_at IS NULL AND r.status = 'RUNNING'
+                           AND EXISTS (SELECT 1 FROM production_discovery d
+                               WHERE d.production_request_id = r.id AND d.selection_mode = 'MANUAL'
+                                 AND d.evaluation_json IS NOT NULL
+                                 AND d.chosen_candidate_id IS NULL AND d.selected_candidate_id IS NULL)
+                           AND EXISTS (SELECT 1 FROM production_step s WHERE s.production_request_id = r.id
+                                       AND s.stage = 'DISCOVER' AND s.status = 'SUCCEEDED')
+                           AND EXISTS (SELECT 1 FROM production_step s WHERE s.production_request_id = r.id
+                                       AND s.stage = 'SELECT' AND s.status = 'PENDING')
+                           AND NOT EXISTS (SELECT 1 FROM production_step s WHERE s.production_request_id = r.id
+                                           AND s.status IN ('RUNNING', 'RECOVERY_REQUIRED')))))
               AND r.status IN ('QUEUED', 'RUNNING', 'RECOVERY_REQUIRED')
               AND (r.lease_owner IS NULL OR r.lease_until <= UTC_TIMESTAMP(6))
               AND ((r.cancel_requested_at IS NOT NULL AND r.status <> 'RECOVERY_REQUIRED')
@@ -50,7 +75,15 @@ interface ExecutionMapper {
             LIMIT 1
             FOR UPDATE
             """)
-    Long nextClaimable();
+    Long nextClaimable(@Param("discovery") boolean discovery);
+
+    /** The wait condition of {@link #nextClaimable}: MANUAL, evaluated, and neither chosen nor selected yet. */
+    @Select("""
+            SELECT COUNT(*) > 0 FROM production_discovery
+            WHERE production_request_id = #{requestId} AND selection_mode = 'MANUAL' AND evaluation_json IS NOT NULL
+              AND chosen_candidate_id IS NULL AND selected_candidate_id IS NULL
+            """)
+    boolean awaitingManualChoice(long requestId);
 
     @Update("""
             UPDATE production_request
