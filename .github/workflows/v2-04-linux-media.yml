@@ -26,6 +26,16 @@ jobs:
         env:
           AI_STUDIO_TEST_LINUX_MEDIA: "true"
         run: ./gradlew :backend:test --tests '*LinuxMediaProcessTest'
+      - name: Require the Linux isolation test to have executed
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          report, = Path('backend/build/test-results/test').glob('TEST-*LinuxMediaProcessTest.xml')
+          counts = ET.parse(report).getroot().attrib
+          assert counts['tests'] == '1', counts
+          assert all(counts[key] == '0' for key in ('failures', 'errors', 'skipped')), counts
+          PY
       - uses: actions/upload-artifact@v7.0.2
         if: always()
         with:

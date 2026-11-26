@@ -280,6 +280,7 @@ class PlanningExecutionIT {
     }
 
     @org.springframework.beans.factory.annotation.Value("${ai-studio.production.media.storage-root}") String mediaStorageRoot;
+    @Autowired com.aistudio.production.media.storage.MediaCleanup mediaCleanup;
     @Autowired MockMvc mvc;
     @Autowired AdminAccountService accounts;
     @Autowired ChannelService channels;
@@ -972,6 +973,37 @@ class PlanningExecutionIT {
     private static ScenePlan invalidSceneStructure() {
         List rawDrafts = List.of("untyped draft");
         return new ScenePlan("diagram", rawDrafts);
+    }
+
+    @Test
+    void mediaCleanupPreservesLeasedAndRecentlyWrittenScratch(
+            @org.junit.jupiter.api.io.TempDir Path scratch) throws Exception {
+        long leased = create("SHORTS", "");
+        long idle = create("SHORTS", "");
+        jdbc.update("""
+                UPDATE production_request SET lease_owner = 'cleanup-test', lease_epoch = 1,
+                    lease_until = UTC_TIMESTAMP(6) + INTERVAL 10 MINUTE WHERE id = ?
+                """, leased);
+        var retainedForLease = scratchAttempt(scratch, leased, 1, false);
+        var expired = scratchAttempt(scratch, idle, 1, false);
+        var retainedForRecentWrite = scratchAttempt(scratch, idle, 2, true);
+
+        mediaCleanup.reap(scratch.toRealPath(), Path.of(mediaStorageRoot));
+
+        assertThat(retainedForLease).exists();
+        assertThat(expired).doesNotExist();
+        assertThat(retainedForRecentWrite).exists();
+    }
+
+    private static Path scratchAttempt(Path root, long request, int attempt, boolean recent) throws IOException {
+        var dir = java.nio.file.Files.createDirectory(root.resolve("r" + request + "-i1-a" + attempt));
+        var payload = java.nio.file.Files.writeString(dir.resolve("output"), "isolated");
+        var past = java.nio.file.attribute.FileTime.from(java.time.Instant.now().minus(java.time.Duration.ofHours(25)));
+        if (!recent) {
+            java.nio.file.Files.setLastModifiedTime(payload, past);
+        }
+        java.nio.file.Files.setLastModifiedTime(dir, past);
+        return dir;
     }
 
     @Test
