@@ -155,8 +155,8 @@ describe('Production request detail', () => {
     expect(await screen.findByRole('heading', { name: '제작 요청 #42' })).toBeInTheDocument()
     expect(screen.getByText('진행 중')).toBeInTheDocument()
     const list = await screen.findByRole('list', { name: '소재 후보 목록' })
-    expect(screen.getByText(/직접 선택 · 후보 5개 · 적격 2개/)).toBeInTheDocument()
-    expect(screen.getByText(/적격 후보 중 하나를 선택하면/)).toBeInTheDocument()
+    expect(screen.getByText(/직접 선택 · 후보 5개 · 자동 선정 가능 2개 · 검수 필요 0개/)).toBeInTheDocument()
+    expect(screen.getByText(/후보를 선택하면 최신 소재 목록과 다시 비교합니다/)).toBeInTheDocument()
     const items = within(list).getAllByRole('listitem')
     expect(within(items[0]).getByRole('heading')).toHaveTextContent('A Teaspoon of Neutron Star')
     expect(within(list).getByText('중복')).toBeInTheDocument()
@@ -176,6 +176,38 @@ describe('Production request detail', () => {
     expect(calls.find((c) => c.method === 'POST')?.body).toEqual({ candidateId: 3, version: 1, batchToken: TOKEN_1 })
     expect(await screen.findByText(/후보 3번 선택을 기록했습니다/)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '이 소재 선택' })).not.toBeInTheDocument()
+  })
+
+  it('shows review-only candidates separately and posts explicit confirmation', async () => {
+    const review = {
+      ...waiting,
+      candidates: waiting.candidates.map((candidate) => ({
+        ...candidate,
+        blockCodes: candidate.blockCodes.length === 0 ? ['SIMILARITY_UNCERTAIN'] : candidate.blockCodes,
+        comparisons: candidate.blockCodes.length === 0
+          ? [{ reason: 'QUESTION_SIMILARITY 0.65 ANGLE_OVERLAP 0.30 SIMILARITY_UNCERTAIN' }]
+          : candidate.comparisons,
+      })),
+    }
+    const calls = mockApi(
+      me, csrf, health, allChannels,
+      on('GET', '/api/v1/production-requests/42', 200, detail('RUNNING', (s) => (s === 'DISCOVER' ? 'SUCCEEDED' : 'PENDING'))),
+      on('GET', '/api/v1/production-requests/42/discovery', 200, review),
+      on('POST', '/api/v1/production-requests/42/selection', 200, { ...review, awaitingSelection: false }),
+    )
+    renderApp('/production/42')
+    const user = userEvent.setup()
+    const list = await screen.findByRole('list', { name: '소재 후보 목록' })
+    expect(screen.queryByText(/모든 후보가 차단/)).not.toBeInTheDocument()
+    expect(within(list).getAllByText('검수 필요', { exact: true })).toHaveLength(2)
+    expect(within(list).getAllByText('차단', { exact: true })).toHaveLength(3)
+    await user.click(within(list).getAllByRole('button', { name: '이 소재 선택' })[0])
+    const dialog = await screen.findByRole('alertdialog')
+    expect(within(dialog).getByText(/QUESTION_SIMILARITY 0.65/)).toBeInTheDocument()
+    expect(calls.some((call) => call.method === 'POST')).toBe(false)
+    await user.click(within(dialog).getByRole('button', { name: '검수 근거를 확인하고 선택' }))
+    await waitFor(() => expect(calls.find((call) => call.method === 'POST')?.body)
+      .toEqual({ candidateId: 1, version: 1, batchToken: TOKEN_1, confirmReview: true }))
   })
 
   it('keeps the dialog open with the conflict when the batch changed meanwhile', async () => {

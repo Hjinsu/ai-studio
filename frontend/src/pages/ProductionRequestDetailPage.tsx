@@ -209,13 +209,14 @@ function DiscoveryCandidates({
   const mode = SELECTION_MODE[discovery.selectionMode] ?? { text: discovery.selectionMode, help: '' }
   const ordered = [...discovery.candidates].sort((a, b) => rank(b) - rank(a) || a.candidateId - b.candidateId)
   const eligible = ordered.filter((c) => c.blockCodes.length === 0)
+  const reviewable = ordered.filter((c) => requiresReview(c) && !isBlocked(c))
   const selected = discovery.candidates.find((c) => c.candidateId === discovery.selectedCandidateId)
   const discoverStep = request.steps.find((step) => step.stage === 'DISCOVER')
 
   return (
     <Card
       title="소재 후보"
-      description={`${mode.text} · 후보 ${discovery.candidateCount}개 · 적격 ${eligible.length}개`}
+      description={`${mode.text} · 후보 ${discovery.candidateCount}개 · 자동 선정 가능 ${eligible.length}개 · 검수 필요 ${reviewable.length}개`}
     >
       <div className="grid grid-cols-1 gap-4">
         {discovery.candidates.length === 0 ? (
@@ -232,14 +233,17 @@ function DiscoveryCandidates({
           <>
             {discovery.awaitingSelection && (
               <InlineNotice tone="primary" icon={<Lightbulb className="size-4" />}>
-                후보 평가가 끝났습니다. 적격 후보 중 하나를 선택하면 최신 소재 목록과 다시 비교한 뒤 진행합니다.
+                후보를 선택하면 최신 소재 목록과 다시 비교합니다. 검수 필요 후보는 비교 근거를 확인한 뒤 선택할 수 있습니다.
               </InlineNotice>
             )}
             {discovery.selectionMode === 'MANUAL' && discovery.chosenCandidateId != null && selected == null && (
               <InlineNotice>후보 {discovery.chosenCandidateId}번 선택을 기록했습니다. 다음 실행에서 다시 확인한 뒤 연결합니다.</InlineNotice>
             )}
-            {eligible.length === 0 && (
+            {eligible.length === 0 && reviewable.length === 0 && (
               <InlineNotice tone="danger">모든 후보가 차단되었습니다. 추가 발굴이나 자동 재생성은 하지 않습니다.</InlineNotice>
+            )}
+            {eligible.length === 0 && reviewable.length > 0 && discovery.selectionMode === 'AUTO' && (
+              <InlineNotice tone="warning">자동 선정 가능한 후보가 없습니다. 검수 필요 후보는 자동 선정에서 제외됩니다.</InlineNotice>
             )}
             {selected && (
               <InlineNotice tone="primary" icon={<CheckCircle2 className="size-4" />}>
@@ -313,7 +317,7 @@ function DiscoveryCandidates({
 
 /** 화면 정렬용: 적격 후보 먼저, 그다음 서버 총점. 선정 판단은 서버가 한다. */
 function rank(candidate: EvaluatedCandidate): number {
-  return (candidate.blockCodes.length === 0 ? 1000 : 0) + candidate.totalScore
+  return (isBlocked(candidate) ? 0 : requiresReview(candidate) ? 1000 : 2000) + candidate.totalScore
 }
 
 function requiresReview(candidate: EvaluatedCandidate): boolean {

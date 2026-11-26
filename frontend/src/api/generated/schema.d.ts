@@ -875,6 +875,7 @@ export interface components {
             };
             scores: components["schemas"]["DiscoveryScores"];
             totalScore: number;
+            /** @description SIMILARITY_UNCERTAIN requires manual review and excludes automatic selection. Other codes block all selection. */
             blockCodes: ("DUPLICATE" | "SIMILARITY_UNCERTAIN" | "CHANNEL_PROHIBITED" | "UNSUPPORTED_ASSERTION")[];
             comparisons: {
                 topicId?: string | null;
