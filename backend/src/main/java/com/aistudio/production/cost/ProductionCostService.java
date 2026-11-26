@@ -25,6 +25,10 @@ import com.aistudio.production.contract.DiscoveryProvider;
 import com.aistudio.production.contract.ProductionCostPort;
 import com.aistudio.production.contract.ProductionDiscovery;
 import com.aistudio.production.contract.ProductionStage;
+import com.aistudio.production.discovery.DiscoveryInputs;
+import com.aistudio.production.discovery.DiscoveryResponseCodec;
+import com.aistudio.production.discovery.DiscoveryResponseException;
+import com.aistudio.production.discovery.DiscoveryResponseValidator;
 import com.aistudio.production.discovery.persistence.ProductionDiscoveryMapper;
 import com.aistudio.production.cost.ProductionCostMapper.Operation;
 import com.aistudio.production.cost.ProductionCostMapper.Request;
@@ -81,13 +85,14 @@ public class ProductionCostService implements ProductionCostPort {
         }
         String key = EffectKey.forInput(owner.requestId(), step.stage(), step.targetKey(), step.inputGeneration());
         var price = new PricedRequest("KRW", maximumAmount, null);
-        String hash = CanonicalJson.sha256(Map.of("promptVersion", ProductionDiscovery.PROMPT_VERSION,
-                "input", json.convertValue(input, Object.class)));
+        String hash = DiscoveryInputs.sha256(input);
         return execute(owner, key, hash, price, true, (id, priced) -> {
             String body;
             try {
-                body = DiscoveryResponseBody.validate(json, input, generator.generate(input));
-            } catch (DiscoveryProvider.InvalidResponse e) {
+                var response = generator.generate(input);
+                DiscoveryResponseValidator.validate(input, response);
+                body = DiscoveryResponseCodec.canonicalJson(response);
+            } catch (DiscoveryResponseException | DiscoveryProvider.InvalidResponse e) {
                 return new Completion(new Evidence(Outcome.EXECUTED_FAILED, "fake:" + id, "KRW",
                         priced.maximumAmount(), null, null, "FAKE discovery response format rejected"), null);
             }

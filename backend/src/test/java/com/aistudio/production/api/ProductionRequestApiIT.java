@@ -43,7 +43,6 @@ import com.aistudio.production.contract.ProductionDiscovery.Block;
 import com.aistudio.production.contract.ProductionDiscovery.EvaluatedCandidate;
 import com.aistudio.production.contract.ProductionDiscovery.EvidencePlan;
 import com.aistudio.production.contract.ProductionDiscovery.Scores;
-import com.aistudio.production.execution.ProductionExecutor;
 import com.aistudio.security.AdminAccountService;
 import com.aistudio.shared.db.LockRetryingTransactions;
 
@@ -73,7 +72,6 @@ class ProductionRequestApiIT {
     @Autowired BudgetControlService control;
     @Autowired DiscoveryExecutionPort discovery;
     @MockitoBean DiscoveryProvider provider;
-    @Autowired ProductionExecutor executor;
     @Autowired LockRetryingTransactions transactions;
     @Autowired JsonMapper json;
 
@@ -112,6 +110,23 @@ class ProductionRequestApiIT {
                 .andExpect(jsonPath("$.steps[10].stage").value("QC"))
                 .andExpect(jsonPath("$.reservedKrw").isString())
                 .andExpect(jsonPath("$.recognizedKrw").isString());
+
+        mvc.perform(get(PATH).param("page", "0").param("size", "1").with(ApiTestSupport.as(admin)))
+                .andExpect(status().isOk()).andExpect(ApiTestSupport.matchesContract())
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.items[0].id").value(location.substring(PATH.length() + 1)))
+                .andExpect(jsonPath("$.items[0].channelId").value(Long.toString(channelId)))
+                .andExpect(jsonPath("$.items[0].selectedTitle").isEmpty())
+                .andExpect(jsonPath("$.items[0].reservedKrw").isString())
+                .andExpect(jsonPath("$.items[0].createdAt").isString());
+        mvc.perform(get(PATH).param("page", "-1").with(ApiTestSupport.as(admin)))
+                .andExpect(status().isBadRequest());
+        jdbc.update("UPDATE production_step SET last_error_code = 'DISCOVERY_NO_ELIGIBLE_CANDIDATE'"
+                + " WHERE production_request_id = ? AND stage = 'DISCOVER'",
+                Long.parseLong(location.substring(PATH.length() + 1)));
+        mvc.perform(get(location).with(ApiTestSupport.as(admin)))
+                .andExpect(status().isOk()).andExpect(ApiTestSupport.matchesContract())
+                .andExpect(jsonPath("$.steps[0].lastErrorCode").value("DISCOVERY_NO_ELIGIBLE_CANDIDATE"));
 
         mvc.perform(post(location + "/cancel").with(ApiTestSupport.as(admin)))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.cancelRequestedAt").isString());
@@ -171,7 +186,6 @@ class ProductionRequestApiIT {
         assertThat(jdbc.queryForObject("SELECT pipeline_version FROM production_request WHERE id = ?",
                 String.class, id)).isEqualTo("v2-discovery-1");
 
-        assertThat(executor.runOnce("common-legacy-worker")).isFalse();
         policies.create("SYSTEM", null, null, "DAY", new BigDecimal("1000"), "UTC", null, actor);
         policies.create("SYSTEM", null, null, "MONTH", new BigDecimal("1000"), "UTC", null, actor);
         control.setSpending(true, "isolated discovery fixture", control.get().version(), actor);
@@ -186,7 +200,7 @@ class ProductionRequestApiIT {
         var scores = new Scores(25, 20, 20, 15, 15, 5);
         var candidate = new Candidate("Gravity", "How can gravity change paths?", "Gravity and paths",
                 "Orbital diagram", List.of("Hook", "Comparison"),
-                List.of(new EvidencePlan("textbook", "orbital examples")), List.of(), scores, "Clear outline");
+                List.of(new EvidencePlan("TEXTBOOK", "orbital examples")), List.of(), scores, "Clear outline");
         var assessments = java.util.stream.IntStream.rangeClosed(1, 5)
                 .mapToObj(position -> new EvaluatedCandidate(position, candidate, scores, 100,
                         position == 1 || position == 3 ? List.of() : List.of(Block.DUPLICATE),

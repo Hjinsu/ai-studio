@@ -1172,6 +1172,27 @@ paths:
       tags: ["contents"]
 
   /api/v1/production-requests:
+    get:
+      tags: [Production]
+      operationId: listProductionRequests
+      summary: List production requests owned by the current user
+      description: Returns the newest requests first and reads the selected title from the linked run revision.
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 0, default: 0 }
+        - name: size
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        '200':
+          description: Page of production requests.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProductionRequestPage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
     post:
       operationId: createProductionRequest
       summary: 소재 선정 전 제작 요청 생성
@@ -1494,6 +1515,32 @@ components:
               revisionId: { type: [string, 'null'] }
               reason: { type: string }
         rationale: { type: string }
+    ProductionRequestPage:
+      type: object
+      required: [items, page, size, totalElements, totalPages]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/ProductionRequestListItem' }
+        page: { type: integer, minimum: 0 }
+        size: { type: integer, minimum: 1, maximum: 100 }
+        totalElements: { type: integer, minimum: 0 }
+        totalPages: { type: integer, minimum: 0 }
+
+    ProductionRequestListItem:
+      type: object
+      required: [id, channelId, channelName, selectedTitle, status, limitKrw, reservedKrw, recognizedKrw, createdAt]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        channelId: { $ref: '#/components/schemas/Id' }
+        channelName: { type: string }
+        selectedTitle: { type: [string, 'null'] }
+        status: { $ref: '#/components/schemas/ProductionStatus' }
+        limitKrw: { $ref: '#/components/schemas/NonNegativeKrwAmount' }
+        reservedKrw: { $ref: '#/components/schemas/NonNegativeKrwAmount' }
+        recognizedKrw: { $ref: '#/components/schemas/NonNegativeKrwAmount' }
+        createdAt: { type: string, format: date-time }
+
     ProductionRequestSummary:
       type: object
       required: [id, status]
@@ -1518,7 +1565,7 @@ components:
           type: array
           items:
             type: object
-            required: [stage, targetKey, inputGeneration, status, attempts]
+            required: [stage, targetKey, inputGeneration, status, attempts, lastErrorCode]
             properties:
               stage:
                 type: string
@@ -1529,6 +1576,7 @@ components:
                 type: string
                 enum: [PENDING, RUNNING, RETRY_WAIT, RECOVERY_REQUIRED, SUCCEEDED, FAILED, CANCELLED]
               attempts: { type: integer, minimum: 0, maximum: 3 }
+              lastErrorCode: { type: [string, 'null'], maxLength: 64 }
 
     Id:
       type: string

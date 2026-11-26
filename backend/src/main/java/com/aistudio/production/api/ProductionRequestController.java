@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.aistudio.content.command.IdempotentCommands;
@@ -25,6 +26,8 @@ import com.aistudio.production.contract.ProductionDiscovery.Mode;
 import com.aistudio.production.contract.ProductionStatus;
 import com.aistudio.security.CurrentActor;
 import com.aistudio.shared.api.ApiId;
+import com.aistudio.shared.api.PageResponse;
+import com.aistudio.shared.api.PageResponse.PageQuery;
 
 @RestController
 @RequestMapping("/api/v1/production-requests")
@@ -42,6 +45,9 @@ class ProductionRequestController {
 
     record Summary(String id, ProductionStatus status) {}
 
+    record ListItem(String id, String channelId, String channelName, String selectedTitle, ProductionStatus status,
+            String limitKrw, String reservedKrw, String recognizedKrw, Instant createdAt) {}
+
     record Detail(String id, String channelId, String contentType, ProductionStatus status,
             String contentId, String runId, Instant cancelRequestedAt, String limitKrw, String reservedKrw,
             String recognizedKrw, List<ProductionRequestMapper.Step> steps) {}
@@ -50,6 +56,12 @@ class ProductionRequestController {
 
     ProductionRequestController(ProductionRequestService service) {
         this.service = service;
+    }
+
+    @GetMapping
+    PageResponse<ListItem> list(@RequestParam(defaultValue = "0") @Min(0) int page,
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
+        return service.list(CurrentActor.principal().id(), new PageQuery(page, size));
     }
 
     @PostMapping

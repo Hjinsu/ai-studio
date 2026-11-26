@@ -24,6 +24,8 @@ import com.aistudio.content.command.CanonicalJson;
 import com.aistudio.production.contract.ProductionStatus;
 import com.aistudio.shared.api.ApiException;
 import com.aistudio.shared.api.ErrorCode;
+import com.aistudio.shared.api.PageResponse;
+import com.aistudio.shared.api.PageResponse.PageQuery;
 import com.aistudio.shared.db.BudgetControlLock;
 import com.aistudio.shared.db.LockRetryingTransactions;
 
@@ -95,6 +97,14 @@ class ProductionRequestService {
             }
             return replay(previous, hash);
         }
+    }
+
+    @Transactional(readOnly = true, isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
+    public PageResponse<ProductionRequestController.ListItem> list(long actorId, PageQuery page) {
+        return PageResponse.of(mapper.list(actorId, page.size(), page.offset()), page, mapper.count(actorId),
+                row -> new ProductionRequestController.ListItem(Long.toString(row.id()), Long.toString(row.channelId()),
+                        row.channelName(), row.selectedTitle(), row.status(), row.limitKrw().toPlainString(),
+                        row.reservedKrw().toPlainString(), row.recognizedKrw().toPlainString(), row.createdAt()));
     }
 
     @Transactional(readOnly = true, isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)

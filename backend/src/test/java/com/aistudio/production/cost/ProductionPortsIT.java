@@ -60,6 +60,7 @@ import com.aistudio.production.contract.ProductionCostPort.Evidence;
 import com.aistudio.production.contract.ProductionCostPort.Outcome;
 import com.aistudio.production.contract.ProductionCostPort.StepOwner;
 import com.aistudio.production.contract.ProductionStage;
+import com.aistudio.production.discovery.DiscoveryResponseCodec;
 import com.aistudio.production.execution.ProductionExecutor;
 import com.aistudio.security.AdminAccountService;
 import com.aistudio.shared.api.ApiException;
@@ -106,7 +107,7 @@ class ProductionPortsIT {
 
     @AfterEach
     void releaseDiscoveryFixtureLeases() {
-        jdbc.update("UPDATE production_request SET lease_owner = NULL, lease_until = NULL WHERE lease_owner = 'discovery-test'");
+        jdbc.update("UPDATE production_request SET status = 'FAILED', lease_owner = NULL, lease_until = NULL WHERE lease_owner = 'discovery-test'");
     }
 
     @Test
@@ -145,6 +146,7 @@ class ProductionPortsIT {
         var receipt = discovery.discover(restarted, input).receipt();
         assertThat(discovery.discover(restarted, input).receipt()).isEqualTo(receipt);
         assertThat(discovery.response(restarted, receipt)).isEqualTo(response);
+        assertThat(receipt.resultHash()).isEqualTo(DiscoveryResponseCodec.sha256(response));
         assertThatThrownBy(() -> discovery.response(owner, receipt)).isInstanceOf(ApiException.class);
         verify(discoveryProvider).generate(input);
         var assessments = sampleAssessments(response);
@@ -159,6 +161,7 @@ class ProductionPortsIT {
                 candidate.centralQuestion(), 45, input.language());
         assertThatThrownBy(() -> transactions.run(() -> {
             var batch = discovery.lockForSelection(selecting);
+            assertThat(batch.responseHash()).isEqualTo(receipt.resultHash());
             assertThat(discovery.catalog(request, response.candidates())).isEmpty();
             selection.link(selecting, link);
             discovery.recordSelection(selecting, batch.version(), 1, "First ranked", assessments);
@@ -297,7 +300,7 @@ class ProductionPortsIT {
         return new Response(input.rulesVersion(), java.util.stream.IntStream.rangeClosed(1, input.candidateCount())
                 .mapToObj(i -> new Candidate("Light " + i, "Why does light bend?", "Light and lenses " + i,
                         "Compare lenses " + i, List.of("Show a lens", "Trace the rays"),
-                        List.of(new EvidencePlan("Physics textbook", "Refraction diagram")), List.of(),
+                        List.of(new EvidencePlan("TEXTBOOK", "Refraction diagram")), List.of(),
                         new Scores(15, 10, 10, 7, 7, 3), "Visual explanation")).toList());
     }
 

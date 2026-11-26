@@ -158,7 +158,7 @@ class ProductionDiscoveryService implements DiscoveryExecutionPort {
         }
         var evaluations = List.of(json.readValue(batch.evaluationJson(), EvaluatedCandidate[].class));
         checkEvaluations(storedResponse(request.id(), generated.operationId(), generated.responseHash()), evaluations);
-        return new SelectionBatch(batch.selectionMode(), batch.version(), batch.chosenCandidateId(), evaluations);
+        return new SelectionBatch(batch.selectionMode(), batch.version(), batch.chosenCandidateId(), evaluations, generated.responseHash());
     }
 
     @Override

@@ -173,7 +173,7 @@ final class FakeDiscoveryPort implements DiscoveryExecutionPort {
         requireTransaction();
         beforeLock.accept(owner.requestId());
         Map<String, Object> row = jdbc.queryForMap("""
-                SELECT selection_mode, version, chosen_candidate_id, evaluation_json FROM production_discovery
+                SELECT selection_mode, version, chosen_candidate_id, evaluation_json, response_hash FROM production_discovery
                 WHERE production_request_id = ? FOR UPDATE
                 """, owner.requestId());
         jdbc.queryForList("""
@@ -183,7 +183,7 @@ final class FakeDiscoveryPort implements DiscoveryExecutionPort {
         Object chosen = row.get("chosen_candidate_id");
         return new SelectionBatch(Mode.valueOf((String) row.get("selection_mode")),
                 ((Number) row.get("version")).intValue(), chosen == null ? null : ((Number) chosen).intValue(),
-                json.readValue(row.get("evaluation_json").toString(), EVALUATIONS));
+                json.readValue(row.get("evaluation_json").toString(), EVALUATIONS), (String) row.get("response_hash"));
     }
 
     @Override

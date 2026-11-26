@@ -737,7 +737,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * List production requests owned by the current user
+         * @description Returns the newest requests first and reads the selected title from the linked run revision.
+         */
+        get: operations["listProductionRequests"];
         put?: never;
         /** 소재 선정 전 제작 요청 생성 */
         post: operations["createProductionRequest"];
@@ -880,6 +884,25 @@ export interface components {
             }[];
             rationale: string;
         };
+        ProductionRequestPage: {
+            items: components["schemas"]["ProductionRequestListItem"][];
+            page: number;
+            size: number;
+            totalElements: number;
+            totalPages: number;
+        };
+        ProductionRequestListItem: {
+            id: components["schemas"]["Id"];
+            channelId: components["schemas"]["Id"];
+            channelName: string;
+            selectedTitle: string | null;
+            status: components["schemas"]["ProductionStatus"];
+            limitKrw: components["schemas"]["NonNegativeKrwAmount"];
+            reservedKrw: components["schemas"]["NonNegativeKrwAmount"];
+            recognizedKrw: components["schemas"]["NonNegativeKrwAmount"];
+            /** Format: date-time */
+            createdAt: string;
+        };
         ProductionRequestSummary: {
             id: components["schemas"]["Id"];
             status: components["schemas"]["ProductionStatus"];
@@ -908,6 +931,7 @@ export interface components {
                 /** @enum {string} */
                 status: "PENDING" | "RUNNING" | "RETRY_WAIT" | "RECOVERY_REQUIRED" | "SUCCEEDED" | "FAILED" | "CANCELLED";
                 attempts: number;
+                lastErrorCode: string | null;
             }[];
         };
         /** @description 양의 signed BIGINT 식별자 문자열 (1~9223372036854775807) */
@@ -2962,6 +2986,32 @@ export interface operations {
                 };
             };
             500: components["responses"]["InternalError"];
+        };
+    };
+    listProductionRequests: {
+        parameters: {
+            query?: {
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Page of production requests. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductionRequestPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
         };
     };
     createProductionRequest: {
