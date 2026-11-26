@@ -233,6 +233,16 @@ class ScenesReviewTest {
     }
 
     @Test
+    void aFramingAdjectiveDoesNotExemptAnObjectOrMeasurementRatio() {
+        for (String fact : List.of("vertical 9:16 ratio of the tower", "portrait 9:16 mass ratio",
+                "vertical 9:16 aspect ratio of the tower", "9:16 aspect ratio of the tower")) {
+            assertThat(newFacts(prompt(0, fact))).as(fact).containsExactly("9", "16");
+            assertThat(blocks(prompt(0, fact))).as(fact).contains("SCENE_NEW_FACT");
+        }
+        assertThat(prompt(0, "Vertical 9:16 aspect ratio, tower centered").findings()).isEmpty();
+    }
+
+    @Test
     void aFrameTokenAndASeparateFactualRatioInOneSentence() {
         // the first 9:16 is the frame; the second is a claimed resonance the narration never states
         assertThat(newFacts(prompt(0, "Vertical 9:16 frame showing the orbital resonance ratio of 9:16")))

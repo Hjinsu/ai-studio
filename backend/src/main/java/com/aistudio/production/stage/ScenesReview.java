@@ -194,7 +194,14 @@ public final class ScenesReview {
         String after = text.substring(end);
         Matcher next = CLAUSE_END.matcher(after);
         int to = next.find() ? next.start() : after.length();
-        return framedBefore(words(before.substring(from))) || framedAfter(words(after.substring(0, to)));
+        List<String> right = words(after.substring(0, to));
+        // A ratio that describes an object or measurement can follow even an apparent framing adjective.
+        if (!right.isEmpty() && right.getFirst().equals("ratio")
+                || right.size() >= 2 && right.get(1).equals("ratio")
+                    && (!right.getFirst().equals("aspect") || right.size() >= 3 && right.get(2).equals("of"))) {
+            return false;
+        }
+        return framedBefore(words(before.substring(from))) || framedAfter(right);
     }
 
     private static boolean framedBefore(List<String> left) {
