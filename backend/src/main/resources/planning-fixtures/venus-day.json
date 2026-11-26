@@ -65,21 +65,21 @@
     {
       "segmentIds": ["s1", "s2"],
       "visualDescription": "Split screen with a pair of clocks: a slow spin dial on Venus and an orbit track around the Sun.",
-      "imagePrompt": "Flat infographic split screen, left a dial spinning slowly on the yellow globe of Venus, right Venus moving along an orbit track around the Sun, warm amber palette, vertical 9:16, large readable labels",
+      "imagePrompt": "Flat infographic split screen, left a dial spinning slowly on the yellow globe of Venus, right Venus moving along an orbit track around the Sun, warm amber palette, vertical, large readable labels",
       "direction": "Locked-off frontal camera; the orbit marker finishes its lap before the spin dial does.",
       "transition": "Slide the split apart"
     },
     {
       "segmentIds": ["s3", "s4"],
       "visualDescription": "The Sun rising in the west over a hazy Venus horizon, then a sunrise-to-sunrise timeline.",
-      "imagePrompt": "Illustrated hazy yellow Venus horizon with the Sun rising on the side labelled west, thick cloud layers, then a clean timeline bar from one sunrise to the next, vertical 9:16",
+      "imagePrompt": "Illustrated hazy yellow Venus horizon with the Sun rising on the side labelled west, thick cloud layers, then a clean timeline bar from one sunrise to the next, vertical",
       "direction": "Slow upward tilt with the sunrise, then a graphic wipe into the timeline; bright backlight.",
       "transition": "Graphic wipe"
     },
     {
       "segmentIds": ["s5", "s6"],
       "visualDescription": "Young Venus struck by a large body, then thick swirling atmosphere, ending on a question card.",
-      "imagePrompt": "Illustrated young Venus being struck by a large rocky body, followed by thick swirling yellow atmosphere, final title card with a question mark, vertical 9:16, cinematic lighting",
+      "imagePrompt": "Illustrated young Venus being struck by a large rocky body, followed by thick swirling yellow atmosphere, final title card with a question mark, vertical, cinematic lighting",
       "direction": "Dynamic orbit camera around the impact, settle on the question card; mark both causes as possibilities on screen.",
       "transition": "Fade to end card"
     }

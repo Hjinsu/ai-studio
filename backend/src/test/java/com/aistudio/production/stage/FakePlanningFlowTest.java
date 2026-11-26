@@ -53,7 +53,7 @@ class FakePlanningFlowTest {
             assertThat(scene.subtitleText()).isEqualTo(scene.narration());
             assertThat(scene.estimatedDurationMs()).isPositive();
         });
-        assertThat(run.scenes().visualStyle()).contains("Clean infographic").contains("9:16");
+        assertThat(run.scenes().visualStyle()).contains("Clean infographic").contains("vertical frame").doesNotContain("9:16");
     }
 
     @Test

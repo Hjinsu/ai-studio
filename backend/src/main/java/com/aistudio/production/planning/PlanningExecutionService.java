@@ -48,6 +48,8 @@ import tools.jackson.databind.json.JsonMapper;
 class PlanningExecutionService implements PlanningExecutionPort {
     private static final InputVersion VERSION = new InputVersion("planning-prompt-1", "planning-rules-1",
             "fake-planning-1");
+    private static final InputVersion SCENES_VERSION = new InputVersion("scenes-prompt-2", "scenes-rules-2",
+            "fake-scenes-2");
 
     private final PlanningResultMapper results;
     private final ProductionDiscoveryMapper discovery;
@@ -112,7 +114,7 @@ class PlanningExecutionService implements PlanningExecutionPort {
             return fixed;
         }
         var script = accepted(requestId, ProductionStage.SCRIPT);
-        return new ScenesInput(snapshot(requestId), VERSION, ref(script), json.readValue(script.bodyJson(), Script.class));
+        return new ScenesInput(snapshot(requestId), SCENES_VERSION, ref(script), json.readValue(script.bodyJson(), Script.class));
     }
 
     @Override

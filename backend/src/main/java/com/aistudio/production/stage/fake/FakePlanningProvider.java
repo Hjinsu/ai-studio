@@ -33,7 +33,7 @@ import com.aistudio.production.stage.SpeechTiming;
  */
 public final class FakePlanningProvider implements PlanningProvider {
     static final String LANGUAGE = "en";
-    static final String FRAMING = "vertical 9:16 frame, key subject inside the center safe area";
+    static final String FRAMING = "vertical frame, key subject inside the center safe area";
     private static final int MAX_QUERIES = 4;
 
     private final PlanningFixtures fixtures;
@@ -136,7 +136,7 @@ public final class FakePlanningProvider implements PlanningProvider {
     private static List<PlanningFixtures.Scene> generic(Script script) {
         return script.segments().stream().map(segment -> new PlanningFixtures.Scene(List.of(segment.id()),
                 "Simple illustration of the narrated idea.",
-                "Clean explanatory illustration of: " + firstWords(segment.narration()) + ", vertical 9:16",
+                "Clean explanatory illustration of: " + firstWords(segment.narration()) + ", vertical",
                 "Static medium shot, soft key light.", "Cut")).collect(Collectors.toList());
     }
 

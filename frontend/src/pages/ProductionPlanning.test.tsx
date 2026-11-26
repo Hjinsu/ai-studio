@@ -67,17 +67,17 @@ const script = {
 }
 
 const scenes = {
-  visualStyle: 'Clean infographic; vertical 9:16 frame',
+  visualStyle: 'Clean infographic; vertical frame',
   scenes: [
     {
       id: 'scene-1', order: 1, segmentIds: ['s1'], estimatedDurationMs: 2630, narration: 'Guess what this sugar cube weighs?',
-      visualDescription: 'A glowing sugar cube on a kitchen scale.', imagePrompt: 'Close-up of a glowing sugar cube, vertical 9:16',
+      visualDescription: 'A glowing sugar cube on a kitchen scale.', imagePrompt: 'Close-up of a glowing sugar cube, vertical',
       direction: 'Slow push-in.', transition: 'Hard cut', subtitleText: 'Guess what this sugar cube weighs?',
     },
     {
       id: 'scene-2', order: 2, segmentIds: ['s2'], estimatedDurationMs: 54760,
       narration: 'Now squeeze about 1.4 times the mass of our Sun into a small ball.',
-      visualDescription: 'A glowing sphere shrinking down.', imagePrompt: 'Animated compression of a glowing sphere, vertical 9:16',
+      visualDescription: 'A glowing sphere shrinking down.', imagePrompt: 'Animated compression of a glowing sphere, vertical',
       direction: 'Animated compression shot.', transition: null,
       subtitleText: 'Now squeeze about 1.4 times the mass of our Sun into a small ball.',
     },

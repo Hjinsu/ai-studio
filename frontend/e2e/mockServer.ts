@@ -157,12 +157,12 @@ export async function installMockApi(pageObject: Page, options: { signedIn?: boo
       {
         operationId: '13', stage: 'SCENES', bodyHash: 'f'.repeat(64),
         body: {
-          visualStyle: 'Clean infographic; Clean cinematic science illustration, dark space palette with warm highlights; vertical 9:16 frame, key subject inside the center safe area',
+          visualStyle: 'Clean infographic; Clean cinematic science illustration, dark space palette with warm highlights; vertical frame, key subject inside the center safe area',
           scenes: [
-            scene(1, ['s1'], 2630, 'A single glowing sugar cube resting on a matte black kitchen scale.', 'Close-up illustration of a softly glowing sugar cube on a matte black kitchen scale, warm rim light, vertical 9:16 composition', 'Static close-up with a slow push-in; eye-level camera, low-key lighting.', 'Hard cut on the question'),
-            scene(2, ['s2'], 11160, 'A massive star blowing off its outer layers while a small bright core remains.', 'Stylized illustration of a massive star exploding as a supernova, small blue-white core at the center, vertical 9:16', 'Wide shot; the camera pulls back as the shell expands.', 'Flash to white'),
-            scene(3, ['s3', 's4'], 16700, 'A glowing sphere shrinking down, then the sugar cube back on the scale with its readout spinning.', 'Animated compression of a glowing sphere into a tiny dense ball, then a glowing sugar cube on a kitchen scale, vertical 9:16', 'Animated compression shot, then match cut to the scale.', 'Match cut from sphere to cube'),
-            scene(4, ['s5'], 10900, 'Illustrated thought experiment: the tiny cube on a lab bench bursting outward.', 'Illustrated thought experiment, small dense cube on a lab bench bursting outward into a bright expanding cloud, corner label reading thought experiment, vertical 9:16', 'Slow-motion burst from a low angle; label stays on screen to mark the scene as imagined.', 'Fade to end card'),
+            scene(1, ['s1'], 2630, 'A single glowing sugar cube resting on a matte black kitchen scale.', 'Close-up illustration of a softly glowing sugar cube on a matte black kitchen scale, warm rim light, vertical composition', 'Static close-up with a slow push-in; eye-level camera, low-key lighting.', 'Hard cut on the question'),
+            scene(2, ['s2'], 11160, 'A massive star blowing off its outer layers while a small bright core remains.', 'Stylized illustration of a massive star exploding as a supernova, small blue-white core at the center, vertical', 'Wide shot; the camera pulls back as the shell expands.', 'Flash to white'),
+            scene(3, ['s3', 's4'], 16700, 'A glowing sphere shrinking down, then the sugar cube back on the scale with its readout spinning.', 'Animated compression of a glowing sphere into a tiny dense ball, then a glowing sugar cube on a kitchen scale, vertical', 'Animated compression shot, then match cut to the scale.', 'Match cut from sphere to cube'),
+            scene(4, ['s5'], 10900, 'Illustrated thought experiment: the tiny cube on a lab bench bursting outward.', 'Illustrated thought experiment, small dense cube on a lab bench bursting outward into a bright expanding cloud, corner label reading thought experiment, vertical', 'Slow-motion burst from a low angle; label stays on screen to mark the scene as imagined.', 'Fade to end card'),
           ],
         },
         validation: { findings: [] },

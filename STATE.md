@@ -16,6 +16,13 @@
 ## 인수인계 기록
 작업 ID / 상태 / 변경 파일 / 테스트 명령 및 실제 결과 / 미해결 문제 / 다음 작업 / 필요 환경변수. 커밋 해시는 생성된 경우만 기록.
 
+### V2-03 — F05 화면비 수치 예외 제거 (2026-11-26 KST, HOLD)
+
+- `v2/review-v2-03` 기준 `e0083695192c1a01253e1e1d138ba4ed0bc6864c`. `ScenesReview`, `PlanningExecutionService`, `FakePlanningProvider`, SCENES fixture, 관련 백엔드·프론트 테스트와 화면 레이블을 갱신했다. 설계 승인은 `DECISIONS.md`와 V2-03 구현 계획, 검증과 인수인계는 `TASKS.md`, `docs/NEXT_SESSION.md` 및 결합 보고서에 기록했다.
+- 새 SCENES 입력만 버전을 올렸다. 구버전 영수증은 저장 증거로 재생하며, 미적용 상태에서 재검수할 때 대본 근거가 없는 수치는 비용을 정산한 뒤 차단한다.
+- 단위 293건, 격리 MariaDB 11.8.2 통합 255건(실제 API Edge 포함), bootJar, 프론트 lint·typecheck·build, Vitest 97건, Mock Edge 14건, OpenAPI 검사 및 생성 타입 일치, Gitleaks, diff 검사 통과. 두 소재별 전체 11단계 완료, 버전 1 영수증 두 경로 및 F01~F04·F06을 검증했다. V12는 격리 DB에만 적용했고 기존 Migration 파일은 기준과 동일하다.
+- 다음 작업은 [Draft PR #6 최신 HEAD의 CI](https://github.com/Hjinsu/ai-studio/pull/6/checks)와 SHA를 확인한 별도 읽기 전용 독립 리뷰다. 사용자 승인까지 HOLD를 유지한다. [결합 검증](docs/reports/V2-03_INTEGRATION_REPORT.md#f05-화면비-수치-예외-제거-2026-11-26-kst)
+
 ### V2-03 — F05 최종 수정 검증 (2026-11-26 KST, HOLD)
 
 - 기준 `eabf980780d06474767f6195895c3b0df84a926b`에 Claude `1d31f5046bce52cc70a6fb4236b7b05abc079b5c`를 별도 `ai-studio-v2-review-03` worktree의 `v2/review-v2-03`에서 fast-forward했다. 변경 제품 파일은 `ScenesReview.java`, `ScenesReviewTest.java`다. 인수 문서는 `STATE.md`, `TASKS.md`, `docs/NEXT_SESSION.md`, `docs/reports/V2-03_INTEGRATION_REPORT.md`다.

@@ -2,6 +2,17 @@
 
 2026-11-26 KST · `v2/review-v2-03` · 구현 결합, 별도 독립 리뷰 대상
 
+## F05 화면비 수치 예외 제거 (2026-11-26 KST)
+
+기준 `e0083695192c1a01253e1e1d138ba4ed0bc6864c`, `v2/review-v2-03`, [Draft PR #6 검사](https://github.com/Hjinsu/ai-studio/pull/6/checks). **HOLD**는 별도 독립 리뷰 APPROVE 및 사용자 승인까지 유지한다.
+
+- 이전 HOLD는 사실 비율의 앞 문맥이 문장부호로 분리되면 화면비 지시로 판정되어 수치 검수를 우회하는 문제였다. `ScenesReview`에서 화면비 예외를 제거했다. 장면 설명·이미지 프롬프트·연출 지시에 기존 `Statements.numbers`를 적용한다. 이전 우회 사례와 콜론·괄호·긴 대시·쉼표 반례에서 `SCENE_NEW_FACT`에 9와 16을 남긴다. 숫자 없는 프레이밍, 정상 fixture, 대본에 근거가 있는 수치는 허용한다.
+- `FakePlanningProvider` 공통 스타일·일반 프롬프트, 번들 SCENES fixture 세 개, 프론트 테스트 대역을 숫자 없는 세로 구도로 갱신했다. 공통 스타일 권고와 화면 레이블도 같은 표현을 사용한다. V2-04는 실제 화면비·해상도를 구조화된 미디어 프로필에서 관리한다. [구현 계획](../v2/V2-03_IMPLEMENTATION_PLAN.md)
+- 신규 SCENES 입력은 `scenes-prompt-2` / `scenes-rules-2` / `fake-scenes-2`를 사용한다. 고정 입력·이미 채택된 결과의 읽기 경로는 기존 저장 내용을 사용한다. 구버전 미적용 영수증은 저장된 입력과 응답으로 재생한다. 근거 없는 수치가 있으면 영수증을 적용하고 SCENES에서 차단한다. 기존 입력·요청·응답 해시와 비용 증거를 재작성할 필요가 없다.
+- `AI_STUDIO_REVIEW_EDGE=true`로 `gradlew.bat --no-build-cache :backend:test :backend:bootJar :backend:integrationTest --rerun-tasks` 실행. 단위 293건(ScenesReviewTest 22건), 격리 MariaDB 11.8.2 통합 255건(실제 API Edge 1건 포함), 실패·오류·건너뜀 0건. bootJar 성공. 중성자별·완보동물 각 11단계 완료. 구버전 미적용 영수증 2건은 정상 완료와 근거 없는 수치 차단을 각각 검증했다. 원본 입력·요청·응답 해시와 비용 증거가 동일했고, SCENES 작업 및 발송은 기존 1건을 유지했다. F01~F04·F06, 비용 보호, lease·fencing, 취소, 영수증 재생, V11 데이터 보존 및 격리 DB V12 적용 회귀 통과. 임시 서버의 정상 종료 확인.
+- `npm run lint`, `npm run typecheck`, `npm run build`, `npm test` 97건, `npm run e2e` Mock Edge 14건 통과. `frontend/tools/openapi-typescript`에서 `npm run lint:openapi`(기존 경고 2건)와 `npm run check` 통과. OpenAPI·생성 타입·기존 Migration 파일은 기준과 동일하다.
+- Gitleaks 8.30.1 게시 대상 이력 검사와 `git diff --check` 통과.
+
 ## F05 최종 수정 결합 및 검증 (2026-11-26 KST)
 
 **HOLD.** 기준 `eabf980780d06474767f6195895c3b0df84a926b`와 Claude 브랜치 `v2/03-f05-final-fix`의 원격 SHA `1d31f5046bce52cc70a6fb4236b7b05abc079b5c`를 확인했다. 별도 `ai-studio-v2-review-03` worktree의 `v2/review-v2-03`에서 fast-forward했다. 제품 변경 파일은 `ScenesReview.java`와 `ScenesReviewTest.java`다.

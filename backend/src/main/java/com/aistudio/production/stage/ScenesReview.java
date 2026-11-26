@@ -4,7 +4,6 @@ import static com.aistudio.production.stage.Findings.blank;
 import static com.aistudio.production.stage.Findings.list;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -12,7 +11,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -35,36 +33,6 @@ public final class ScenesReview {
     private static final Pattern EVIDENCE_LOOK = Pattern.compile(
             "\\b(real|actual|authentic|genuine|unedited)\\s+(photo|photograph|footage|image|recording|video)s?\\b"
                     + "|\\b(nasa|esa|telescope|satellite|news)\\s+(photo|photograph|footage|image)s?\\b");
-    /** The vertical frame token, not part of a longer number, time or ratio (19:16, 9:160, 9:16:2, 9:16.5). */
-    private static final Pattern FRAME_RATIO = Pattern.compile(
-            "(?<![\\p{Nd}.,:])9\\s?:\\s?16(?!\\p{Nd}|[.,:]\\p{Nd})");
-    /**
-     * Where one instruction clause ends: , . ; ! ? | ( ) [ ] en/em dashes and line breaks. A comma or full stop
-     * between two digits (1,000 or 2.5) is part of the number. A colon ends a clause unless a digit stands right
-     * after it, so "Composition: the mass ratio is 9:16" splits but "Aspect ratio: 9:16" and the token do not.
-     */
-    private static final Pattern CLAUSE_SEPARATOR = Pattern.compile(
-            "(?<!\\p{Nd})[,.]|[,.](?!\\p{Nd})|:(?!\\s*\\p{Nd})|[;!?|()\\[\\]\\u2013\\u2014\\r\\n]");
-    /** Stands for the frame token in the word form of a clause. */
-    private static final String TOKEN = "#";
-    /**
-     * The only framing instructions: the whole clause, as lower-case words with the token as {@code #}, must be an
-     * optional "in/at/with/using" and "a/an", then the token with a framing phrase before it ("vertical",
-     * "portrait framing", "aspect ratio", "vertical aspect ratio") and/or after it ("vertical", "composition",
-     * "frame", "vertical frame", "aspect ratio"). Anything else in the clause keeps the token as numbers.
-     */
-    private static final Pattern FRAMING_CLAUSE;
-
-    static {
-        String adjective = "(?:vertical|portrait)";
-        String noun = "(?:frame|framing|format|orientation|composition|crop|canvas|aspect ratio)";
-        String before = "(?:" + adjective + "(?: (?:frame|framing|format|orientation|aspect ratio))?|aspect ratio)";
-        String after = "(?:" + adjective + "(?: " + noun + ")?|" + noun + ")";
-        String lead = "(?:(?:in|at|with|using) )?(?:(?:a|an) )?";
-        FRAMING_CLAUSE = Pattern.compile(lead + "(?:" + before + " " + TOKEN + "(?: " + after + ")?|"
-                + TOKEN + " " + after + ")");
-    }
-
     public Validation review(ScenesInput input, Scenes scenes) {
         Findings findings = new Findings();
         List<Segment> segments = list(input.script().segments());
@@ -156,7 +124,7 @@ public final class ScenesReview {
         }
         Set<String> narrated = Statements.numbers(scene.narration());
         Function<String, Set<String>> added = text -> {
-            Set<String> numbers = new LinkedHashSet<>(visualNumbers(text));
+            Set<String> numbers = Statements.numbers(text);
             numbers.removeAll(narrated);
             return numbers;
         };
@@ -176,51 +144,6 @@ public final class ScenesReview {
         }
     }
 
-    /**
-     * Numbers a visual field uses, except a 9:16 frame token that is a separate framing instruction. The text is
-     * split into clauses at punctuation, and the token is left out only when its clause is nothing but one of the
-     * {@link #FRAMING_CLAUSE} forms ("Vertical 9:16", "Aspect ratio 9:16", "9:16 vertical composition"). A token
-     * in a clause that says anything else ("the orbital resonance ratio is 9:16 vertical", "mass ratio of 9:16
-     * composition", "the tower's vertical 9:16 proportion") stays two numbers compared with the narration.
-     */
-    static Set<String> visualNumbers(String text) {
-        if (text == null) {
-            return Set.of();
-        }
-        StringBuilder kept = new StringBuilder(text.length());
-        Matcher separator = CLAUSE_SEPARATOR.matcher(text);
-        int from = 0;
-        while (separator.find()) {
-            kept.append(withoutFrameToken(text.substring(from, separator.start()))).append(separator.group());
-            from = separator.end();
-        }
-        kept.append(withoutFrameToken(text.substring(from)));
-        return Statements.numbers(kept.toString());
-    }
-
-    /** A blank in place of the clause's frame token when the clause is only framing; otherwise the clause as is. */
-    private static String withoutFrameToken(String clause) {
-        Matcher ratio = FRAME_RATIO.matcher(clause);
-        if (!ratio.find()) {
-            return clause;
-        }
-        int start = ratio.start();
-        int end = ratio.end();
-        if (ratio.find()) {
-            return clause;
-        }
-        String form = String.join(" ", words(clause.substring(0, start))) + " " + TOKEN + " "
-                + String.join(" ", words(clause.substring(end)));
-        return FRAMING_CLAUSE.matcher(form.strip()).matches()
-                ? clause.substring(0, start) + " " + clause.substring(end)
-                : clause;
-    }
-
-    private static List<String> words(String text) {
-        return Arrays.stream(text.toLowerCase(Locale.ROOT).split("[^\\p{L}\\p{Nd}]+"))
-                .filter(word -> !word.isEmpty()).toList();
-    }
-
     private static void style(ScenesInput input, Scenes scenes, Findings findings) {
         String channel = input.snapshot().visualStyle();
         String style = scenes.visualStyle() == null ? "" : scenes.visualStyle();
@@ -230,9 +153,9 @@ public final class ScenesReview {
             findings.recommend("CHANNEL_STYLE_NOT_APPLIED", "scenes.visualStyle", List.of(),
                     "Carry the channel visual style into the common style.");
         }
-        if (!style.contains("9:16") && !style.toLowerCase(Locale.ROOT).contains("vertical")) {
+        if (!style.toLowerCase(Locale.ROOT).contains("vertical")) {
             findings.recommend("FRAMING_NOT_VERTICAL", "scenes.visualStyle", List.of(),
-                    "Plan for a vertical 9:16 frame with the subject inside the safe area.");
+                    "Plan for a vertical composition with the subject inside the safe area.");
         }
     }
 }

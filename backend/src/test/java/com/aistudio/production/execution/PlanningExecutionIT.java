@@ -2,6 +2,7 @@ package com.aistudio.production.execution;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -78,10 +79,12 @@ import com.aistudio.production.contract.ProductionDiscovery.Response;
 import com.aistudio.production.contract.ProductionDiscovery.Scores;
 import com.aistudio.production.contract.ProductionPlanning.Claim;
 import com.aistudio.production.contract.ProductionPlanning.ClaimKind;
+import com.aistudio.production.contract.ProductionPlanning.InputVersion;
 import com.aistudio.production.contract.ProductionPlanning.SceneDraft;
 import com.aistudio.production.contract.ProductionPlanning.Research;
 import com.aistudio.production.contract.ProductionPlanning.Scene;
 import com.aistudio.production.contract.ProductionPlanning.Scenes;
+import com.aistudio.production.contract.ProductionPlanning.ScenesInput;
 import com.aistudio.production.contract.ProductionPlanning.Script;
 import com.aistudio.production.contract.ProductionPlanning.ScriptInput;
 import com.aistudio.production.contract.ProductionPlanning.Validation;
@@ -372,7 +375,9 @@ class PlanningExecutionIT {
                     .isEqualTo(persisted.getFirst().get("body_hash"));
             assertThat(scenesInput.path("scriptRef").path("bodyHash").asString())
                     .isEqualTo(persisted.get(1).get("body_hash"));
-            assertThat(scenesInput.path("version").path("promptVersion").asString()).isEqualTo("planning-prompt-1");
+            assertThat(scriptInput.path("version").path("promptVersion").asString()).isEqualTo("planning-prompt-1");
+            assertThat(json.treeToValue(scenesInput.path("version"), InputVersion.class))
+                    .isEqualTo(new InputVersion("scenes-prompt-2", "scenes-rules-2", "fake-scenes-2"));
         }
         verify(provider, times(2)).research(any());
         JsonNode first = planning(neutron);
@@ -395,7 +400,9 @@ class PlanningExecutionIT {
         for (var pair : List.of(Map.entry(a, sa), Map.entry(b, sb))) {
             Map<String, String> text = new java.util.HashMap<>();
             pair.getKey().segments().forEach(s -> text.put(s.id(), s.narration()));
+            assertThat(pair.getValue().visualStyle()).contains("vertical frame").doesNotContain("9:16");
             for (Scene scene : pair.getValue().scenes()) {
+                assertThat(scene.imagePrompt()).contains("vertical").doesNotContain("9:16");
                 String expected = String.join(" ", scene.segmentIds().stream().map(text::get).toList());
                 assertThat(scene.narration()).isEqualTo(expected);
                 assertThat(scene.subtitleText()).isEqualTo(expected);
@@ -588,6 +595,76 @@ class PlanningExecutionIT {
         assertThat(operations(id, ProductionStage.RESEARCH)).isEqualTo(1);
         verify(provider).research(any());
         assertThat(((Number) step(id, ProductionStage.RESEARCH).get("attempts")).intValue()).isEqualTo(1);
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = { false, true })
+    void legacyScenesReceiptReplaysFromFixedInputWithoutRegeneration(boolean unsupportedNumbers) throws Exception {
+        var legacy = new InputVersion("planning-prompt-1", "planning-rules-1", "fake-planning-1");
+        var adapter = AopTestUtils.<PlanningExecutionPort>getUltimateTargetObject(port);
+        boolean[] createLegacyInput = { true };
+        doAnswer(call -> {
+            ScenesInput input = (ScenesInput) call.callRealMethod();
+            return createLegacyInput[0] ? new ScenesInput(input.snapshot(), legacy, input.scriptRef(), input.script())
+                    : input;
+        }).when(adapter).scenesInput(anyLong());
+        doAnswer(call -> {
+            ScenePlan plan = (ScenePlan) call.callRealMethod();
+            if (!unsupportedNumbers) {
+                return plan;
+            }
+            List<SceneDraft> drafts = new ArrayList<>(plan.scenes());
+            SceneDraft first = drafts.getFirst();
+            drafts.set(0, new SceneDraft(first.id(), first.order(), first.segmentIds(), first.estimatedDurationMs(),
+                    first.visualDescription(), first.imagePrompt() + ", vertical 9:16", first.direction(),
+                    first.transition()));
+            return new ScenePlan(plan.visualStyle(), drafts);
+        }).when(provider).planScenes(any());
+        // Settle with the original input and body, then simulate a restart before the receipt could be applied.
+        doAnswer(call -> {
+            Object result = call.callRealMethod();
+            if (createLegacyInput[0] && operations(call.<ProductionCostPort.StepOwner>getArgument(0).requestId(),
+                    ProductionStage.SCENES) != 0) {
+                throw new IllegalStateException("simulated restart before legacy scene receipt application");
+            }
+            return result;
+        }).when(adapter).apply(any(), any(), any());
+
+        long id = shorts(VENUS);
+        drain();
+        assertStatus(id, "RECOVERY_REQUIRED");
+        assertThat(step(id, ProductionStage.SCENES).get("last_error_code")).isEqualTo("RECEIPT_APPLY_FAILED");
+        String fixedEffect = """
+                SELECT r.operation_id, r.input_json, r.input_hash, r.body_json, r.body_hash,
+                       o.request_hash, o.evidence_json, o.evidence_hash, o.receipt_outcome, o.status, o.reservation_id
+                FROM production_stage_result r JOIN provider_operation o ON o.id = r.operation_id
+                JOIN production_step s ON s.id = r.step_id WHERE r.request_id = ? AND s.stage = 'SCENES'
+                """;
+        Map<String, Object> before = jdbc.queryForMap(fixedEffect, id);
+        assertThat(before).containsEntry("status", "SETTLED").containsEntry("receipt_outcome", "RESULT_ADOPTED");
+        assertThat(PlanningJson.matches((String) before.get("input_json"), (String) before.get("input_hash"))).isTrue();
+        assertThat(PlanningJson.matches((String) before.get("body_json"), (String) before.get("body_hash"))).isTrue();
+
+        createLegacyInput[0] = false;
+        assertThat(port.scenesInput(id).version()).isEqualTo(legacy);
+        makeDue(id);
+        drain();
+
+        assertThat(jdbc.queryForMap(fixedEffect, id)).isEqualTo(before);
+        assertThat(operations(id, ProductionStage.SCENES)).isEqualTo(1);
+        verify(provider).planScenes(any());
+        assertThat(((Number) step(id, ProductionStage.SCENES).get("attempts")).intValue()).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT applied_at IS NOT NULL FROM provider_operation WHERE id = ?",
+                Boolean.class, before.get("operation_id"))).isTrue();
+        var result = result(planning(id), ProductionStage.SCENES);
+        if (unsupportedNumbers) {
+            assertStatus(id, "FAILED");
+            assertThat(codes(result, "BLOCK")).containsExactly("SCENE_NEW_FACT");
+            assertThat(step(id, ProductionStage.IMAGE).get("status")).isEqualTo("PENDING");
+        } else {
+            assertStatus(id, "SUCCEEDED");
+            assertThat(codes(result, "BLOCK")).isEmpty();
+        }
     }
 
     @Test

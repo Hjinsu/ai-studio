@@ -178,7 +178,7 @@ export const FINDING: Record<string, string> = {
   SCENE_NEW_FACT: '화면에 대본에 없는 사실 추가',
   SCENE_PRESENTED_AS_EVIDENCE: '생성 이미지를 실제 자료처럼 표현',
   CHANNEL_STYLE_NOT_APPLIED: '채널 시각 스타일 미반영',
-  FRAMING_NOT_VERTICAL: '9:16 세로 구도 미지정',
+  FRAMING_NOT_VERTICAL: '세로 구도 미지정',
 }
 
 /**

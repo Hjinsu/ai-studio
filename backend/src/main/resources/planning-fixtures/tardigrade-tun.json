@@ -73,42 +73,42 @@
     {
       "segmentIds": ["s1"],
       "visualDescription": "Macro view of a moss leaf where a water droplet shrinks away.",
-      "imagePrompt": "Macro illustration of a bright green moss leaf with a shrinking water droplet, soft morning light, shallow depth of field, vertical 9:16",
+      "imagePrompt": "Macro illustration of a bright green moss leaf with a shrinking water droplet, soft morning light, shallow depth of field, vertical",
       "direction": "Time-lapse feel, locked macro camera at leaf level.",
       "transition": "Quick zoom in"
     },
     {
       "segmentIds": ["s2"],
       "visualDescription": "A chubby tardigrade walking through a thin film of water on moss.",
-      "imagePrompt": "Stylized illustration of a chubby tardigrade walking through a thin film of water on a moss leaf, translucent body, soft green tones, vertical 9:16, subject centered",
+      "imagePrompt": "Stylized illustration of a chubby tardigrade walking through a thin film of water on a moss leaf, translucent body, soft green tones, vertical, subject centered",
       "direction": "Tracking shot at the animal's eye level, gentle handheld drift.",
       "transition": "Light rack focus"
     },
     {
       "segmentIds": ["s3"],
       "visualDescription": "The tardigrade pulling in its legs and curling into a dry barrel-shaped tun as the moss browns.",
-      "imagePrompt": "Illustrated tardigrade pulling in its legs and curling into a dry barrel-shaped tun on browning moss, warm dry light, vertical 9:16",
+      "imagePrompt": "Illustrated tardigrade pulling in its legs and curling into a dry barrel-shaped tun on browning moss, warm dry light, vertical",
       "direction": "Time-lapse transformation, slow push-in as colors drain.",
       "transition": "Dissolve"
     },
     {
       "segmentIds": ["s4"],
       "visualDescription": "Stylized cell interior where a glassy mesh forms around cell parts.",
-      "imagePrompt": "Stylized cutaway of a cell interior with a translucent glassy mesh forming around cell parts, labelled possible mechanism, cool blue highlights, vertical 9:16",
+      "imagePrompt": "Stylized cutaway of a cell interior with a translucent glassy mesh forming around cell parts, labelled possible mechanism, cool blue highlights, vertical",
       "direction": "Slow orbit inside the cell; on-screen label marks the mechanism as a hypothesis.",
       "transition": "Cut to rain"
     },
     {
       "segmentIds": ["s5"],
       "visualDescription": "A raindrop splashing onto dry moss; the tun swells and the tardigrade walks away.",
-      "imagePrompt": "Illustrated raindrop splashing onto dry moss, a barrel-shaped tun swelling back into a tardigrade that starts walking, fresh green tones, vertical 9:16",
+      "imagePrompt": "Illustrated raindrop splashing onto dry moss, a barrel-shaped tun swelling back into a tardigrade that starts walking, fresh green tones, vertical",
       "direction": "Slow-motion splash, then real-time walk out of frame.",
       "transition": "Whip pan"
     },
     {
       "segmentIds": ["s6"],
       "visualDescription": "An hourglass beside a tun on moss with a question card.",
-      "imagePrompt": "Illustrated hourglass beside a tiny barrel-shaped tun on moss, large question mark title card, soft vignette, vertical 9:16",
+      "imagePrompt": "Illustrated hourglass beside a tiny barrel-shaped tun on moss, large question mark title card, soft vignette, vertical",
       "direction": "Static hold for the end card.",
       "transition": "Fade to end card"
     }

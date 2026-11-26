@@ -74,35 +74,35 @@
     {
       "segmentIds": ["s1"],
       "visualDescription": "A single glowing sugar cube resting on a matte black kitchen scale against a dark background.",
-      "imagePrompt": "Close-up illustration of a softly glowing sugar cube on a matte black kitchen scale, dark background, warm rim light, vertical 9:16 composition, cube centered in the upper safe area",
+      "imagePrompt": "Close-up illustration of a softly glowing sugar cube on a matte black kitchen scale, dark background, warm rim light, vertical composition, cube centered in the upper safe area",
       "direction": "Static close-up with a slow push-in; eye-level camera, low-key lighting.",
       "transition": "Hard cut on the question"
     },
     {
       "segmentIds": ["s2"],
       "visualDescription": "A massive star blowing off its outer layers while a small bright core remains at the center.",
-      "imagePrompt": "Stylized illustration of a massive star exploding as a supernova, expanding orange shell, small blue-white core at the center, deep space background, vertical 9:16",
+      "imagePrompt": "Stylized illustration of a massive star exploding as a supernova, expanding orange shell, small blue-white core at the center, deep space background, vertical",
       "direction": "Wide shot; the camera pulls back as the shell expands, core stays centered.",
       "transition": "Flash to white"
     },
     {
       "segmentIds": ["s3", "s4"],
       "visualDescription": "A glowing sphere shrinking down, then the sugar cube back on the scale with its readout spinning.",
-      "imagePrompt": "Animated compression of a glowing sphere into a tiny dense ball, then a glowing sugar cube on a kitchen scale with a blurred spinning readout, vertical 9:16, dramatic contrast",
+      "imagePrompt": "Animated compression of a glowing sphere into a tiny dense ball, then a glowing sugar cube on a kitchen scale with a blurred spinning readout, vertical, dramatic contrast",
       "direction": "Animated compression shot, then match cut to the scale; slight camera shake as the readout spins.",
       "transition": "Match cut from sphere to cube"
     },
     {
       "segmentIds": ["s5"],
       "visualDescription": "Illustrated thought experiment: the tiny cube on a lab bench bursting outward into a bright expanding cloud.",
-      "imagePrompt": "Illustrated thought experiment, small dense cube on a lab bench bursting outward into a bright expanding cloud, corner label reading thought experiment, vertical 9:16, dramatic lighting",
+      "imagePrompt": "Illustrated thought experiment, small dense cube on a lab bench bursting outward into a bright expanding cloud, corner label reading thought experiment, vertical, dramatic lighting",
       "direction": "Slow-motion burst from a low angle; label stays on screen to mark the scene as imagined.",
       "transition": "Smoke wipe"
     },
     {
       "segmentIds": ["s6", "s7"],
       "visualDescription": "Cross-section of a neutron star with layered crust and a glowing core marked with a question mark.",
-      "imagePrompt": "Cross-section infographic of a neutron star, layered crust, glowing core marked with a large question mark, clean diagram style, vertical 9:16",
+      "imagePrompt": "Cross-section infographic of a neutron star, layered crust, glowing core marked with a large question mark, clean diagram style, vertical",
       "direction": "Slow zoom toward the core, then hold for the end card.",
       "transition": "Fade to end card"
     }
