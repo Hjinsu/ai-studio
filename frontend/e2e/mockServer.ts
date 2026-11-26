@@ -97,7 +97,83 @@ export async function installMockApi(pageObject: Page, options: { signedIn?: boo
       { id: '41', channelId: '1', channelName: 'IFNOVA', selectedTitle: 'A Teaspoon of Neutron Star', status: 'SUCCEEDED', limitKrw: '2000.000000', reservedKrw: '0', recognizedKrw: '8.000000', createdAt: '2026-11-25T01:00:00Z' },
     ],
   })
+  // V2-03 완료된 FAKE 요청 #41: 조사·대본·장면 결과와 검수 지적(오프라인 FIXTURE 출처)
+  const doneDetail = () => ({
+    id: '41', channelId: '1', contentType: 'SHORTS', status: 'SUCCEEDED', contentId: '8', runId: '9', cancelRequestedAt: null,
+    limitKrw: '2000.000000', reservedKrw: '0', recognizedKrw: '8.000000',
+    steps: stages.map((stage) => ({ stage, targetKey: 'video', inputGeneration: 1, status: 'SUCCEEDED', attempts: 1, lastErrorCode: null })),
+  })
+  const doneDiscovery = () => ({
+    ...productionDiscovery(), selectionMode: 'AUTO', awaitingSelection: false, selectedCandidateId: 2,
+    selectionReason: 'AUTO: highest ranked eligible candidate (2 of 4 eligible)',
+  })
+  const fixtureSource = (id: string, title: string) => ({
+    id: `neutron-star:${id}`, origin: 'FIXTURE', status: 'FIXTURE', url: `https://fixtures.ai-studio.invalid/neutron-star/${id}`,
+    title, publisher: 'AI Studio offline fixture, not a real publication', checkedAtUtc: null, documentHash: 'c'.repeat(64),
+  })
+  const narration = [
+    'Guess what this sugar cube weighs?',
+    'It is not sugar. It is a scrap of a neutron star, the collapsed core left behind when a massive star explodes as a supernova.',
+    'Now squeeze about 1.4 times the mass of our Sun into a ball only 20 kilometers across.',
+    'Packed that tightly, a piece the size of a sugar cube would weigh about a billion tons on Earth.',
+    "But if you could carry it home, it would not stay small. Without the star's gravity holding it together, it would burst apart violently.",
+  ]
+  const segmentClaims = [[], ['c1'], ['c2'], ['c3'], ['c4']]
+  const scene = (order: number, segmentIds: string[], ms: number, visualDescription: string, imagePrompt: string, direction: string, transition: string) => {
+    const text = segmentIds.map((id) => narration[Number(id.slice(1)) - 1]).join(' ')
+    return { id: `scene-${order}`, order, segmentIds, estimatedDurationMs: ms, narration: text, subtitleText: text, visualDescription, imagePrompt, direction, transition }
+  }
+  const donePlanning = () => ({
+    executionMode: 'FAKE',
+    results: [
+      {
+        operationId: '11', stage: 'RESEARCH', bodyHash: 'd'.repeat(64),
+        body: {
+          question: 'How heavy would a teaspoon of neutron star be?', angle: 'Compare the effect against familiar everyday scales to make it intuitive.',
+          investigations: [{ id: 'i1', question: 'What do current sources say about neutron star matter density estimates?', requestedEvidence: 'SPACE_AGENCY', status: 'ANSWERED_FROM_FIXTURE' }],
+          claims: [
+            { id: 'c1', kind: 'FACT', text: 'A neutron star is the collapsed core left behind when a massive star explodes as a supernova.', evidenceRefs: [{ sourceId: 'neutron-star:basics', locator: 'paragraph 1, sentence 1', supportingExcerpt: 'the collapsed core left behind when a massive star explodes as a supernova', relation: 'SUPPORTS' }], uncertainty: null },
+            { id: 'c2', kind: 'FACT', text: 'A typical neutron star holds about 1.4 times the mass of the Sun in a sphere about 20 kilometers across.', evidenceRefs: [{ sourceId: 'neutron-star:basics', locator: 'paragraph 1, sentence 2', supportingExcerpt: 'about 1.4 times the mass of the Sun in a sphere only about 20 kilometers across', relation: 'SUPPORTS' }], uncertainty: null },
+            { id: 'c3', kind: 'FACT', text: 'A sugar-cube-sized piece of neutron star matter would weigh about a billion tons on Earth.', evidenceRefs: [{ sourceId: 'neutron-star:density', locator: 'paragraph 1, sentence 1', supportingExcerpt: 'the size of a sugar cube would weigh about a billion tons on Earth', relation: 'SUPPORTS' }], uncertainty: null },
+            { id: 'c4', kind: 'SCENARIO', text: 'If a sugar cube of neutron star matter were brought to Earth, it would decompress violently.', evidenceRefs: [{ sourceId: 'neutron-star:density', locator: 'paragraph 1, sentence 2', supportingExcerpt: 'removed from the star, it would decompress violently', relation: 'SUPPORTS' }], uncertainty: 'Thought experiment: the matter cannot actually be removed from the star.' },
+            { id: 'c5', kind: 'HYPOTHESIS', text: 'The innermost core may contain exotic matter such as free quarks.', evidenceRefs: [], uncertainty: 'Model-based idea; the state of the core is still unknown.' },
+            { id: 'c6', kind: 'FACT', text: 'Neutron stars are the densest objects in the universe.', evidenceRefs: [{ sourceId: 'neutron-star:basics', locator: 'paragraph 1, sentence 3', supportingExcerpt: 'one of the densest forms of matter known', relation: 'INSUFFICIENT' }], uncertainty: null },
+          ],
+          sources: [fixtureSource('basics', 'Neutron star basics (offline fixture)'), fixtureSource('density', 'Neutron star matter density (offline fixture)')],
+          limitations: ['The sugar cube on Earth is a thought experiment.', 'The state of the innermost core is a model-based hypothesis.'],
+          scriptClaimIds: ['c1', 'c2', 'c3', 'c4', 'c5'],
+        },
+        validation: { findings: [{ severity: 'RECOMMENDATION', code: 'OPTIONAL_CLAIM_EXCLUDED', location: 'research.claims[c6]', references: ['neutron-star:basics'], correction: 'Not confirmed; it stays out of the script.' }] },
+      },
+      {
+        operationId: '12', stage: 'SCRIPT', bodyHash: 'e'.repeat(64),
+        body: {
+          language: 'en', hookSegmentIds: ['s1'], estimatedDurationMs: 41390, timingRuleVersion: 'speech-estimate-1',
+          editorialIntent: 'Let viewers guess the weight of a sugar cube, reveal the neutron star scale, then flip it with the thought experiment.',
+          segments: narration.map((text, i) => ({ id: `s${i + 1}`, narration: text, claimIds: segmentClaims[i] })),
+        },
+        validation: { findings: [{ severity: 'RECOMMENDATION', code: 'CLAIM_UNUSED', location: 'script', references: ['c5'], correction: 'A researched claim is not used; check the explanation is complete.' }] },
+      },
+      {
+        operationId: '13', stage: 'SCENES', bodyHash: 'f'.repeat(64),
+        body: {
+          visualStyle: 'Clean infographic; Clean cinematic science illustration, dark space palette with warm highlights; vertical frame, key subject inside the center safe area',
+          scenes: [
+            scene(1, ['s1'], 2630, 'A single glowing sugar cube resting on a matte black kitchen scale.', 'Close-up illustration of a softly glowing sugar cube on a matte black kitchen scale, warm rim light, vertical composition', 'Static close-up with a slow push-in; eye-level camera, low-key lighting.', 'Hard cut on the question'),
+            scene(2, ['s2'], 11160, 'A massive star blowing off its outer layers while a small bright core remains.', 'Stylized illustration of a massive star exploding as a supernova, small blue-white core at the center, vertical', 'Wide shot; the camera pulls back as the shell expands.', 'Flash to white'),
+            scene(3, ['s3', 's4'], 16700, 'A glowing sphere shrinking down, then the sugar cube back on the scale with its readout spinning.', 'Animated compression of a glowing sphere into a tiny dense ball, then a glowing sugar cube on a kitchen scale, vertical', 'Animated compression shot, then match cut to the scale.', 'Match cut from sphere to cube'),
+            scene(4, ['s5'], 10900, 'Illustrated thought experiment: the tiny cube on a lab bench bursting outward.', 'Illustrated thought experiment, small dense cube on a lab bench bursting outward into a bright expanding cloud, corner label reading thought experiment, vertical', 'Slow-motion burst from a low angle; label stays on screen to mark the scene as imagined.', 'Fade to end card'),
+          ],
+        },
+        validation: { findings: [] },
+      },
+    ],
+  })
   const handleProduction = (method: string, path: string, body: Record<string, unknown> | undefined): { status: number; body?: unknown } | null => {
+    if (path === '/api/v1/production-requests/41' && method === 'GET') return { status: 200, body: doneDetail() }
+    if (path === '/api/v1/production-requests/41/discovery') return { status: 200, body: doneDiscovery() }
+    if (path === '/api/v1/production-requests/41/planning') return { status: 200, body: donePlanning() }
+    if (path === '/api/v1/production-requests/42/planning') return { status: 200, body: { executionMode: 'FAKE', results: [] } }
     if (path === '/api/v1/production-requests' && method === 'POST') return { status: 201, body: { id: '42', status: 'QUEUED' } }
     if (path === '/api/v1/production-requests' && method === 'GET') return { status: 200, body: productionList() }
     if (path === '/api/v1/production-requests/42' && method === 'GET') return { status: 200, body: productionDetail() }

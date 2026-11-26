@@ -13,6 +13,7 @@ import {
   getProductionDiscovery,
   getProductionRequest,
   isTerminal,
+  planningKey,
   productionKey,
   type CandidateChoice,
   type EvaluatedCandidate,
@@ -31,6 +32,7 @@ import { PageHeader } from '../ui/PageHeader'
 import { EmptyState, ErrorState, InlineNotice, LoadingSkeleton, QueryView } from '../ui/States'
 import { LabelBadge, StatusBadge } from '../ui/StatusBadge'
 import { useToast } from '../ui/toast-context'
+import { PlanningSection } from './ProductionPlanningSection'
 import {
   BLOCK,
   CRITERIA,
@@ -47,7 +49,7 @@ import {
 const POLL_MS = 5_000
 
 /**
- * 제작 요청 상세(V2-02): 진행 단계·비용, 소재 후보와 평가 근거, 선정 결과. 직접 선택 모드에서 대기 중이면 적격 후보를
+ * 제작 요청 상세(V2-02~03): 진행 단계·비용, 소재 후보와 평가 근거, 선정 결과, 조사·대본·장면(읽기 전용). 직접 선택 모드에서 대기 중이면 적격 후보를
  * 고를 수 있다. 저장된 결과만 보여주며 화면을 다시 열어도 같은 대기 상태를 이어서 확인할 수 있다.
  */
 export function ProductionRequestDetailPage() {
@@ -62,7 +64,8 @@ export function ProductionRequestDetailPage() {
   })
   const [cancelling, setCancelling] = useState(false)
   const refresh = (generation: AbortSignal) =>
-    invalidateSessionQueries(queryClient, generation, productionKey(requestId), discoveryKey(requestId))
+    invalidateSessionQueries(queryClient, generation, productionKey(requestId), discoveryKey(requestId),
+      planningKey(requestId))
   const cancel = useSessionMutation({
     mutationFn: () => cancelProductionRequest(requestId),
     onSuccess: async (_result, _variables, generation) => {
@@ -110,6 +113,7 @@ export function ProductionRequestDetailPage() {
                 <StatCard label="확정 비용" value={<Money value={request.recognizedKrw} />} />
               </section>
               <DiscoverySection request={request} onChanged={refresh} />
+              <PlanningSection request={request} />
               <Card title="진행 단계" description="고정된 11단계를 순서대로 실행합니다.">
                 <DataTable<ProductionStep>
                   caption="진행 단계"

@@ -1,0 +1,87 @@
+{
+  "key": "venus-day",
+  "match": ["venus"],
+  "structure": "MYTH_TWIST",
+  "documents": [
+    {
+      "id": "d1",
+      "url": "https://fixtures.ai-studio.invalid/venus/rotation-and-orbit",
+      "title": "Venus rotation and orbit (offline fixture)",
+      "publisher": "AI Studio offline fixture, not a real publication",
+      "text": "Venus takes about 243 Earth days to spin once on its axis, measured against the distant stars. It takes about 225 Earth days to orbit the Sun. Venus also spins in the opposite direction to most planets, so on Venus the Sun would rise in the west and set in the east."
+    },
+    {
+      "id": "d2",
+      "url": "https://fixtures.ai-studio.invalid/venus/solar-day",
+      "title": "Sunrise to sunrise on Venus (offline fixture)",
+      "publisher": "AI Studio offline fixture, not a real publication",
+      "text": "Because Venus spins backward while it orbits, the time from one sunrise to the next is shorter than its spin: a solar day on Venus lasts about 117 Earth days. Why Venus spins backward is not settled. Proposed explanations include a giant impact early in its history and tides raised by its thick atmosphere."
+    }
+  ],
+  "claims": [
+    {
+      "id": "c1", "kind": "FACT",
+      "text": "Venus takes about 243 Earth days to spin once on its axis, measured against the stars.",
+      "evidence": [{ "document": "d1", "locator": "paragraph 1, sentence 1", "excerpt": "Venus takes about 243 Earth days to spin once on its axis", "relation": "SUPPORTS" }]
+    },
+    {
+      "id": "c2", "kind": "FACT",
+      "text": "Venus takes about 225 Earth days to orbit the Sun.",
+      "evidence": [{ "document": "d1", "locator": "paragraph 1, sentence 2", "excerpt": "It takes about 225 Earth days to orbit the Sun", "relation": "SUPPORTS" }]
+    },
+    {
+      "id": "c3", "kind": "FACT",
+      "text": "Venus spins in the opposite direction to most planets, so the Sun would rise in the west.",
+      "evidence": [{ "document": "d1", "locator": "paragraph 1, sentence 3", "excerpt": "spins in the opposite direction to most planets, so on Venus the Sun would rise in the west", "relation": "SUPPORTS" }]
+    },
+    {
+      "id": "c4", "kind": "FACT",
+      "text": "Because Venus spins backward while it orbits, a solar day from sunrise to sunrise lasts about 117 Earth days.",
+      "evidence": [{ "document": "d2", "locator": "paragraph 1, sentence 1", "excerpt": "a solar day on Venus lasts about 117 Earth days", "relation": "SUPPORTS" }]
+    },
+    {
+      "id": "c5", "kind": "HYPOTHESIS",
+      "text": "Venus may spin backward because of a giant impact early in its history or tides from its thick atmosphere.",
+      "uncertainty": "Not settled; these are proposed explanations, not an established cause.",
+      "evidence": [{ "document": "d2", "locator": "paragraph 1, sentences 2-3", "excerpt": "Proposed explanations include a giant impact early in its history and tides raised by its thick atmosphere", "relation": "SUPPORTS" }]
+    }
+  ],
+  "scriptClaimIds": ["c1", "c2", "c3", "c4", "c5"],
+  "limitations": [
+    "The cause of the backward spin is an open question; both explanations are presented as possibilities."
+  ],
+  "editorialIntent": "Start from the famous fact that a Venus day outlasts its year, confirm it, then reverse it: from sunrise to sunrise the day is far shorter, and the backward spin is still unexplained.",
+  "hookSegmentIds": ["s1"],
+  "segments": [
+    { "id": "s1", "narration": "A day longer than a year?", "claimIds": [] },
+    { "id": "s2", "narration": "On Venus, yes. One spin on its axis takes about 243 Earth days, but one trip around the Sun takes only about 225.", "claimIds": ["c1", "c2"] },
+    { "id": "s3", "narration": "And it spins backward compared with most planets, so the Sun would rise in the west.", "claimIds": ["c3"] },
+    { "id": "s4", "narration": "Here is the twist. Because it spins backward while it orbits, sunrise to sunrise is much shorter: about 117 Earth days.", "claimIds": ["c4"] },
+    { "id": "s5", "narration": "Why does it spin backward? Nobody knows for sure. A giant impact long ago, or tides from its thick atmosphere, might have flipped it.", "claimIds": ["c5"] },
+    { "id": "s6", "narration": "So which is longer on Venus, a day or a year? It depends on which day you mean. Follow IFNOVA for more strange science.", "claimIds": [] }
+  ],
+  "visualStyle": "Bold flat infographic animation, warm yellow and amber palette for Venus",
+  "scenes": [
+    {
+      "segmentIds": ["s1", "s2"],
+      "visualDescription": "Split screen with a pair of clocks: a slow spin dial on Venus and an orbit track around the Sun.",
+      "imagePrompt": "Flat infographic split screen, left a dial spinning slowly on the yellow globe of Venus, right Venus moving along an orbit track around the Sun, warm amber palette, vertical, large readable labels",
+      "direction": "Locked-off frontal camera; the orbit marker finishes its lap before the spin dial does.",
+      "transition": "Slide the split apart"
+    },
+    {
+      "segmentIds": ["s3", "s4"],
+      "visualDescription": "The Sun rising in the west over a hazy Venus horizon, then a sunrise-to-sunrise timeline.",
+      "imagePrompt": "Illustrated hazy yellow Venus horizon with the Sun rising on the side labelled west, thick cloud layers, then a clean timeline bar from one sunrise to the next, vertical",
+      "direction": "Slow upward tilt with the sunrise, then a graphic wipe into the timeline; bright backlight.",
+      "transition": "Graphic wipe"
+    },
+    {
+      "segmentIds": ["s5", "s6"],
+      "visualDescription": "Young Venus struck by a large body, then thick swirling atmosphere, ending on a question card.",
+      "imagePrompt": "Illustrated young Venus being struck by a large rocky body, followed by thick swirling yellow atmosphere, final title card with a question mark, vertical, cinematic lighting",
+      "direction": "Dynamic orbit camera around the impact, settle on the question card; mark both causes as possibilities on screen.",
+      "transition": "Fade to end card"
+    }
+  ]
+}

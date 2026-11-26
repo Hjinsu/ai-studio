@@ -50,7 +50,7 @@ class DatabaseBootstrapIT {
     void allMigrationsAreAppliedOnCleanDatabase() {
         List<String> versions = jdbcTemplate.queryForList(
                 "SELECT version FROM flyway_schema_history WHERE success = 1 ORDER BY installed_rank", String.class);
-        assertThat(versions).containsExactly("1", "2", "3", "4", "5", "6", "9", "10", "11");
+        assertThat(versions).containsExactly("1", "2", "3", "4", "5", "6", "9", "10", "11", "12");
         assertThat(flyway.info().pending()).isEmpty();
     }
 
@@ -78,6 +78,7 @@ class DatabaseBootstrapIT {
                 "budget_reservation.request_key", "content_revision.revision_hash", "content_run.output_manifest_hash",
                 "cost_log.event_fingerprint", "cost_log.event_key", "cost_log.request_key",
                 "production_request.request_hash", "production_request.request_key", "production_request.selection_hash",
+                "production_stage_result.body_hash", "production_stage_result.input_hash",
                 "production_step.target_key", "provider_operation.effect_key", "provider_operation.evidence_hash",
                 "provider_operation.request_hash", "queue_command_log.request_fingerprint", "queue_command_log.request_key",
                 "topic.normalized_hash");

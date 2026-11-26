@@ -26,3 +26,5 @@ GRANT SELECT, INSERT, UPDATE ON @DB@.production_request TO '@APP_USER@'@'@APP_HO
 GRANT SELECT, INSERT, UPDATE ON @DB@.production_step TO '@APP_USER@'@'@APP_HOST@';
 GRANT SELECT, INSERT, UPDATE ON @DB@.provider_operation TO '@APP_USER@'@'@APP_HOST@';
 GRANT SELECT, INSERT, UPDATE ON @DB@.production_discovery TO '@APP_USER@'@'@APP_HOST@';
+GRANT SELECT, INSERT ON @DB@.production_stage_result TO '@APP_USER@'@'@APP_HOST@';
+GRANT UPDATE (body_hash, body_json, validation_json) ON @DB@.production_stage_result TO '@APP_USER@'@'@APP_HOST@';

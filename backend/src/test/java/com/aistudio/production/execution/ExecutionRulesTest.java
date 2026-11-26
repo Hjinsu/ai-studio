@@ -104,6 +104,50 @@ class ExecutionRulesTest {
     }
 
     @Test
+    void fakeSelectionLengthStaysInsideTheFrozenRangeOfEitherContentType() {
+        // the earlier FAKE 45 s is kept whenever allowed, so earlier SHORTS selections replay with the same hash
+        assertThat(new FakeStageWork.DurationRange(40, 60).target()).isEqualTo(45);
+        assertThat(new FakeStageWork.DurationRange(45, 45).target()).isEqualTo(45);
+        assertThat(new FakeStageWork.DurationRange(1, 180).target()).isEqualTo(45);
+        // otherwise the midpoint, rounded down
+        assertThat(new FakeStageWork.DurationRange(480, 720).target()).isEqualTo(600);
+        assertThat(new FakeStageWork.DurationRange(60, 60).target()).isEqualTo(60);
+        assertThat(new FakeStageWork.DurationRange(60, 14400).target()).isEqualTo(7230);
+        assertThat(new FakeStageWork.DurationRange(10, 31).target()).isEqualTo(20);
+        assertThat(new FakeStageWork.DurationRange(1, 1).target()).isEqualTo(1);
+        for (int min = 1; min <= 200; min += 7) {
+            for (int max = min; max <= 400; max += 13) {
+                int target = new FakeStageWork.DurationRange(min, max).target();
+                assertThat(target).isBetween(min, max);
+            }
+        }
+        assertThatThrownBy(() -> new FakeStageWork.DurationRange(0, 10)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new FakeStageWork.DurationRange(61, 60)).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void fakeSelectionAsksTheRangeSourceForEachRequestAndIsDeterministic() {
+        StageWork.StepContext shorts = new StageWork.StepContext(7, 70, ProductionStage.SELECT, "video", 1, 1, 1,
+                "SHORTS", null, null);
+        StageWork.StepContext longform = new StageWork.StepContext(8, 80, ProductionStage.SELECT, "video", 1, 1, 1,
+                "LONGFORM", null, null);
+        FakeStageWork work = new FakeStageWork(BigDecimal.ONE, context -> "SHORTS".equals(context.contentType())
+                ? new FakeStageWork.DurationRange(40, 60) : new FakeStageWork.DurationRange(480, 720));
+        assertThat(work.select(shorts).targetDurationSeconds()).isEqualTo(45);
+        assertThat(work.select(longform).targetDurationSeconds()).isEqualTo(600);
+        assertThat(work.select(longform)).isEqualTo(work.select(longform));
+        // the fingerprint identifies the request, not the length
+        assertThat(work.select(shorts).fingerprint())
+                .isEqualTo(new FakeStageWork(BigDecimal.ONE).select(shorts).fingerprint());
+
+        assertThatThrownBy(() -> new FakeStageWork(BigDecimal.ONE, null)).isInstanceOf(NullPointerException.class);
+        StepFailure missing = (StepFailure) org.assertj.core.api.Assertions.catchThrowable(
+                () -> new FakeStageWork(BigDecimal.ONE, context -> null).select(shorts));
+        assertThat(missing.code()).isEqualTo("FAKE_LENGTH_RANGE_MISSING");
+        assertThat(missing.retryable()).isFalse();
+    }
+
+    @Test
     void stepFailureCodesAreBounded() {
         assertThat(new StepFailure("RENDER_TIMEOUT", true, "x").retryable()).isTrue();
         assertThatThrownBy(() -> new StepFailure("bad code", true, "x")).isInstanceOf(IllegalArgumentException.class);

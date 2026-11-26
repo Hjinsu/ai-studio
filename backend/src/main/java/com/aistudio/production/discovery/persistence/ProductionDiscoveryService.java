@@ -230,7 +230,7 @@ class ProductionDiscoveryService implements DiscoveryExecutionPort {
     private ProductionCostMapper.Request lockOwned(StepOwner owner, ProductionStage expectedStage) {
         var request = requests.lockRequest(owner.requestId());
         var step = requests.step(owner.requestId(), owner.stepId());
-        if (request == null || !ProductionDiscovery.PIPELINE.equals(request.pipelineVersion())
+        if (request == null || !ProductionDiscovery.supportsPipeline(request.pipelineVersion())
                 || step == null || step.stage() != expectedStage
                 || !requests.owns(owner.requestId(), owner.leaseOwner(), owner.leaseEpoch())) {
             throw invalid();

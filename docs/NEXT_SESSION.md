@@ -1,6 +1,6 @@
 # 회사 PC 다음 세션 — AI Studio v2
 
-2026-11-26 KST · V2-01·V2-02 DONE · V2-03 설계 방향 승인 및 구현 착수 승인 대기.
+2026-11-26 KST · V2-01·V2-02 DONE · V2-03 HOLD, F05 수치 예외 제거 및 별도 독립 리뷰 대기.
 
 ## 기준과 보존
 
@@ -31,11 +31,12 @@ git -C ../ai-studio-v2 status --short --branch
 
 ## 다음 작업
 
-**V2-03 자료 조사·대본·장면 구성** 설계 방향은 ChatGPT의 조건부 승인을 받았고 R01~R07이 반영됐다. 설계는 로컬 `v2/03-design` worktree의 `docs/v2/V2-03_IMPLEMENTATION_PLAN.md`에 있으며, 기준 HEAD `735fb60576fc531e4b4f77fbf210d56abe9e9088` 위의 미추적 파일이다. 해당 worktree를 보존한다. 아래 명령으로 설계 기준 이후 통합 변경을 확인하고, 설계 문서의 참조와 계약을 대조한다. 제품 구현은 별도 사용자 착수 승인 후 배정한다. [로드맵](v2/03_ROADMAP.md)
+**V2-03 자료 조사·대본·장면 구성**은 `v2/review-v2-03`의 별도 `ai-studio-v2-review-03` worktree에서 이어간다. F05 수치 예외를 제거했다. 다음 작업은 Draft PR #6 최신 HEAD 및 동일 SHA의 CI를 확인하고, 구현 세션과 분리된 읽기 전용 독립 리뷰에서 수치 검수와 구버전 영수증 재생을 확인하는 것이다. HOLD 해제와 병합은 독립 리뷰 APPROVE 및 사용자 승인 후 진행한다. 미디어 프로필은 V2-04 별도 승인 범위다. [결합 검증 보고서](reports/V2-03_INTEGRATION_REPORT.md) · [승인 설계](v2/V2-03_IMPLEMENTATION_PLAN.md)
 
 ```powershell
-git diff --stat 735fb60576fc531e4b4f77fbf210d56abe9e9088 origin/v2/integration
-git -C ../ai-studio-v2-03-design status --short --branch
+git fetch origin
+git rev-parse origin/v2/review-v2-03
+gh pr view v2/review-v2-03 --json headRefOid,isDraft,statusCheckRollup
 ```
 
 ## 환경 및 검증 상태

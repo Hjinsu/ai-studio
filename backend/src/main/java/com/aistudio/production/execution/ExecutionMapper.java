@@ -18,13 +18,20 @@ import com.aistudio.production.contract.StepStatus;
 @Mapper
 interface ExecutionMapper {
     String DISCOVERY_PIPELINE = "v2-discovery-1";
+    String PLANNING_PIPELINE = "v2-planning-1";
 
     record RequestRow(long id, long channelId, String contentType, String pipelineVersion, ProductionStatus status,
             Long contentId, Long runId, String leaseOwner, long leaseEpoch, boolean leaseValid,
             boolean cancelRequested) {
 
+        /** DISCOVER and SELECT run the V2-02 discovery flow (v2-discovery-1 and v2-planning-1). */
         boolean discovery() {
-            return DISCOVERY_PIPELINE.equals(pipelineVersion);
+            return DISCOVERY_PIPELINE.equals(pipelineVersion) || planning();
+        }
+
+        /** V2-03: RESEARCH, SCRIPT and SCENES run through the planning port. */
+        boolean planning() {
+            return PLANNING_PIPELINE.equals(pipelineVersion);
         }
     }
 
@@ -46,7 +53,8 @@ interface ExecutionMapper {
      * a future retry_at (local retry backoff or recovery recheck); a cancel intent skips a local retry wait but not
      * a recovery recheck.
      *
-     * <p>V2-02: discovery requests are only claimed when the discovery flow is wired. A MANUAL request that
+     * <p>V2-02: discovery requests are only claimed when the discovery flow is wired. V2-03: planning requests
+     * also need the planning flow, which is off by default; old pipelines keep their claim rule. A MANUAL request that
      * finished DISCOVER and has no recorded choice waits for the requester without a lease and is not claimed;
      * a committed choice or cancel makes it claimable again. Recovery (status RECOVERY_REQUIRED or a step in
      * recovery) is never held back by the wait.
@@ -54,7 +62,8 @@ interface ExecutionMapper {
     @Select("""
             SELECT r.id FROM production_request r
             WHERE (r.pipeline_version = 'v2-fixed-1'
-                   OR (#{discovery} AND r.pipeline_version = 'v2-discovery-1'
+                   OR (((#{discovery} AND r.pipeline_version = 'v2-discovery-1')
+                        OR (#{discovery} AND #{planning} AND r.pipeline_version = 'v2-planning-1'))
                        AND NOT (r.cancel_requested_at IS NULL AND r.status = 'RUNNING'
                            AND EXISTS (SELECT 1 FROM production_discovery d
                                WHERE d.production_request_id = r.id AND d.selection_mode = 'MANUAL'
@@ -75,7 +84,7 @@ interface ExecutionMapper {
             LIMIT 1
             FOR UPDATE
             """)
-    Long nextClaimable(@Param("discovery") boolean discovery);
+    Long nextClaimable(@Param("discovery") boolean discovery, @Param("planning") boolean planning);
 
     /** The wait condition of {@link #nextClaimable}: MANUAL, evaluated, and neither chosen nor selected yet. */
     @Select("""

@@ -89,6 +89,96 @@ export const STEP_ERROR: Record<string, string> = {
   LOCAL_ERROR: '내부 처리 오류(재시도)',
   INTERRUPTED: '중단 후 시도 한도 도달',
   ATTEMPTS_EXHAUSTED: '시도 한도 도달',
+  PLANNING_VALIDATION_BLOCKED: '검수 필수 차단(이후 단계 미실행)',
+  PLANNING_RESPONSE_UNAVAILABLE: '기획 응답 확인 대기',
+  PLANNING_REVIEW_FAILED: '기획 검수 재시도 대기',
+}
+
+/** 조사 주장 유형(V2-03). 사실만 출처 근거로 확인하며 가설·가상 시나리오는 불확실성을 함께 표시한다. */
+export const CLAIM_KIND: Record<string, Label & { help: string }> = {
+  FACT: { ...of('사실', 'success'), help: '보유한 문서의 인용으로 지지를 확인한 주장' },
+  HYPOTHESIS: { ...of('가설', 'warning'), help: '추론 근거와 불확실성이 있는 설명' },
+  SCENARIO: { ...of('가상 시나리오', 'primary'), help: '전제와 적용 한계를 둔 사고 실험' },
+  UNVERIFIED: { ...of('미확인', 'neutral'), help: '근거가 확인되지 않아 대본에 쓰지 않는 내용' },
+}
+
+/** 출처 조회 상태. FIXTURE는 오프라인 시험 자료이며 실제 확인(VERIFIED)으로 표시하지 않는다. */
+export const SOURCE_STATUS: Record<string, Label> = {
+  VERIFIED: of('조회 확인', 'success'),
+  FIXTURE: of('FIXTURE 시험 자료', 'warning'),
+  UNVERIFIED: of('미확인 단서', 'neutral'),
+}
+
+export const SOURCE_ORIGIN: Record<string, string> = {
+  RETRIEVED: '서버 조회 문서',
+  MODEL_HINT: '모델 제시 단서',
+  FAKE: 'FAKE 생성',
+  FIXTURE: '오프라인 fixture',
+}
+
+/** 주장 지지 판정(출처 조회 상태와 별개). */
+export const RELATION: Record<string, Label> = {
+  SUPPORTS: of('지지', 'success'),
+  CONTRADICTS: of('반박', 'danger'),
+  INSUFFICIENT: of('근거 부족', 'neutral'),
+}
+
+export const SEVERITY: Record<string, Label> = {
+  BLOCK: of('필수 차단', 'danger'),
+  RECOMMENDATION: of('개선 권고', 'warning'),
+}
+
+/** 검수 지적 코드. 모르는 코드는 원문을 보여준다. */
+export const FINDING: Record<string, string> = {
+  RESEARCH_STRUCTURE: '조사 결과 구조 오류',
+  RESEARCH_INPUT_MISMATCH: '선정 소재의 질문·관점과 다름',
+  SOURCE_URL_INVALID: '허용되지 않는 출처 주소',
+  SOURCE_FALSE_VERIFICATION: '서버가 확인하지 않은 검증 표시',
+  SOURCE_NOT_FOUND: '보유하지 않은 출처(허위 출처 의심)',
+  QUOTE_NOT_FOUND: '문서에 없는 인용(허위 인용 의심)',
+  EVIDENCE_SOURCE_UNKNOWN: '목록에 없는 출처 연결',
+  FACT_CONTRADICTED: '핵심 사실이 출처와 상충',
+  CORE_EVIDENCE_INSUFFICIENT: '핵심 근거 부족',
+  CORE_UNVERIFIED_CLAIM: '미확인 내용을 대본에 사용',
+  CLAIM_UNCERTAINTY_MISSING: '가설·시나리오의 불확실성 누락',
+  OPTIONAL_CLAIM_EXCLUDED: '확인되지 않은 부가 내용 제외',
+  INVESTIGATION_PLAN_NOT_COVERED: '조사 계획 일부 미기록',
+  LIMITATIONS_MISSING: '조사 한계 미기록',
+  SCRIPT_STRUCTURE: '대본 구조 오류',
+  SCRIPT_LANGUAGE_MISMATCH: '채널 언어와 다름',
+  UNKNOWN_CLAIM_REFERENCE: '없는 주장 참조',
+  EXCLUDED_CLAIM_REFERENCE: '대본 사용 대상이 아닌 주장 참조',
+  UNSUPPORTED_ASSERTION: '근거 주장 없이 사실 단정',
+  HYPOTHESIS_AS_FACT: '가설·가상을 사실로 단정',
+  NUMBER_MISMATCH: '근거와 다른 수치',
+  UNSUPPORTED_CAUSAL_CLAIM: '근거에 없는 인과 설명',
+  TIMING_RULE_MISMATCH: '발화 시간 규칙 버전 불일치',
+  DURATION_ESTIMATE_MISMATCH: '예상 길이 불일치',
+  DURATION_UNSUITABLE: '길이 부적합(35~65초 밖)',
+  DURATION_ADJUSTMENT: '길이 보정 권고(40~60초 밖)',
+  HOOK_TOO_LONG: '첫 3초 Hook이 김',
+  HOOK_WEAK: 'Hook 흡인력 부족',
+  ENDING_WEAK: '결말 약함',
+  EDITORIAL_INTENT_MISSING: '차별적 설명 의도 미기록',
+  CLAIM_UNUSED: '조사한 핵심 주장 미사용',
+  SUBSTANTIVE_REPEAT: '최근 대본과 실질적 반복',
+  SIMILAR_RECENT_SCRIPT: '최근 대본과 유사',
+  SCENE_STRUCTURE: '장면 구성 구조 오류',
+  SCENE_ORDER: '장면 순서 번호 오류',
+  SCENE_SEGMENT_MISSING: '대본 구간 누락',
+  SCENE_SEGMENT_DUPLICATE: '대본 구간 중복',
+  SCENE_SEGMENT_UNKNOWN: '없는 대본 구간 참조',
+  SCENE_SEGMENT_ORDER: '대본 순서와 다른 장면 순서',
+  SCENE_DURATION_INVALID: '장면 길이 오류',
+  SCENE_DURATION_TOTAL: '장면 길이 합계 불일치',
+  SCENE_TOO_SHORT: '너무 짧은 장면',
+  SCENE_TEXT_MISMATCH: '내레이션·자막이 고정 대본과 다름',
+  SCENE_VISUAL_MISSING: '시각 연출 정보 누락',
+  SCENE_TRANSITION_MISSING: '장면 전환 미지정',
+  SCENE_NEW_FACT: '화면에 대본에 없는 사실 추가',
+  SCENE_PRESENTED_AS_EVIDENCE: '생성 이미지를 실제 자료처럼 표현',
+  CHANNEL_STYLE_NOT_APPLIED: '채널 시각 스타일 미반영',
+  FRAMING_NOT_VERTICAL: '세로 구도 미지정',
 }
 
 /**

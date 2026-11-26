@@ -16,6 +16,35 @@
 ## 인수인계 기록
 작업 ID / 상태 / 변경 파일 / 테스트 명령 및 실제 결과 / 미해결 문제 / 다음 작업 / 필요 환경변수. 커밋 해시는 생성된 경우만 기록.
 
+### V2-03 — F05 화면비 수치 예외 제거 (2026-11-26 KST, HOLD)
+
+- `v2/review-v2-03` 기준 `e0083695192c1a01253e1e1d138ba4ed0bc6864c`. `ScenesReview`, `PlanningExecutionService`, `FakePlanningProvider`, SCENES fixture, 관련 백엔드·프론트 테스트와 화면 레이블을 갱신했다. 설계 승인은 `DECISIONS.md`와 V2-03 구현 계획, 검증과 인수인계는 `TASKS.md`, `docs/NEXT_SESSION.md` 및 결합 보고서에 기록했다.
+- 새 SCENES 입력만 버전을 올렸다. 구버전 영수증은 저장 증거로 재생하며, 미적용 상태에서 재검수할 때 대본 근거가 없는 수치는 비용을 정산한 뒤 차단한다.
+- 단위 293건, 격리 MariaDB 11.8.2 통합 255건(실제 API Edge 포함), bootJar, 프론트 lint·typecheck·build, Vitest 97건, Mock Edge 14건, OpenAPI 검사 및 생성 타입 일치, Gitleaks, diff 검사 통과. 두 소재별 전체 11단계 완료, 버전 1 영수증 두 경로 및 F01~F04·F06을 검증했다. V12는 격리 DB에만 적용했고 기존 Migration 파일은 기준과 동일하다.
+- 다음 작업은 [Draft PR #6 최신 HEAD의 CI](https://github.com/Hjinsu/ai-studio/pull/6/checks)와 SHA를 확인한 별도 읽기 전용 독립 리뷰다. 사용자 승인까지 HOLD를 유지한다. [결합 검증](docs/reports/V2-03_INTEGRATION_REPORT.md#f05-화면비-수치-예외-제거-2026-11-26-kst)
+
+### V2-03 — F05 최종 수정 검증 (2026-11-26 KST, HOLD)
+
+- 기준 `eabf980780d06474767f6195895c3b0df84a926b`에 Claude `1d31f5046bce52cc70a6fb4236b7b05abc079b5c`를 별도 `ai-studio-v2-review-03` worktree의 `v2/review-v2-03`에서 fast-forward했다. 변경 제품 파일은 `ScenesReview.java`, `ScenesReviewTest.java`다. 인수 문서는 `STATE.md`, `TASKS.md`, `docs/NEXT_SESSION.md`, `docs/reports/V2-03_INTEGRATION_REPORT.md`다.
+- 이전 HOLD 사례 여섯 개는 수치 검수에서 차단됐다. 콜론·괄호·긴 대시·쉼표가 사실 비율을 화면비 지시처럼 분리하는 신규 반례 네 개가 재현됐다. 다음 작업은 Claude 담당 F05 경계 보완과 회귀 추가, 결합 및 최신 HEAD의 CI 확인, 별도 독립 재검토다.
+- 백엔드 단위 293건(ScenesReviewTest 22건), 격리 MariaDB 11.8.2 통합 253건(실제 API Edge 1건 포함)과 bootJar 통과. V12는 격리 DB에만 적용했고 임시 서버의 정상 종료를 확인했다. Vitest 97건, Mock Edge 14건, 프론트 lint·typecheck·build, OpenAPI lint(기존 경고 2건)와 생성 타입 검사, 게시 이력 Gitleaks, diff 검사 통과. Migration 파일은 기준과 동일하다. [결합 보고서](docs/reports/V2-03_INTEGRATION_REPORT.md#f05-최종-수정-결합-및-검증-2026-11-26-kst) · [Draft PR #6 검사](https://github.com/Hjinsu/ai-studio/pull/6/checks)
+
+### V2-03 — 독립 리뷰 HOLD 수정 (2026-11-26 KST)
+
+- 독립 리뷰 기준 `54ffea3c09246b61a057c427e6210591af20cccb`, 수정 브랜치 `v2/review-v2-03`, [Draft PR #6](https://github.com/Hjinsu/ai-studio/pull/6). 사용자가 HOLD를 수용했다. 별도 독립 리뷰 APPROVE와 사용자 승인 전까지 병합·DONE을 보류한다.
+- F01은 UTF-8 저장 크기·지적 수·필드 길이를 제한하고 차단 지적을 우선 보존한다. F02는 공급자 응답 반환 후 형식 검사를 결과 불명과 분리한다. F03은 SCRIPT 비교 목록을 한 번 읽어 예약과 재생에 사용한다. F04는 요청 생성과 claim에 같은 공급자 준비 조건을 적용한다.
+- 변경 경로는 planning 서비스·검수 기록·준비 상태, 비용 서비스, 요청 API·실행기 설정, 격리 DB와 실행기 테스트, 실제 API Edge 스크립트다. Codex 커밋은 `ec10c07`이다.
+- Claude F05 `5f8dfe3`와 F06 `a6fa744`를 `e139cef`에서 결합했다. F05 후속 `8fd969a`를 `9b952e6`에서 인수했고, `782b6d5`에서 `vertical 9:16 ratio of the tower` 등 사실 비율과 프레이밍 표현이 붙은 경우도 검수 대상으로 유지했다.
+- `e139cef`에서 `AI_STUDIO_REVIEW_EDGE=true`와 `gradlew.bat --no-build-cache :backend:test :backend:bootJar :backend:integrationTest --rerun-tasks`로 단위 287건, 격리 MariaDB 11.8.2 통합 253건(실제 API Edge 1건 포함), 실패·오류·건너뜀 0건, bootJar 성공. 정산 영수증 새 lease 적용, SCENES 형식 오류·로컬 소켓 타임아웃 분리, 대본 21개 이상에서 최초 20개 고정·재생, V11 기존 데이터 보존, 제한 운영 계정 11단계, 소유자 200·다른 인증 사용자 404·미인증 401, LONGFORM 및 길이 범위를 변경한 SHORTS를 확인했다.
+- 최종 코드 `782b6d5` 재실행에서 단위 292건, 격리 통합 253건(실제 API Edge 포함), Vitest 97건, Mock Edge 14건이 통과했다. 다음 작업은 [Draft PR #6 최신 HEAD의 CI](https://github.com/Hjinsu/ai-studio/pull/6/checks)를 확인한 별도 독립 리뷰다. F05의 괄호 화면비 표현은 검수 대상이 될 수 있고 비영어 화면비 표현은 지원 범위 밖이다. 일반 자연어 의미 검증은 V2-05에서 다룬다. [최종 결합 검증](docs/reports/V2-03_INTEGRATION_REPORT.md#hold-수정-결합)
+- V12 적용은 격리 테스트 DB로 제한했다. 기존 migration, OpenAPI 및 생성 타입에는 변경이 없다.
+
+### V2-03 — 제품·안전성 결합 검증 후보 (2026-11-26 KST)
+
+- `v2/review-v2-03`, 통합 기준 `c4832b7`, 공통 `610b9f8`, 제품 `5694941`, 안전성 `4299c69`. 두 브랜치의 이력을 병합 `c1fdff1`로 보존했다. [변경 파일과 검증 결과](docs/reports/V2-03_INTEGRATION_REPORT.md)
+- 실제 저장·비용 포트로 AUTO/MANUAL 11단계, 장애·비용·품질 차단을 확인했다. 백엔드 단위 279건, 격리 통합 241건, 선택 실행 실제 API Edge 1건, Vitest 97건, Mock API Edge 14건 통과. V12는 격리 DB에만 적용했다. V1~V12 파일·OpenAPI·생성 타입은 공통 기준과 동일하다.
+- 다음 작업은 최신 Draft PR HEAD와 CI를 확인한 뒤 별도 세션 독립 리뷰다. 사용자 최종 승인 후 종료와 병합을 검토한다.
+
 ### V2-02 — 최종 승인 및 종료 (2026-11-26 KST, DONE)
 
 - ChatGPT 설계·구현 검토와 별도 Codex 독립 재검토 APPROVE, P0/P1 없음, 사용자 최종 종료·병합 승인. 검증 SHA `9acab98483539402ee61e9695a3d3ccf10b66f00`의 [CI 45758360558](https://github.com/Hjinsu/ai-studio/actions/runs/45758360558) 7/7 통과.

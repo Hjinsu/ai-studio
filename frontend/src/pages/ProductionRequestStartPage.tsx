@@ -80,7 +80,7 @@ export function ProductionRequestStartPage() {
     <>
       <PageHeader
         title="제작 시작"
-        description="채널을 고르면 채널 설정으로 과학 소재 후보를 발굴하고 평가해 소재를 선정합니다. 소재를 직접 입력하지 않아도 됩니다."
+        description="채널을 고르면 채널 설정을 바탕으로 소재 후보를 발굴하고 평가합니다. 소재를 직접 입력하지 않아도 됩니다."
       />
       <div className="grid max-w-3xl gap-5">
         {spending?.blocked && (
