@@ -18,6 +18,7 @@ import java.time.Duration;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -276,7 +277,106 @@ class ProductionCostIT {
         assertThat(costs.readCostState(request).unappliedReceipts()).containsExactly(receipt);
         apply(restarted, operation);
         assertThat(costs.readCostState(request).unappliedReceipts()).isEmpty();
+        var applied = jdbc.queryForObject("SELECT applied_at FROM provider_operation WHERE id = ?",
+                java.time.LocalDateTime.class, operation);
+        transactions.run(() -> costs.markReceiptApplied(restarted, operation));
+        assertThat(jdbc.queryForObject("SELECT applied_at FROM provider_operation WHERE id = ?",
+                java.time.LocalDateTime.class, operation)).isEqualTo(applied);
         verify(provider, times(1)).send(anyLong(), any());
+    }
+
+    @Test
+    void recoveredReservationDispatchesOnceAtExecutorDefaultPrice() throws Exception {
+        long request = request();
+        var owner = start(request, ProductionStage.DISCOVER);
+        doThrow(new IllegalStateException("interrupted before permit")).doCallRealMethod()
+                .when(ledgerTarget()).checkProductionDispatch(anyLong(), anyLong());
+        assertThatThrownBy(() -> effect(owner, ProductionStage.DISCOVER, "1", "SUCCESS"))
+                .hasMessage("interrupted before permit");
+        long operation = operation(request);
+        jdbc.update("UPDATE production_request SET status = 'RECOVERY_REQUIRED' WHERE id = ?", request);
+        var restarted = replaceLease(owner);
+        var receipt = effect(restarted, ProductionStage.DISCOVER, "1", "SUCCESS").receipt();
+        assertThat(receipt.operationId()).isEqualTo(operation);
+        assertThat(receipt.outcome()).isEqualTo(Outcome.RESULT_ADOPTED);
+        assertThat(effect(restarted, ProductionStage.DISCOVER, "1.0", "SUCCESS").receipt()).isEqualTo(receipt);
+        assertThat(jdbc.queryForObject("SELECT amount_krw FROM cost_log WHERE id = ?", BigDecimal.class,
+                receipt.ledgerEventId())).isEqualByComparingTo("1");
+        verify(provider, times(1)).send(anyLong(), any());
+    }
+
+    @Test
+    void requestLockSerializesEvidenceAndSettlementWithoutTakingBudgetControlOnRead() throws Exception {
+        long request = request();
+        var owner = start(request, ProductionStage.DISCOVER);
+        assertThat(effect(owner, ProductionStage.DISCOVER, "1", "UNKNOWN").disposition())
+                .isEqualTo(Disposition.RECOVERY_REQUIRED);
+        long operation = operation(request);
+        var evidence = new Evidence(Outcome.NOT_EXECUTED, null, "KRW", BigDecimal.ZERO, null, null, "verified");
+        try (var workers = Executors.newFixedThreadPool(2)) {
+            var requestLocked = new CountDownLatch(1);
+            var releaseRequest = new CountDownLatch(1);
+            var finishing = workers.submit(() -> transactions.run(() -> {
+                lockRequest(request);
+                requestLocked.countDown();
+                await(releaseRequest);
+                assertThat(costs.readCostState(request).unresolved()).isTrue();
+            }));
+            var reconciling = new CountDownLatch(1);
+            try {
+                await(requestLocked);
+                var settlement = workers.submit(() -> {
+                    reconciling.countDown();
+                    return costs.reconcile(operation, "lookup", evidence);
+                });
+                await(reconciling);
+                assertThatThrownBy(() -> settlement.get(300, TimeUnit.MILLISECONDS))
+                        .isInstanceOf(TimeoutException.class);
+                assertThat(jdbc.queryForObject("SELECT evidence_hash FROM provider_operation WHERE id = ?",
+                        String.class, operation)).isNull();
+                releaseRequest.countDown();
+                finishing.get(5, TimeUnit.SECONDS);
+                var receipt = settlement.get(5, TimeUnit.SECONDS);
+                assertThat(receipt.outcome()).isEqualTo(Outcome.NOT_EXECUTED);
+
+                // A different connection owns the global X lock while the executor-style read runs.
+                var controlLocked = new CountDownLatch(1);
+                var releaseControl = new CountDownLatch(1);
+                var controlWriter = workers.submit(() -> transactions.run(() -> {
+                    jdbc.queryForObject("SELECT id FROM budget_control WHERE id = 1 FOR UPDATE", Long.class);
+                    controlLocked.countDown();
+                    await(releaseControl);
+                }));
+                try {
+                    await(controlLocked);
+                    var read = workers.submit(() -> transactions.execute(() -> {
+                        lockRequest(request);
+                        return costs.readCostState(request);
+                    }));
+                    var state = read.get(5, TimeUnit.SECONDS);
+                    assertThat(state.unresolved()).isFalse();
+                    assertThat(state.unappliedReceipts()).containsExactly(receipt);
+                } finally {
+                    releaseControl.countDown();
+                }
+                controlWriter.get(5, TimeUnit.SECONDS);
+            } finally {
+                releaseRequest.countDown();
+            }
+        }
+    }
+
+    private void lockRequest(long request) {
+        jdbc.queryForObject("SELECT id FROM production_request WHERE id = ? FOR UPDATE", Long.class, request);
+    }
+
+    private static void await(CountDownLatch latch) {
+        try {
+            assertThat(latch.await(10, TimeUnit.SECONDS)).isTrue();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Contract test interrupted", e);
+        }
     }
 
     @Test
