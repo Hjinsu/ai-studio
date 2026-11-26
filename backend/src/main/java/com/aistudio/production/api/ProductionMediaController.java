@@ -87,8 +87,9 @@ class ProductionMediaController {
         }
         try (channel) {
             boolean head = "HEAD".equals(input.getMethod());
-            var range = MediaByteRange.parse(head || input.getHeader("If-Range") != null
-                    ? null : input.getHeader("Range"), identity.bytes());
+            var ranges = java.util.Collections.list(input.getHeaders("Range"));
+            var range = MediaByteRange.parse(head || input.getHeader("If-Range") != null || ranges.size() != 1
+                    ? null : ranges.getFirst(), identity.bytes());
             response.setStatus(range.status());
             response.setHeader("Accept-Ranges", "bytes");
             response.setHeader("Cache-Control", "private, no-store");

@@ -7,7 +7,8 @@ import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
+import java.nio.file.FileAlreadyExistsException;
+import java.util.Objects;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.security.MessageDigest;
@@ -24,6 +25,25 @@ public final class WorkspaceMediaStore implements MediaStore {
     public WorkspaceMediaStore(Path root) throws IOException {
         this.root = root.toAbsolutePath().normalize();
         requireDirectory(this.root);
+    }
+
+    public void verifyPublicationSupport() throws IOException {
+        Path temporary = Files.createTempDirectory(root, ".media-readiness-");
+        Path source = temporary.resolve("staged");
+        Path target = temporary.resolve("asset");
+        try {
+            Files.writeString(source, "media");
+            Files.createLink(target, source);
+            if (!Files.isSameFile(source, target)) {
+                throw new IOException("Media filesystem did not preserve identity");
+            }
+        } catch (UnsupportedOperationException ex) {
+            throw new IOException("Media filesystem lacks atomic no-replace publication", ex);
+        } finally {
+            Files.deleteIfExists(target);
+            Files.deleteIfExists(source);
+            Files.deleteIfExists(temporary);
+        }
     }
 
     @Override
@@ -65,16 +85,25 @@ public final class WorkspaceMediaStore implements MediaStore {
 
     private void commitVerified(Attempt attempt, Role role, FileIdentity expected) throws IOException {
         Path target = assetPath(attempt, role, false);
-        if (Files.exists(target, LinkOption.NOFOLLOW_LINKS)) {
-            try (FileChannel ignored = verified(target, expected)) {
-                return;
+        Path staged = sibling(target);
+        if (!Files.exists(target, LinkOption.NOFOLLOW_LINKS)) {
+            try (FileChannel ignored = verified(staged, expected)) {
+                // The staging file has already been flushed.
+            }
+            try {
+                // Atomic publication without replacement, including across JVMs on the same filesystem.
+                Files.createLink(target, staged);
+            } catch (FileAlreadyExistsException ignored) {
+                // Recovery may have published this input already. Verify the existing target below.
+            } catch (UnsupportedOperationException ex) {
+                throw new IOException("Media storage cannot publish without replacement", ex);
             }
         }
-        Path staged = sibling(target);
-        try (FileChannel ignored = verified(staged, expected)) {
-            // Verify before publishing. Close the handle before moving for Windows.
+        try (FileChannel ignored = verified(target, expected)) {
+            if (Files.isRegularFile(staged, LinkOption.NOFOLLOW_LINKS) && Files.isSameFile(staged, target)) {
+                Files.deleteIfExists(staged);
+            }
         }
-        Files.move(staged, target, StandardCopyOption.ATOMIC_MOVE);
     }
 
     @Override
@@ -133,6 +162,13 @@ public final class WorkspaceMediaStore implements MediaStore {
             }
             if (size != expected.bytes() || !expected.sha256().equals(HexFormat.of().formatHex(hash.digest()))) {
                 throw new IOException("Media integrity check failed");
+            }
+            var after = Files.readAttributes(path, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+            if (!after.isRegularFile() || after.size() != expected.bytes()
+                    || !Objects.equals(attributes.fileKey(), after.fileKey())
+                    || !attributes.lastModifiedTime().equals(after.lastModifiedTime())
+                    || !path.toRealPath().equals(path)) {
+                throw new IOException("Media file changed during verification");
             }
             channel.position(0);
             valid = true;

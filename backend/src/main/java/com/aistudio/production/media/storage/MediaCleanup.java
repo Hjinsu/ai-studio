@@ -46,7 +46,7 @@ public class MediaCleanup {
                     var name = SCRATCH.matcher(directory.getFileName().toString());
                     if (name.matches() && Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS)
                             && older(directory, cutoff) && safe(directory)) {
-                        reapScratch(Long.parseLong(name.group(1)), directory);
+                        reapScratch(Long.parseLong(name.group(1)), directory, cutoff);
                     }
                 }
             }
@@ -65,7 +65,7 @@ public class MediaCleanup {
         }
     }
 
-    private void reapScratch(long requestId, Path directory) {
+    private void reapScratch(long requestId, Path directory, Instant cutoff) {
         transactions.run(() -> {
             if (leased(requestId)) {
                 return;
@@ -76,7 +76,7 @@ public class MediaCleanup {
                     return;
                 }
                 for (Path path : paths) {
-                    if (!safe(path) || !(Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)
+                    if (!safe(path) || !older(path, cutoff) || !(Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)
                             || Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS))) {
                         return;
                     }

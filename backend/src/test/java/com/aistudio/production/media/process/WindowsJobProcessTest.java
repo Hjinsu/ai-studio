@@ -36,6 +36,24 @@ class WindowsJobProcessTest {
     }
 
     @Test
+    void cancellationStopsOwnedJobWithoutTouchingAnotherProcess() throws Exception {
+        Path executable = Path.of(System.getenv("SystemRoot"), "System32", "ping.exe");
+        List<String> arguments = List.of("-n", "20", "127.0.0.1");
+        Process unrelated = new ProcessBuilder(executable.toString(), "-n", "20", "127.0.0.1")
+                .redirectOutput(ProcessBuilder.Redirect.DISCARD).start();
+        try {
+            var polls = new java.util.concurrent.atomic.AtomicInteger();
+            assertThatThrownBy(() -> new WindowsJobProcess().run(executable, arguments, scratch,
+                    Duration.ofSeconds(10), () -> polls.incrementAndGet() > 10))
+                    .isInstanceOf(IOException.class).hasMessage("Media process cancelled or timed out");
+            assertThat(unrelated.isAlive()).isTrue();
+        } finally {
+            unrelated.destroyForcibly();
+            unrelated.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
+        }
+    }
+
+    @Test
     void closesTheOwnedJobWhenLauncherJvmIsKilled() throws Exception {
         Path pidFile = scratch.resolve("owned-child.pid");
         String classpath = java.util.stream.Stream.of(OwnedChild.class, WindowsJobProcess.class,

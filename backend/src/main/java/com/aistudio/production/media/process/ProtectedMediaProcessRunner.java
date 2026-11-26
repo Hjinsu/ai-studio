@@ -41,11 +41,15 @@ final class ProtectedMediaProcessRunner implements MediaProcessRunner {
     private final int decodeTimeout;
     private final int loudnessTimeout;
     private final ReentrantLock execution = new ReentrantLock(true);
+    private final Object scratchAdmission = new Object();
     private final MediaCleanup cleanup;
     private long cleanupAt;
     private volatile boolean verified;
     private volatile boolean failed;
     private WindowsJobProcess windows;
+    private LinuxMediaProcess linux;
+    private final String linuxOwnerService;
+    private final boolean linuxVerified;
 
     ProtectedMediaProcessRunner(
             @Value("${ai-studio.production.media.ffmpeg-path:}") String ffmpegPath,
@@ -61,7 +65,11 @@ final class ProtectedMediaProcessRunner implements MediaProcessRunner {
             @Value("${ai-studio.production.media.probe-timeout-seconds:30}") int probeTimeout,
             @Value("${ai-studio.production.media.decode-timeout-seconds:120}") int decodeTimeout,
             @Value("${ai-studio.production.media.loudness-timeout-seconds:60}") int loudnessTimeout,
+            @Value("${ai-studio.production.media.linux-owner-service:}") String linuxOwnerService,
+            @Value("${ai-studio.production.media.linux-protection-verified:false}") boolean linuxVerified,
             MediaCleanup cleanup) {
+        this.linuxOwnerService = linuxOwnerService;
+        this.linuxVerified = linuxVerified;
         this.ffmpegPath = ffmpegPath;
         this.ffmpegHash = ffmpegHash;
         this.ffprobePath = ffprobePath;
@@ -83,7 +91,7 @@ final class ProtectedMediaProcessRunner implements MediaProcessRunner {
 
     @Override
     public synchronized boolean ready() {
-        if (failed || !Platform.isWindows()) {
+        if (failed || (!Platform.isWindows() && !(Platform.isLinux() && linuxVerified))) {
             return false;
         }
         if (verified) {
@@ -97,7 +105,11 @@ final class ProtectedMediaProcessRunner implements MediaProcessRunner {
             }
             var ffmpeg = binary(Tool.FFMPEG);
             var ffprobe = binary(Tool.FFPROBE);
-            windows = new WindowsJobProcess();
+            if (Platform.isWindows()) {
+                windows = new WindowsJobProcess();
+            } else {
+                linux = new LinuxMediaProcess(linuxOwnerService);
+            }
             if (!startup(ffmpeg, root, "-version").contains("ffmpeg version")
                     || !startup(ffprobe, root, "-version").contains("ffprobe version")
                     || !all(startup(ffmpeg, root, "-encoders"), List.of("libx264", "aac"))
@@ -128,13 +140,21 @@ final class ProtectedMediaProcessRunner implements MediaProcessRunner {
             try {
                 long now = System.nanoTime();
                 if (cleanupAt == 0 || now - cleanupAt > Duration.ofMinutes(10).toNanos()) {
-                    cleanup.reap(root, Path.of(workspaceRoot));
+                    synchronized (scratchAdmission) {
+                        cleanup.reap(root, Path.of(workspaceRoot));
+                    }
                     cleanupAt = now;
                 }
             } finally {
                 execution.unlock();
             }
         }
+        synchronized (scratchAdmission) {
+            return reserveScratch(root, handle);
+        }
+    }
+
+    private Path reserveScratch(Path root, Scratch handle) throws IOException {
         String name = "r" + handle.requestId() + "-i" + handle.itemId() + "-a" + handle.attempt();
         Path attempt = root.resolve(name);
         if (attempt.toString().length() > 200) {
@@ -181,7 +201,7 @@ final class ProtectedMediaProcessRunner implements MediaProcessRunner {
             args.addAll(command.arguments());
             var volume = Files.getFileStore(cwd);
             long[] checkedAt = {0};
-            return windows.run(executable.path(), args, cwd, Duration.ofSeconds(seconds), () -> {
+            return launch(executable.path(), args, cwd, Duration.ofSeconds(seconds), () -> {
                 if (cancelled.getAsBoolean()) {
                     return true;
                 }
@@ -199,7 +219,9 @@ final class ProtectedMediaProcessRunner implements MediaProcessRunner {
         } catch (IOException e) {
             if (e.getMessage() != null && (e.getMessage().startsWith("CreateProcessW")
                     || e.getMessage().startsWith("IsProcessInJob") || e.getMessage().startsWith("SetInformationJobObject")
-                    || e.getMessage().startsWith("TerminateJobObject") || e.getMessage().startsWith("Wait for empty Job"))) {
+                    || e.getMessage().startsWith("TerminateJobObject") || e.getMessage().startsWith("Wait for empty Job")
+                    || e.getMessage().startsWith("Linux media boundary")
+                    || e.getMessage().startsWith("Linux media supervisor"))) {
                 failed = true;
             }
             throw e;
@@ -250,8 +272,14 @@ final class ProtectedMediaProcessRunner implements MediaProcessRunner {
         }
     }
 
+    private Result launch(Path binary, List<String> args, Path cwd, Duration timeout, BooleanSupplier cancelled)
+            throws IOException, InterruptedException {
+        return windows != null ? windows.run(binary, args, cwd, timeout, cancelled)
+                : linux.run(binary, args, cwd, timeout, cancelled);
+    }
+
     private String startup(Binary binary, Path cwd, String... arguments) throws IOException, InterruptedException {
-        var result = windows.run(binary.path(), List.of(arguments), cwd, Duration.ofSeconds(probeTimeout), () -> false);
+        var result = launch(binary.path(), List.of(arguments), cwd, Duration.ofSeconds(probeTimeout), () -> false);
         if (result.exitCode() != 0) {
             throw new IOException("Media tool preparation failed");
         }

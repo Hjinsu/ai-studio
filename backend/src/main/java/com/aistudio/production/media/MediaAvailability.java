@@ -22,6 +22,7 @@ public class MediaAvailability {
     private final PlanningAvailability planning;
     private final ObjectProvider<MediaProcessRunner> runner;
     private final ObjectProvider<MediaStageWork> stages;
+    private volatile java.nio.file.FileStore verifiedStore;
 
     public MediaAvailability(@Value("${ai-studio.production.media.enabled:false}") boolean enabled,
             @Value("${ai-studio.production.media.storage-root:}") String root,
@@ -48,7 +49,13 @@ public class MediaAvailability {
             return false;
         }
         try {
-            new WorkspaceMediaStore(Path.of(root));
+            Path path = Path.of(root).toAbsolutePath().normalize();
+            var storage = new WorkspaceMediaStore(path);
+            var current = java.nio.file.Files.getFileStore(path);
+            if (!current.equals(verifiedStore)) {
+                storage.verifyPublicationSupport();
+                verifiedStore = current;
+            }
             return true;
         } catch (IOException | IllegalArgumentException ex) {
             return false;

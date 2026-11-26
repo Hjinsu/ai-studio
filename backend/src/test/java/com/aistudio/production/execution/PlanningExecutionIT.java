@@ -134,6 +134,8 @@ class PlanningExecutionIT {
     private static final java.util.concurrent.atomic.AtomicBoolean failMediaWrite = new java.util.concurrent.atomic.AtomicBoolean();
     private static final java.util.concurrent.atomic.AtomicBoolean mediaProcessReady = new java.util.concurrent.atomic.AtomicBoolean(true);
     private static final AtomicInteger mediaDispatches = new AtomicInteger();
+    private static final java.util.concurrent.atomic.AtomicReference<Runnable> onMediaSend =
+            new java.util.concurrent.atomic.AtomicReference<>(() -> {});
     private static final String PATH = "/api/v1/production-requests";
     private static final TestDatabases.TestDatabase DB = TestDatabases.create();
     private static final String APP_USER = "it_planning_" + ProcessHandle.current().pid();
@@ -208,6 +210,7 @@ class PlanningExecutionIT {
                                 var result = context.recoveryOnly() ? costs.recover(item)
                                         : costs.execute(item, BigDecimal.ONE, id -> {
                                             mediaDispatches.incrementAndGet();
+                                            onMediaSend.get().run();
                                             return new MediaEffectPort.ProviderResult(
                                                 new MediaEffectPort.ExecutionProof("fixture-" + id, "result-" + id,
                                                         BigDecimal.ONE, "KRW", "Isolated fixture proof"),
@@ -276,6 +279,7 @@ class PlanningExecutionIT {
         }
     }
 
+    @org.springframework.beans.factory.annotation.Value("${ai-studio.production.media.storage-root}") String mediaStorageRoot;
     @Autowired MockMvc mvc;
     @Autowired AdminAccountService accounts;
     @Autowired ChannelService channels;
@@ -971,6 +975,75 @@ class PlanningExecutionIT {
     }
 
     @Test
+    void expiredMediaWriterCannotPublishAndReplacementSettlesAfterCancel() throws Exception {
+        discover(NEUTRON);
+        long id = create("SHORTS", ",\"candidateCount\":5,\"mediaEnabled\":true");
+        onMediaSend.set(() -> jdbc.update(
+                "UPDATE production_request SET lease_until = UTC_TIMESTAMP(6) - INTERVAL 1 SECOND WHERE id = ?", id));
+        try {
+            assertThat(executor.runOnce("expired-writer")).isTrue();
+        } finally {
+            onMediaSend.set(() -> {});
+        }
+        long epoch = jdbc.queryForObject("SELECT lease_epoch FROM production_request WHERE id = ?", Long.class, id);
+        var state = jdbc.queryForMap("SELECT id, operation_id, state FROM production_media_item "
+                + "WHERE production_request_id = ? AND state = 'PROVEN'", id);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM production_media_asset WHERE item_id = ?", Integer.class,
+                state.get("id"))).isZero();
+        jdbc.update("UPDATE production_request SET cancel_requested_at = UTC_TIMESTAMP(6) WHERE id = ?", id);
+        makeDue(id);
+        drain();
+        assertStatus(id, "CANCELLED");
+        assertThat(jdbc.queryForObject("SELECT lease_epoch FROM production_request WHERE id = ?", Long.class, id))
+                .isGreaterThan(epoch);
+        assertThat(mediaDispatches).hasValue(1);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM cost_log WHERE event_key = CONCAT('production:settle:', ?)",
+                Integer.class, state.get("operation_id"))).isEqualTo(1);
+    }
+
+    @Test
+    void movedMediaReplaysAfterFinalizeRollbackWithoutResendingOrSettlingTwice() throws Exception {
+        discover(VENUS);
+        long id = create("SHORTS", ",\"candidateCount\":5,\"mediaEnabled\":true");
+        var root = new JdbcTemplate(DB.dataSource());
+        root.execute("""
+                CREATE TRIGGER it_media_abort_finalize BEFORE UPDATE ON production_media_item FOR EACH ROW
+                BEGIN
+                    IF NEW.production_request_id = %d AND NEW.state = 'FINALIZED' THEN
+                        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'IT interruption after file publication';
+                    END IF;
+                END
+                """.formatted(id));
+        long operation;
+        try {
+            drain();
+            assertStatus(id, "RECOVERY_REQUIRED");
+            assertThat(mediaDispatches).hasValue(1);
+            long itemId = jdbc.queryForObject("SELECT id FROM production_media_item WHERE production_request_id = ?"
+                    + " AND state = 'PROVEN'", Long.class, id);
+            operation = jdbc.queryForObject("SELECT operation_id FROM production_media_item WHERE id = ?", Long.class,
+                    itemId);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM production_media_asset WHERE item_id = ?"
+                    + " AND state = 'STAGED'", Integer.class, itemId)).isEqualTo(2);
+            for (String path : jdbc.queryForList("SELECT relative_path FROM production_media_asset WHERE item_id = ?",
+                    String.class, itemId)) {
+                assertThat(java.nio.file.Files.isRegularFile(Path.of(mediaStorageRoot).resolve(path))).isTrue();
+            }
+            assertThat(jdbc.queryForObject("SELECT receipt_event_id FROM provider_operation WHERE id = ?", Long.class,
+                    operation)).isNull();
+        } finally {
+            root.execute("DROP TRIGGER it_media_abort_finalize");
+        }
+        makeDue(id);
+        drain();
+        assertStatus(id, "SUCCEEDED");
+        assertThat(mediaDispatches).hasValue(jdbc.queryForObject("SELECT COUNT(*) FROM production_media_item "
+                + "WHERE production_request_id = ? AND operation_id IS NOT NULL", Integer.class, id));
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM cost_log WHERE event_key = CONCAT('production:settle:', ?)",
+                Integer.class, operation)).isEqualTo(1);
+    }
+
+    @Test
     void persistedMediaProofSettlesOnceWhenFileWriteFailsAndCancellationRecovers() throws Exception {
         discover(VENUS);
         failMediaWrite.set(true);
@@ -1045,6 +1118,23 @@ class PlanningExecutionIT {
                 .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header()
                         .longValue("Content-Length", 13));
         mvc.perform(get(path)).andExpect(status().isUnauthorized());
+        mvc.perform(get(path).with(ApiTestSupport.as(admin)).header("Range", "bytes=-5"))
+                .andExpect(status().isPartialContent())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content().string("bytes"));
+        mvc.perform(get(path).with(ApiTestSupport.as(admin)).header("Range", "bytes=1-3", "bytes=4-6"))
+                .andExpect(status().isOk());
+        mvc.perform(get(path).with(ApiTestSupport.as(admin)).header("Range", "bytes=0-1").header("If-Range", "\"old\""))
+                .andExpect(status().isOk());
+        mvc.perform(get(path).with(ApiTestSupport.as(admin)).header("Range", "bytes=9999999999999999999999999999999-"))
+                .andExpect(status().isRequestedRangeNotSatisfiable());
+        long unrelated = create("SHORTS", "");
+        mvc.perform(get(PATH + "/" + unrelated + "/media/" + video).with(ApiTestSupport.as(admin)))
+                .andExpect(status().isNotFound());
+        String stored = jdbc.queryForObject("SELECT relative_path FROM production_media_asset WHERE id = ?", String.class,
+                video);
+        java.nio.file.Files.writeString(Path.of(mediaStorageRoot).resolve(stored), "altered bytes");
+        mvc.perform(get(path).with(ApiTestSupport.as(admin)).header("Range", "bytes=0-1"))
+                .andExpect(status().isNotFound());
     }
 
     @Test

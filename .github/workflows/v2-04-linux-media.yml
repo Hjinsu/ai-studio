@@ -1,0 +1,33 @@
+name: V2-04 Linux media isolation
+on:
+  push:
+    branches: [v2/04-safety]
+    paths: [backend/**, .github/workflows/v2-04-linux-media.yml]
+permissions:
+  contents: read
+jobs:
+  media-cgroup:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-java@v6.1.0
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: gradle/actions/setup-gradle@v6.4.1
+      - name: Start isolated user supervisor
+        run: |
+          sudo loginctl enable-linger "$(id -un)"
+          sudo systemctl start "user@$(id -u).service"
+          echo "XDG_RUNTIME_DIR=/run/user/$(id -u)" >> "$GITHUB_ENV"
+          echo "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u)/bus" >> "$GITHUB_ENV"
+      - name: Exercise cgroup membership, memory cap, timeout, cancel and JVM death
+        env:
+          AI_STUDIO_TEST_LINUX_MEDIA: "true"
+        run: ./gradlew :backend:test --tests '*LinuxMediaProcessTest'
+      - uses: actions/upload-artifact@v7.0.2
+        if: always()
+        with:
+          name: linux-media-test-report
+          path: backend/build/test-results/test/
