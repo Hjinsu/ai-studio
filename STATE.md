@@ -16,6 +16,13 @@
 ## 인수인계 기록
 작업 ID / 상태 / 변경 파일 / 테스트 명령 및 실제 결과 / 미해결 문제 / 다음 작업 / 필요 환경변수. 커밋 해시는 생성된 경우만 기록.
 
+### V2-02-HOLD-FIX — 수동 검수 재확인 경합 검증 (2026-11-26, IMPLEMENTED)
+
+- 기준 `735fb60576fc531e4b4f77fbf210d56abe9e9088`, 대상 Draft PR #5의 `v2/review-v2-02`. 별도 detached worktree에서 회귀 테스트와 로드맵을 변경했으며 제품 코드·API·기존 migration은 변경하지 않았다.
+- `DiscoveryExecutionIT.manualReviewMustBeConfirmedAgainWhenAnotherContentAddsANewUncertainComparison`: 실제 평가기·저장·비용·선정 포트와 격리 MariaDB, 스크립트 FAKE 공급자를 사용한다. 최초 검수 근거 확인 후 다른 콘텐츠와 revision을 별도 서비스 트랜잭션으로 커밋하고 SELECT를 실행하여 새 검수 사유·선택 무효화·재대기·재확인·최종 연결 및 발굴 비용 보존을 확인한다. 실행 순서를 고정한 트랜잭션 경계 검증이며 두 트랜잭션이 동시에 잠금을 경합하는 테스트는 아니다.
+- 신규 테스트는 기존 제품 코드에서 통과했다. `gradlew.bat :backend:test :backend:integrationTest :backend:bootJar --rerun-tasks`는 단위 210건·통합 223건(실패·건너뜀 0) 통과했다. 격리 MariaDB 11.8.2, 127.0.0.1:3397, binlog ON을 사용했으며 기존 수동 선정·동시성 및 V2-01 비용 회귀가 포함된다. 프론트 lint·typecheck·build 및 Vitest 89건 통과. 최신 PR HEAD CI는 푸시 후 확인한다. 기존 FAKE UI 문구 및 사실 주장·의미 중복의 규칙 기반 판단 한계는 `docs/v2/03_ROADMAP.md`에 후속 항목으로 기록했다.
+- DB: 사용자 DB 미접속. 격리 MariaDB에 V1~V11 적용, 기존 migration 수정 없음. 실제 공급자·게시 미사용. 다음 작업은 새 PR HEAD의 CI 확인과 별도 독립 리뷰 세션의 재검토다. 최종 종료 및 병합은 별도 승인 대상이다.
+
 ### T03-B-CLOSE — 종료 및 통합 승인
 
 - ChatGPT 최종 APPROVE 및 사용자 종료·병합 승인. 제품 수정 `b5ffc73`의 RV-B-01~06과 계약 통합 `8cfe8a0`의 OpenAPI A1~A8을 수용했다. 로컬 단위 151건, 격리 MariaDB 통합 153건, 프론트엔드 73건 및 계약 통합 CI 7/7 성공을 확인했다. [검증 CI 45637703367](https://github.com/Hjinsu/ai-studio/actions/runs/45637703367)

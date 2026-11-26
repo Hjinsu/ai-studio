@@ -47,6 +47,7 @@ import com.aistudio.budget.BudgetControlService;
 import com.aistudio.budget.BudgetPolicyService;
 import com.aistudio.channel.ChannelService;
 import com.aistudio.channel.ChannelSettings;
+import com.aistudio.content.ContentService;
 import com.aistudio.production.contract.DiscoveryExecutionPort;
 import com.aistudio.production.contract.ProductionCostPort;
 import com.aistudio.production.contract.ProductionDiscovery.Block;
@@ -65,6 +66,7 @@ import com.aistudio.security.AdminPrincipal;
 import com.aistudio.shared.db.BudgetControlLock;
 import com.aistudio.shared.db.LockRetryingTransactions;
 import com.aistudio.topic.TopicNormalizer;
+import com.aistudio.topic.TopicService;
 
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.JsonNode;
@@ -118,6 +120,8 @@ class DiscoveryExecutionIT {
     @Autowired MockMvc mvc;
     @Autowired AdminAccountService accounts;
     @Autowired ChannelService channels;
+    @Autowired TopicService topics;
+    @Autowired ContentService contents;
     @Autowired BudgetPolicyService policies;
     @Autowired BudgetControlService control;
     @Autowired JdbcTemplate jdbc;
@@ -629,6 +633,116 @@ class DiscoveryExecutionIT {
     }
 
     // ------------------------------------------------------------------ MANUAL
+
+    @Test
+    void manualReviewMustBeConfirmedAgainWhenAnotherContentAddsANewUncertainComparison() throws Exception {
+        long channel = channel(List.of());
+        String brief = "Question: Why is the daytime sky blue instead of violet?\n"
+                + "Angle: Walk through the scattering mechanism one step at a time with a simple diagram.\n"
+                + "Core topic: Rayleigh scattering";
+        Actor actor = Actor.admin(admin.id());
+        var firstTopic = topics.create(new TopicService.CreateTopic(ApiTestSupport.uniqueKey("topic"), channel,
+                "Why the Sky Is Blue, Not Violet", null), actor).topic();
+        var firstContent = contents.create(new ContentService.CreateContent(ApiTestSupport.uniqueKey("content"),
+                channel, firstTopic.id(), "SHORTS", firstTopic.title(), brief, "en", 50, null, null, null), actor)
+                .view();
+        Candidate borderline = DiscoveryFixtures.candidate("Rayleigh scattering",
+                "Why is the daytime sky blue at noon?", "Noon Sky Blue Explained Simply",
+                "Rayleigh scattering of the blue daytime sky.");
+        long id = create(channel, ",\"selectionMode\":\"MANUAL\",\"candidateCount\":5");
+        provider.responses = input -> DiscoveryFixtures.response(5, borderline);
+        drain("review-first");
+
+        String originalEvaluation = batch(id).get("evaluation_json").toString();
+        EvaluatedCandidate initial = find(evaluations(id), 1);
+        assertThat(initial.blockCodes()).containsExactly(Block.SIMILARITY_UNCERTAIN);
+        assertThat(initial.comparisons()).anySatisfy(c -> {
+            assertThat(c.contentId()).isEqualTo(Long.toString(firstContent.content().id()));
+            assertThat(c.reason()).endsWith(" SIMILARITY_UNCERTAIN");
+        });
+        JsonNode before = discoveryView(id);
+        int oldVersion = before.path("version").asInt();
+        String oldToken = before.path("batchToken").asString();
+        confirmChoice(id, 1, oldVersion, oldToken, 200);
+        assertThat(provider.generations.get()).isEqualTo(1);
+        assertThat(operations(id, "DISCOVER")).isEqualTo(1);
+        BigDecimal discoveryCost = jdbc.queryForObject("""
+                SELECT b.recognized_cost_krw FROM provider_operation o
+                JOIN production_step s ON s.id = o.production_step_id
+                JOIN budget_reservation b ON b.id = o.reservation_id
+                WHERE o.production_request_id = ? AND s.stage = 'DISCOVER'
+                """, BigDecimal.class, id);
+
+        // These service calls commit on the test thread after the choice and before the SELECT transaction.
+        var secondTopic = topics.create(new TopicService.CreateTopic(ApiTestSupport.uniqueKey("topic"), channel,
+                "A Different Existing Sky Explanation", null), actor).topic();
+        var secondContent = contents.create(new ContentService.CreateContent(ApiTestSupport.uniqueKey("content"),
+                channel, secondTopic.id(), "SHORTS", secondTopic.title(), brief, "en", 50, null, null, null), actor)
+                .view();
+        drain("review-recheck");
+
+        assertThat(requestStatus(id)).isEqualTo("RUNNING");
+        assertThat(step(id, "SELECT").get("status")).isEqualTo("PENDING");
+        assertThat(step(id, "SELECT").get("attempts")).isEqualTo(0);
+        assertThat(batch(id).get("chosen_candidate_id")).isNull();
+        assertThat(batch(id).get("evaluation_json").toString()).isEqualTo(originalEvaluation);
+        assertThat(jdbc.queryForMap("SELECT content_id, run_id FROM production_request WHERE id = ?", id))
+                .containsEntry("content_id", null).containsEntry("run_id", null);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM content WHERE channel_id = ?", Integer.class, channel))
+                .isEqualTo(2);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM content_revision WHERE channel_id = ?", Integer.class,
+                channel)).isEqualTo(2);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM content_run WHERE content_id IN (?, ?)", Integer.class,
+                firstContent.content().id(), secondContent.content().id())).isZero();
+        EvaluatedCandidate refreshed = find(rechecks(id), 1);
+        assertThat(refreshed.blockCodes()).containsExactly(Block.SIMILARITY_UNCERTAIN);
+        assertThat(refreshed.comparisons()).anySatisfy(c -> {
+            assertThat(c.contentId()).isEqualTo(Long.toString(secondContent.content().id()));
+            assertThat(c.revisionId()).isEqualTo(Long.toString(secondContent.currentRevision().id()));
+            assertThat(c.reason()).endsWith(" SIMILARITY_UNCERTAIN");
+        });
+        assertThat(leased(id)).isFalse();
+        assertThat(executor.runOnce("review-wait")).isFalse();
+        confirmChoice(id, 1, oldVersion, oldToken, 409);
+        JsonNode updated = discoveryView(id);
+        assertThat(updated.path("awaitingSelection").asBoolean()).isTrue();
+        assertThat(updated.path("version").asInt()).isGreaterThan(oldVersion);
+        assertThat(updated.path("batchToken").asString()).isNotEqualTo(oldToken);
+        assertThat(updated.path("candidates").get(0).path("comparisons").toString())
+                .contains(Long.toString(secondContent.content().id()), "SIMILARITY_UNCERTAIN");
+        confirmChoice(id, 1, updated.path("version").asInt(), oldToken, 409);
+        choose(id, 1, updated.path("version").asInt(), updated.path("batchToken").asString(), 422);
+        confirmChoice(id, 1, updated.path("version").asInt(), updated.path("batchToken").asString(), 200);
+        drain("review-confirmed");
+
+        assertThat(requestStatus(id)).isEqualTo("SUCCEEDED");
+        assertThat(linkedTitle(id)).isEqualTo(borderline.title());
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM content WHERE channel_id = ?", Integer.class, channel))
+                .isEqualTo(3);
+        assertThat(jdbc.queryForObject("""
+                SELECT COUNT(*) FROM production_request p JOIN content c ON c.id = p.content_id
+                JOIN content_revision r ON r.id = c.current_revision_id
+                JOIN content_run run ON run.id = p.run_id AND run.content_revision_id = r.id
+                WHERE p.id = ? AND c.channel_id = ?
+                """, Integer.class, id, channel)).isEqualTo(1);
+        assertThat(operations(id, "DISCOVER")).isEqualTo(1);
+        assertThat(provider.generations.get()).isEqualTo(1);
+        assertThat(jdbc.queryForObject("""
+                SELECT b.recognized_cost_krw FROM provider_operation o
+                JOIN production_step s ON s.id = o.production_step_id
+                JOIN budget_reservation b ON b.id = o.reservation_id
+                WHERE o.production_request_id = ? AND s.stage = 'DISCOVER'
+                """, BigDecimal.class, id)).isEqualByComparingTo(discoveryCost);
+        assertThat(batch(id).get("evaluation_json").toString()).isEqualTo(originalEvaluation);
+    }
+
+    private void confirmChoice(long id, int candidate, int version, String token, int expectedStatus) throws Exception {
+        mvc.perform(post(PATH + "/" + id + "/selection").with(ApiTestSupport.as(admin))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"candidateId\":%d,\"version\":%d,\"batchToken\":\"%s\",\"confirmReview\":true}"
+                                .formatted(candidate, version, token)))
+                .andExpect(status().is(expectedStatus));
+    }
 
     @Test
     void manualWaitsWithoutALeaseWhileOtherRequestsRunAndResumesAfterTheChoice() throws Exception {
