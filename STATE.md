@@ -321,3 +321,12 @@ AI_STUDIO_IT_DB_HOST=127.0.0.1 AI_STUDIO_IT_DB_PORT=3307 AI_STUDIO_IT_DB_USER=ro
 - 격리 MariaDB 11.8.2에서 `gradlew.bat :backend:test :backend:bootJar :backend:integrationTest --rerun-tasks --no-build-cache`를 실행했다. 단위 165건과 통합 202건이 통과했다. V10 설치·업그레이드, V9 요청 멱등 재생, 기존 실행기의 새 파이프라인 제외, 평가 조회·수동 선택의 차단 및 재생을 확인했다.
 - OpenAPI lint와 생성 타입 일치가 통과했다. 공통 기준부터 존재한 경고 2건을 확인했다. V1~V9 원본은 동일하며 사용자 DB에 V10을 적용하지 않았다.
 - 생성·평가·선정·UI, 응답과 영수증 장애 복구, 실제 동시 SELECT와 잠금 순서의 V2-02 결합 검증은 역할별 구현 후 진행한다.
+
+## V2 콘텐츠 제작·품질 정책 개정 (2026-11-26 KST)
+
+- 정책 문서 반영 완료. 변경 파일은 `docs/v2/`의 `01_PRODUCT.md`, `03_ROADMAP.md`, `05_CONTENT_QUALITY_AND_MONETIZATION.md`, `V2-02_IMPLEMENTATION_PLAN.md` 및 루트 `DECISIONS.md`, `STATE.md`다.
+- 차이 분석 기준은 임시 결합 SHA `463c3c0dd56911b69dfd6e1f475e92726391ff38`이다. 현재 `SIMILARITY_UNCERTAIN`과 `UNSUPPORTED_ASSERTION`은 부적격 처리를 하며 적격 후보가 없으면 추가 발굴 없이 실패한다. 새 검수 분류, 미검증 주장 인계, 최종 점수 구간은 정책에만 반영했다.
+- Claude는 결합 수정 커밋 `a820a42`를 `v2/02-product-fix`에 제출했다. 제품 보고서 기준 백엔드 단위 210건·격리 통합 222건, 프론트 단위 88건이 통과했다. Codex 결합 검증 브랜치는 `463c3c0`이며 수정 커밋의 반영과 독립 검증이 남아 있다.
+- 종료 전 최소 수정 범위는 실질 중복 차단 유지, 독립 가치가 있는 일부 유사 소재 감점, 동일 분야 새 질문·관점 허용, 불확실 후보의 검수 필요 분류 및 자동 선정 제외, UI의 차단·감점·검수 필요와 근거 표시다. 기존 평가 JSON·비교 근거·묶음 버전을 우선 쓰고 기존 결합 검증에 해당 회귀를 추가한다. 이 커밋은 검증 브랜치에 이식할 문서 변경만 담는다.
+- 미검증 주장 인계는 V2-03, 최종 품질 점수 및 부분 개선은 V2-05에 배정한다. 재발굴과 비용·실행 안전성·기존 Migration 변경은 제외한다.
+- 문서 변경 범위와 공백은 `git diff --name-only`, `git diff --check`로 확인했다. 코드 테스트, 사용자 DB 접속, Migration 적용, 실제 유료 API 호출은 수행하지 않았다.
