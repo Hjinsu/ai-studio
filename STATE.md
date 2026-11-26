@@ -303,3 +303,11 @@ AI_STUDIO_IT_DB_HOST=127.0.0.1 AI_STUDIO_IT_DB_PORT=3307 AI_STUDIO_IT_DB_USER=ro
 - 다음 작업은 Claude의 실행·lease·취소·복구와 Codex의 소재 연결·비용 포트·정산 구현이다. FAKE로 결합 검증한 뒤 독립 리뷰와 사용자 검토를 진행한다. [계약 및 착수 지시](docs/v2/V2-01_IMPLEMENTATION_PLAN.md)
 - JDK 21.0.13에서 `gradlew.bat :backend:test :backend:integrationTest :backend:bootJar` 성공. 단위 151/151, 격리 MariaDB 11.8.2 통합 154/154. V9은 격리 DB에서만 적용했으며 새 DB 및 기존 기준 업그레이드를 검증했다. OpenAPI lint(기존 경고 2건), 생성 타입 일치, diff 및 일반 비밀정보 패턴 검사 통과.
 - V7 이력 DB 이관과 실행·비용 결합 검증은 보류다. 사용자 DB 적용 이력은 조회하지 않았다.
+
+## V2-01 — 최종 승인 및 종료
+
+- 2026-11-26 KST · **DONE**. ChatGPT 최종 설계·구현 검토, Claude 실행기 독립 리뷰, 별도 Codex 세션의 비용 엔진 리뷰(`6675f86a8a996ff314b7316436e489d2d2445502`) 및 사용자 종료·병합 승인을 확인했다.
+- [PR #4](https://github.com/Hjinsu/ai-studio/pull/4)를 v2/integration에 기존 이력을 보존하는 merge commit `37308fbd65d7f3a4a3bf61b454faea629f53f1ca`로 병합했다. 검증 SHA `23626c609dd7526666f6d9b0e8c035babbcf433c`와 병합 커밋의 전체 Git 트리가 일치한다.
+- [CI Run 45737242958](https://github.com/Hjinsu/ai-studio/actions/runs/45737242958) 7/7 성공. 격리 전체 백엔드 단위 165건·통합 200건, bootJar, binlog ON 핵심 18건, 실제 비용·선정 포트 FAKE 11단계, 효과 8건·확정 KRW 8 확인. 프론트 단위 73건·Edge E2E 10건, OpenAPI 생성 타입 확인. OpenAPI 경고 2건은 공통 기준부터 유지된 항목이다. [실행기 보고서](docs/reports/V2-01_EXECUTION_REPORT.md) · [비용 검증](docs/v2/V2-01_SAFETY_HANDOFF.md)
+- V9 적용 검증은 격리 DB에서 수행했다. 이번 종료 세션은 Git·문서 검증만 수행했으며 사용자 DB에는 접속하거나 V9을 적용하지 않았다. 실행기 기본값은 비활성이다. 실제 유료 호출과 YouTube 게시는 각각 별도 승인 범위다.
+- 다음 배정은 **V2-02 소재 자동 발굴 및 선정**이다. 기술 선행 조건은 충족했으며 사용자 착수 승인 대기 상태다.

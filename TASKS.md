@@ -11,7 +11,8 @@
 | ID | 담당 | 상태 | 범위와 선행 조건 |
 |---|---|---|---|
 | V2-00 | Codex | DONE · 사용자 승인 | v2 문서 전용 기준선. 분기 원점 `dab7013c4557ba87d4440dfc86417344bb2c4e1d`. [검토](docs/v2/V2-00_REPOSITORY_REVIEW.md) |
-| V2-01 | Claude Code 실행 / Codex 비용·공통 계약 | IN_PROGRESS · 사용자 착수 승인 | Claude는 제작 요청의 고정 단계 실행·claim/lease·취소·재개·무효과 테스트. Codex는 선정 전 제작 요청 ID·전 구간 비용 귀속·영속 효과 키·단일 dispatch·불명 결과·정산/receipt·공용 Migration/OpenAPI/포트. V9 사용. 검증한 `v2/common` 동일 SHA에서 `v2/product`(Claude)와 `v2/safety`(Codex) 별도 worktree를 사용한다. [구현 계획](docs/v2/V2-01_IMPLEMENTATION_PLAN.md) [완료 기준](docs/v2/03_ROADMAP.md) |
+| V2-01 | Claude Code 실행 / Codex 비용·공통 계약 | DONE · 사용자 최종 승인 | FAKE 11단계와 비용 안전성 검증, 설계·실행기·비용 독립 리뷰 완료. [PR #4](https://github.com/Hjinsu/ai-studio/pull/4)로 v2/integration 병합. [종료 기록](STATE.md#v2-01--최종-승인-및-종료) |
+| V2-02 | Claude Code | BLOCKED · 사용자 착수 승인 대기 | 소재 자동 발굴 및 선정. V2-01 기술 선행 조건 충족. 착수 승인 후 최신 v2/integration 기준과 작업 범위를 확정한다. [완료 기준](docs/v2/03_ROADMAP.md) |
 
 [품질·수익화 요구사항](docs/v2/05_CONTENT_QUALITY_AND_MONETIZATION.md)은 V2-02~08의 단계별 인수 기준에 적용한다. V2-01은 검수·재생성까지 동일 제작 요청 비용 경계를 제공한다. FFmpeg·FFprobe 준비는 V2-04에 포함한다.
 

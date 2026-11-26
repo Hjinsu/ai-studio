@@ -183,3 +183,7 @@ v2는 고정 단계 실행, 초기 Worker 1개 및 최대 유효 lease 2개로 �
 ## V2-01 — 공통 계약 및 착수 승인
 
 ChatGPT APPROVE WITH MINOR FIXES 및 사용자 승인. [구현 계획](docs/v2/V2-01_IMPLEMENTATION_PLAN.md)의 고정 11단계, 세 테이블, V9, 요청별 예산, 증거 충돌 및 불변 영수증을 적용한다. 새 v2/common의 검증 커밋을 두 구현 브랜치의 공동 기준으로 사용한다. v2/integration과 기존 C/D는 보존한다.
+
+## V2-01 — 최종 승인 및 v2/integration 병합
+
+2026-11-26 KST · ChatGPT 최종 검토와 별도 Codex 비용 독립 리뷰가 APPROVE로 완료되어 사용자가 종료와 [PR #4](https://github.com/Hjinsu/ai-studio/pull/4) 병합을 승인했다. 승인 SHA `23626c609dd7526666f6d9b0e8c035babbcf433c`의 [CI](https://github.com/Hjinsu/ai-studio/actions/runs/45737242958) 7/7을 재확인하고 merge commit `37308fbd65d7f3a4a3bf61b454faea629f53f1ca`로 통합했다. V2-01은 DONE이며 V2-02는 별도 착수 승인 대상이다. main 병합, 사용자 DB Migration, 실제 유료 호출, 실행기 기본 활성화 및 YouTube 게시는 이번 승인 범위에 포함되지 않는다.

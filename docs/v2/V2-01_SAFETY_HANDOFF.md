@@ -1,6 +1,6 @@
 # V2-01 비용 안전성 인수인계
 
-2026-11-26 KST · 비용 구현 IMPLEMENTED · 담당 Codex · `v2/safety` · 공통 기준 `5cba9a822073ac0d44529c1c5dfc72e93d918a04`
+2026-11-26 KST · 비용 구현 검증 완료 · V2-01 DONE · 담당 Codex · `v2/safety` · 공통 기준 `5cba9a822073ac0d44529c1c5dfc72e93d918a04`
 
 ## 변경 범위
 
@@ -49,4 +49,4 @@
 - 허가 커밋 직후 중단에서 새 lease가 같은 효과를 복구할 때 발송 횟수가 증가하지 않았다. 미해결 비용 및 미적용 영수증은 각각 종료를 차단했다. 취소와 정산을 서로 다른 연결에서 시작한 경우 정산과 영수증 적용 후 취소되었다. 요청 성공 쓰기에 오류를 주입하면 Run 상태와 active 포인터까지 롤백되었고, 오류 제거 후 다시 종료할 수 있었다.
 - 종료보다 증거 충돌이 먼저 커밋되면 성공이 차단된다. 종료가 요청 락을 먼저 보유하면 증거 기록자는 대기한다. 성공 확정 이후 들어온 충돌 증거는 `RESOURCE_CONFLICT`를 반환하며 지출 차단을 기록한다. 확정 영수증·원장과 요청·Run의 기존 성공 결과는 보존된다.
 - 격리 MariaDB binlog OFF 전체 단위 165건, 통합 200건, bootJar 성공. binlog ON 핵심 18건 성공. 프론트 lint·typecheck·build, Vitest 73건, Edge Mock API E2E 10건 통과. OpenAPI lint 기존 경고 2건 및 생성 타입 일치 확인.
-- GitHub CI는 main push와 PR을 트리거로 사용한다. 로컬 결합 결과와 별도로 검증 HEAD의 CI 및 별도 Codex 세션의 비용 엔진 독립 리뷰를 확인해야 최종 병합 승인안을 제출할 수 있다.
+- [GitHub CI Run 45737242958](https://github.com/Hjinsu/ai-studio/actions/runs/45737242958) 7/7과 비용 엔진 독립 리뷰 APPROVE를 확인했다. 사용자 승인을 받아 [PR #4](https://github.com/Hjinsu/ai-studio/pull/4)를 v2/integration의 `37308fbd65d7f3a4a3bf61b454faea629f53f1ca`로 병합했다.

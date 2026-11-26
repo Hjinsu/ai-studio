@@ -75,6 +75,6 @@ $env:AI_STUDIO_IT_DB_HOST='127.0.0.1'; $env:AI_STUDIO_IT_DB_PORT='3307'; $env:AI
 7. **FAKE 가격**: `PricedRequest("KRW", fake-effect-max-krw(기본 1, 양수만 허용), "SUCCESS")`. FAKE 비용 대역의 시나리오 이름과 통화가 다르면 알려 준다.
 8. **설정 제안**: 비용 포트 FAKE 구현이 들어오면 local/test 프로파일에서 `ai-studio.production.executor.enabled=true`를 켜는 설정 변경은 통합 담당자가 결정한다.
 
-## 다음 작업
+## 최종 결과
 
-검증 브랜치의 동일 HEAD에서 원격 CI를 확인하고, 비용 구현은 별도 Codex 세션에서 `6675f86a8a996ff314b7316436e489d2d2445502` 기준으로 독립 리뷰한다. 검증 결과와 독립 리뷰를 사용자에게 제출해 병합 승인을 받는다.
+[CI Run 45737242958](https://github.com/Hjinsu/ai-studio/actions/runs/45737242958) 7/7 및 비용 엔진 독립 리뷰 APPROVE를 확인했다. 사용자 승인으로 [PR #4](https://github.com/Hjinsu/ai-studio/pull/4)를 v2/integration의 `37308fbd65d7f3a4a3bf61b454faea629f53f1ca`로 병합했다. V2-01은 DONE이며 V2-02는 착수 승인 대기 중이다.
