@@ -8,7 +8,6 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.Objects;
 
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,6 +21,7 @@ import com.aistudio.production.contract.ProductionStage;
 import com.aistudio.production.contract.PlanningJson;
 import com.aistudio.production.contract.ProductionPlanning;
 import com.aistudio.production.planning.PlanningResultMapper;
+import com.aistudio.production.planning.PlanningAvailability;
 import com.aistudio.production.discovery.persistence.ProductionDiscoveryMapper;
 import com.aistudio.production.discovery.persistence.ProductionDiscoveryMapper.Batch;
 import com.aistudio.content.command.CanonicalJson;
@@ -51,7 +51,7 @@ class ProductionRequestService {
     ProductionRequestService(ProductionRequestMapper mapper, ChannelService channels,
             BudgetControlLock control, LockRetryingTransactions transactions, ProductionDiscoveryMapper discovery,
             JsonMapper json, PlanningResultMapper planningResults,
-            @Value("${ai-studio.production.planning-enabled:false}") boolean planningEnabled) {
+            PlanningAvailability planningAvailability) {
         this.mapper = mapper;
         this.channels = channels;
         this.control = control;
@@ -59,7 +59,7 @@ class ProductionRequestService {
         this.discovery = discovery;
         this.json = json;
         this.planningResults = planningResults;
-        this.shortsPipeline = planningEnabled ? ProductionPlanning.PIPELINE : ProductionDiscovery.PIPELINE;
+        this.shortsPipeline = planningAvailability.ready() ? ProductionPlanning.PIPELINE : ProductionDiscovery.PIPELINE;
     }
 
     @Transactional(readOnly = true)

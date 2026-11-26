@@ -1,6 +1,10 @@
 package com.aistudio;
 
 import java.sql.Connection;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -8,6 +12,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.sql.DataSource;
 
+import org.flywaydb.core.Flyway;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.testcontainers.mariadb.MariaDBContainer;
@@ -61,6 +66,25 @@ public final class TestDatabases {
             registry.add("spring.datasource.username", server::user);
             registry.add("spring.datasource.password", server::password);
             registry.add("ai-studio.datasource.expected-database", this::name);
+        }
+
+        public void provisionProductionAccount(String user, String password) {
+            Flyway.configure().dataSource(dataSource()).locations("classpath:db/migration").load().migrate();
+            try (Connection connection = dataSource().getConnection(); Statement statement = connection.createStatement()) {
+                statement.execute("CREATE USER '" + user + "'@'%' IDENTIFIED BY '" + password + "'");
+                String template = Files.readString(Path.of("..", "infra", "mariadb", "prod-app-grants.sql"),
+                        StandardCharsets.UTF_8);
+                String sql = template.lines().filter(line -> !line.strip().startsWith("--"))
+                        .collect(java.util.stream.Collectors.joining("\n"));
+                for (String grant : sql.split(";")) {
+                    if (!grant.isBlank()) {
+                        statement.execute(grant.strip().replace("@DB@", name).replace("@APP_USER@", user)
+                                .replace("@APP_HOST@", "%"));
+                    }
+                }
+            } catch (SQLException | IOException e) {
+                throw new IllegalStateException("Cannot provision isolated production account", e);
+            }
         }
     }
 

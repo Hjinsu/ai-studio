@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.List;
 
+import com.aistudio.content.ContentFixtures;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -20,6 +21,47 @@ import com.aistudio.shared.db.DatabaseGuardTestAccess;
 class DatabaseUpgradeIT {
 
     static final TestDatabases.TestDatabase DB = TestDatabases.create();
+
+    @Test
+    void upgradesPopulatedV11WithoutChangingLegacyProductionRows() {
+        var old = TestDatabases.create();
+        Flyway.configure().dataSource(old.dataSource()).locations("classpath:db/migration")
+                .cleanDisabled(true).target("11").load().migrate();
+        var jdbc = new JdbcTemplate(old.dataSource());
+        var fixtures = new ContentFixtures(jdbc);
+        long channel = fixtures.channel();
+        long config = fixtures.config(channel, 1);
+        jdbc.update("""
+                INSERT INTO production_request (channel_id, channel_config_id, requested_by, content_type,
+                    pipeline_version, request_key, request_hash, limit_krw, status, created_at)
+                VALUES (?, ?, ?, 'SHORTS', 'v2-discovery-1', 'legacy-v11', SHA2('legacy-v11', 256),
+                    2000, 'SUCCEEDED', UTC_TIMESTAMP(6))
+                """, channel, config, fixtures.admin());
+        long request = jdbc.queryForObject("SELECT id FROM production_request WHERE request_key = 'legacy-v11'",
+                Long.class);
+        jdbc.update("""
+                INSERT INTO production_step (production_request_id, stage, status, result_ref)
+                VALUES (?, 'RESEARCH', 'SUCCEEDED', 'fake:legacy')
+                """, request);
+        jdbc.update("""
+                INSERT INTO production_discovery (production_request_id, selection_mode, candidate_count, language)
+                VALUES (?, 'AUTO', 5, 'en')
+                """, request);
+        var requestBefore = jdbc.queryForMap("SELECT * FROM production_request WHERE id = ?", request);
+        var stepsBefore = jdbc.queryForList("SELECT * FROM production_step WHERE production_request_id = ?", request);
+        var discoveryBefore = jdbc.queryForMap("SELECT * FROM production_discovery WHERE production_request_id = ?",
+                request);
+        var latest = Flyway.configure().dataSource(old.dataSource()).locations("classpath:db/migration")
+                .cleanDisabled(true).load();
+        assertThat(latest.migrate().migrationsExecuted).isEqualTo(1);
+        assertThat(latest.info().current().getVersion().getVersion()).isEqualTo("12");
+        assertThat(jdbc.queryForMap("SELECT * FROM production_request WHERE id = ?", request)).isEqualTo(requestBefore);
+        assertThat(jdbc.queryForList("SELECT * FROM production_step WHERE production_request_id = ?", request))
+                .isEqualTo(stepsBefore);
+        assertThat(jdbc.queryForMap("SELECT * FROM production_discovery WHERE production_request_id = ?", request))
+                .isEqualTo(discoveryBefore);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM production_stage_result", Integer.class)).isZero();
+    }
 
     private static Flyway flyway(String target) {
         var configuration = Flyway.configure()

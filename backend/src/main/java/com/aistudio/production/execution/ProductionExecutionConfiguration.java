@@ -1,7 +1,6 @@
 package com.aistudio.production.execution;
 
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -13,6 +12,7 @@ import com.aistudio.production.contract.DiscoveryExecutionPort;
 import com.aistudio.production.contract.PlanningExecutionPort;
 import com.aistudio.production.contract.ProductionCostPort;
 import com.aistudio.production.discovery.RuleBasedDiscoveryEvaluator;
+import com.aistudio.production.planning.PlanningAvailability;
 import com.aistudio.production.contract.ProductionSelectionPort;
 import com.aistudio.production.stage.PlanningReview;
 import com.aistudio.shared.db.BudgetControlLock;
@@ -34,16 +34,14 @@ class ProductionExecutionConfiguration {
             ObjectProvider<StageWork> work, ExecutionProperties properties,
             ObjectProvider<DiscoveryExecutionPort> discoveryPort, ObjectProvider<DiscoveryEvaluator> evaluator,
             ObjectProvider<PlanningExecutionPort> planningPort, ObjectProvider<PlanningReview> review,
-            @Value("${ai-studio.production.planning-enabled:false}") boolean planningEnabled) {
+            PlanningAvailability planningAvailability) {
         DiscoveryExecutionPort port = discoveryPort.getIfAvailable();
         // V2-02: discovery requests are claimed only when the discovery persistence/cost adapter is present
         DiscoveryFlow flow = port == null ? null
                 : new DiscoveryFlow(port, evaluator.getIfAvailable(RuleBasedDiscoveryEvaluator::new));
-        // V2-03: planning requests are claimed only when enabled and the planning storage/cost adapter is present
-        PlanningExecutionPort planning = planningEnabled && flow != null ? planningPort.getIfAvailable() : null;
-        PlanningReview planningReview = planning == null ? null : review.getIfAvailable();
-        PlanningFlow planningFlow = planning == null || planningReview == null ? null
-                : new PlanningFlow(planning, planningReview, properties.fakeEffectMaxKrw());
+        PlanningFlow planningFlow = planningAvailability.ready()
+                ? new PlanningFlow(planningPort.getObject(), review.getObject(), properties.fakeEffectMaxKrw())
+                : null;
         return new ProductionExecutor(mapper, control, transactions, cost, selection,
                 work.getIfAvailable(() -> new FakeStageWork(properties.fakeEffectMaxKrw())), properties, flow,
                 planningFlow);

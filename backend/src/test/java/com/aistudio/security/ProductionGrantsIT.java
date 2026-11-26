@@ -5,23 +5,14 @@ import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.math.BigDecimal;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.sql.Connection;
 import java.sql.SQLException;
-import java.sql.Statement;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
 
-import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -64,7 +55,6 @@ class ProductionGrantsIT {
     static final TestDatabases.TestDatabase DB = TestDatabases.create();
     static final String APP_USER = "it_app_" + ProcessHandle.current().pid();
     static final String APP_PASSWORD = UUID.randomUUID().toString();
-    static final Path GRANTS = Path.of("..", "infra", "mariadb", "prod-app-grants.sql");
     /** prod-app-grants.sql 기준 SELECT/INSERT만 허용되는 불변·추가 전용 테이블. */
     static final Set<String> IMMUTABLE = Set.of("admin_bootstrap", "audit_event", "channel_config", "exchange_rate",
             "budget_policy_revision", "budget_reservation_bucket", "cost_log", "flyway_schema_history",
@@ -72,37 +62,7 @@ class ProductionGrantsIT {
             "topic", "content_revision", "queue_command_log");
 
     static {
-        Flyway.configure().dataSource(DB.dataSource()).locations("classpath:db/migration").load().migrate();
-        try (Connection connection = DB.dataSource().getConnection(); Statement statement = connection.createStatement()) {
-            statement.execute("CREATE USER '" + APP_USER + "'@'%' IDENTIFIED BY '" + APP_PASSWORD + "'");
-            for (String grant : grantStatements()) {
-                statement.execute(grant);
-            }
-        } catch (SQLException e) {
-            throw new IllegalStateException("운영 권한 템플릿 적용 실패", e);
-        }
-    }
-
-    static List<String> grantStatements() {
-        try {
-            String sql = Files.readString(GRANTS, StandardCharsets.UTF_8);
-            List<String> statements = new ArrayList<>();
-            StringBuilder body = new StringBuilder();
-            for (String line : sql.split("\\R")) {
-                if (!line.strip().startsWith("--")) {
-                    body.append(line).append('\n');
-                }
-            }
-            for (String statement : body.toString().split(";")) {
-                if (!statement.isBlank()) {
-                    statements.add(statement.strip().replace("@DB@", DB.name()).replace("@APP_USER@", APP_USER)
-                            .replace("@APP_HOST@", "%"));
-                }
-            }
-            return statements;
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
+        DB.provisionProductionAccount(APP_USER, APP_PASSWORD);
     }
 
     @DynamicPropertySource

@@ -11,15 +11,24 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.math.BigDecimal;
+import java.net.InetAddress;
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.net.SocketTimeoutException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.IntStream;
 
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,6 +36,8 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
@@ -57,6 +68,7 @@ import com.aistudio.TestDatabases;
 import com.aistudio.audit.AuditService.Actor;
 import com.aistudio.budget.BudgetControlService;
 import com.aistudio.budget.BudgetPolicyService;
+import com.aistudio.budget.BudgetReservationService;
 import com.aistudio.channel.ChannelService;
 import com.aistudio.channel.ChannelSettings;
 import com.aistudio.production.contract.PlanningProvider;
@@ -65,10 +77,14 @@ import com.aistudio.production.contract.ProductionDiscovery.Candidate;
 import com.aistudio.production.contract.ProductionDiscovery.Response;
 import com.aistudio.production.contract.ProductionDiscovery.Scores;
 import com.aistudio.production.contract.ProductionPlanning.Claim;
+import com.aistudio.production.contract.ProductionPlanning.ClaimKind;
+import com.aistudio.production.contract.ProductionPlanning.SceneDraft;
 import com.aistudio.production.contract.ProductionPlanning.Research;
 import com.aistudio.production.contract.ProductionPlanning.Scene;
 import com.aistudio.production.contract.ProductionPlanning.Scenes;
 import com.aistudio.production.contract.ProductionPlanning.Script;
+import com.aistudio.production.contract.ProductionPlanning.ScriptInput;
+import com.aistudio.production.contract.ProductionPlanning.Validation;
 import com.aistudio.production.contract.ProductionPlanning.Segment;
 import com.aistudio.production.contract.ProductionPlanning.Source;
 import com.aistudio.production.contract.ProductionSelectionPort;
@@ -106,6 +122,11 @@ import tools.jackson.databind.json.JsonMapper;
 class PlanningExecutionIT {
     private static final String PATH = "/api/v1/production-requests";
     private static final TestDatabases.TestDatabase DB = TestDatabases.create();
+    private static final String APP_USER = "it_planning_" + ProcessHandle.current().pid();
+    private static final String APP_PASSWORD = UUID.randomUUID().toString();
+    static {
+        DB.provisionProductionAccount(APP_USER, APP_PASSWORD);
+    }
     static final String NEUTRON = "How heavy would a teaspoon of neutron star be?";
     static final String TARDIGRADE = "How do tardigrades survive being completely dried out?";
     static final String VENUS = "Why is a day on Venus longer than its year?";
@@ -114,6 +135,10 @@ class PlanningExecutionIT {
     @DynamicPropertySource
     static void database(DynamicPropertyRegistry registry) {
         DB.register(registry);
+        registry.add("spring.datasource.username", () -> APP_USER);
+        registry.add("spring.datasource.password", () -> APP_PASSWORD);
+        registry.add("spring.flyway.user", () -> DB.server().user());
+        registry.add("spring.flyway.password", () -> DB.server().password());
     }
 
     @TestConfiguration
@@ -140,6 +165,7 @@ class PlanningExecutionIT {
     @Autowired ChannelService channels;
     @Autowired BudgetPolicyService policies;
     @Autowired BudgetControlService control;
+    @Autowired BudgetReservationService reservations;
     @Autowired JdbcTemplate jdbc;
     @Autowired ProductionExecutor executor;
     @MockitoSpyBean PlanningExecutionPort port;
@@ -159,6 +185,7 @@ class PlanningExecutionIT {
 
     @BeforeAll
     void setUp() {
+        assertThat(jdbc.queryForObject("SELECT CURRENT_USER()", String.class)).startsWith(APP_USER + "@");
         admin = ApiTestSupport.admin(accounts, jdbc);
         Actor actor = Actor.admin(admin.id());
         policies.create("SYSTEM", null, null, "DAY", new BigDecimal("1000"), "UTC", null, actor);
@@ -412,6 +439,11 @@ class PlanningExecutionIT {
     @EnabledIfEnvironmentVariable(named = "AI_STUDIO_REVIEW_EDGE", matches = "true")
     @DirtiesContext(methodMode = DirtiesContext.MethodMode.BEFORE_METHOD)
     void liveEdgeConnectsTheFrontendToTheActualServer() throws Exception {
+        jdbc.update("""
+                INSERT INTO admin_user (login, password_hash, role, enabled, password_changed_at, created_at, updated_at)
+                SELECT 'other-reviewer', password_hash, 'ADMIN', TRUE, UTC_TIMESTAMP(6), UTC_TIMESTAMP(6),
+                    UTC_TIMESTAMP(6) FROM admin_user WHERE id = ?
+                """, admin.id());
         discover(NEUTRON);
         var neutron = discovery.responses;
         discover(VENUS);
@@ -616,6 +648,138 @@ class PlanningExecutionIT {
     }
 
     @Test
+    void oversizedReviewReplaysTheSettledReceiptWithOneBoundedBlockingRecord() throws Exception {
+        long id = shorts(NEUTRON);
+        doAnswer(call -> {
+            var input = call.getArgument(0, com.aistudio.production.contract.ProductionPlanning.ResearchInput.class);
+            var claims = IntStream.range(0, 1_000).mapToObj(i ->
+                    new Claim("c" + i, ClaimKind.FACT, "Unconfirmed claim", List.of(), null)).toList();
+            return new Research(input.question(), input.angle(), List.of(), claims, List.of(), List.of("Unconfirmed"),
+                    List.of());
+        }).when(provider).research(any());
+        var applyAttempts = new AtomicInteger();
+        var records = new ArrayList<String>();
+        var epochs = new ArrayList<Long>();
+        doAnswer(call -> {
+            var owner = call.getArgument(0, ProductionCostPort.StepOwner.class);
+            Object result = call.callRealMethod();
+            epochs.add(owner.leaseEpoch());
+            records.add(jdbc.queryForObject("SELECT validation_json FROM production_stage_result WHERE request_id = ?",
+                    String.class, id));
+            if (applyAttempts.incrementAndGet() == 1) {
+                throw new IllegalStateException("interrupt after storing validation");
+            }
+            return result;
+        }).when(AopTestUtils.<PlanningExecutionPort>getUltimateTargetObject(port)).apply(any(), any(), any());
+        drain();
+        assertStatus(id, "RECOVERY_REQUIRED");
+        assertThat(step(id, ProductionStage.RESEARCH)).containsEntry("last_error_code", "RECEIPT_APPLY_FAILED");
+        var settled = researchSettlement(id);
+        assertThat(settled).containsEntry("status", "SETTLED").containsEntry("applied_at", null);
+        assertThat(jdbc.queryForObject("SELECT validation_json FROM production_stage_result WHERE request_id = ?",
+                String.class, id)).isNull();
+        makeDue(id);
+        assertThat(executor.runOnce("new-review-lease")).isTrue();
+        assertStatus(id, "FAILED");
+        assertThat(step(id, ProductionStage.RESEARCH)).containsEntry("last_error_code", "PLANNING_VALIDATION_BLOCKED");
+        assertThat(researchSettlement(id)).containsEntry("receipt_event_id", settled.get("receipt_event_id"))
+                .doesNotContainEntry("applied_at", null);
+        assertThat(epochs).hasSize(2);
+        assertThat(epochs.getLast()).isGreaterThan(epochs.getFirst());
+        assertThat(records).hasSize(2).containsOnly(records.getFirst());
+        assertThat(records.getFirst().getBytes(StandardCharsets.UTF_8).length).isLessThanOrEqualTo(128 * 1024);
+        assertThat(records.getFirst()).contains("CORE_EVIDENCE_INSUFFICIENT", "VALIDATION_FINDINGS_OMITTED",
+                "938 findings omitted");
+        assertThat(jdbc.queryForObject("""
+                SELECT COUNT(*) FROM cost_log l JOIN provider_operation o ON o.reservation_id = l.reservation_id
+                JOIN production_step s ON s.id = o.production_step_id
+                WHERE o.production_request_id = ? AND s.stage = 'RESEARCH' AND l.entry_type = 'CONFIRM'
+                """, Integer.class, id)).isEqualTo(1);
+        assertThat(operations(id, ProductionStage.RESEARCH)).isEqualTo(1);
+        assertThat(operations(id, ProductionStage.SCRIPT)).isZero();
+        verify(provider).research(any());
+        verify(provider, never()).writeScript(any());
+    }
+
+    private Map<String, Object> researchSettlement(long id) {
+        return jdbc.queryForMap("""
+                SELECT o.status, o.receipt_event_id, o.applied_at FROM provider_operation o
+                JOIN production_step s ON s.id = o.production_step_id
+                WHERE o.production_request_id = ? AND s.stage = 'RESEARCH'
+                """, id);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"segments", "description", "structure", "null-response", "timeout"})
+    void separatesReturnedInvalidScenesFromResponseTimeout(String failure) throws Exception {
+        long id = shorts(NEUTRON);
+        doAnswer(call -> switch (failure) {
+            case "segments" -> new ScenePlan("diagram", List.of(new SceneDraft("v1", 1, null, 45_000,
+                    "Star", "Star", "Static", null)));
+            case "description" -> new ScenePlan("diagram", List.of(new SceneDraft("v1", 1, List.of("s1"), 45_000,
+                    null, "Star", "Static", null)));
+            case "structure" -> invalidSceneStructure();
+            case "null-response" -> null;
+            case "timeout" -> scenesResponseTimeout();
+            default -> throw new AssertionError(failure);
+        }).when(provider).planScenes(any());
+        drain();
+        boolean unknown = failure.equals("timeout");
+        assertStatus(id, unknown ? "RECOVERY_REQUIRED" : "FAILED");
+        if (unknown) {
+            makeDue(id);
+            assertThat(executor.runOnce("scene-timeout-recovery")).isTrue();
+            assertStatus(id, "RECOVERY_REQUIRED");
+        } else {
+            assertThat(step(id, ProductionStage.SCENES)).containsEntry("last_error_code", "EFFECT_EXECUTED_FAILED");
+            assertThat(executor.runOnce("scene-format-recheck")).isFalse();
+        }
+        var operation = jdbc.queryForMap("""
+                SELECT o.status, o.receipt_outcome, o.receipt_event_id, o.applied_at, r.body_json
+                FROM provider_operation o JOIN production_step s ON s.id = o.production_step_id
+                JOIN production_stage_result r ON r.operation_id = o.id
+                WHERE o.production_request_id = ? AND s.stage = 'SCENES'
+                """, id);
+        assertThat(operation).containsEntry("status", unknown ? "UNKNOWN" : "SETTLED")
+                .containsEntry("receipt_outcome", unknown ? null : "EXECUTED_FAILED")
+                .containsEntry("body_json", null);
+        if (unknown) {
+            assertThat(operation).containsEntry("receipt_event_id", null).containsEntry("applied_at", null);
+        } else {
+            assertThat(operation.get("receipt_event_id")).isNotNull();
+            assertThat(operation.get("applied_at")).isNotNull();
+        }
+        assertThat(jdbc.queryForObject("""
+                SELECT COUNT(*) FROM cost_log l JOIN provider_operation o ON o.reservation_id = l.reservation_id
+                JOIN production_step s ON s.id = o.production_step_id
+                WHERE o.production_request_id = ? AND s.stage = 'SCENES' AND l.entry_type = 'CONFIRM'
+                """, Integer.class, id)).isEqualTo(unknown ? 0 : 1);
+        assertThat(operations(id, ProductionStage.IMAGE)).isZero();
+        verify(provider).planScenes(any());
+    }
+
+    private static ScenePlan scenesResponseTimeout() {
+        InetAddress loopback = InetAddress.getLoopbackAddress();
+        try (var stub = new ServerSocket(0, 1, loopback);
+                var client = new Socket(loopback, stub.getLocalPort());
+                var silentPeer = stub.accept()) {
+            silentPeer.getOutputStream().flush();
+            client.setSoTimeout(100);
+            throw new AssertionError("Expected timeout, got " + client.getInputStream().read());
+        } catch (SocketTimeoutException timeout) {
+            throw new UncheckedIOException(timeout);
+        } catch (IOException failure) {
+            throw new AssertionError("Could not test local response timeout", failure);
+        }
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private static ScenePlan invalidSceneStructure() {
+        List rawDrafts = List.of("untyped draft");
+        return new ScenePlan("diagram", rawDrafts);
+    }
+
+    @Test
     void unknownPlanningDispatchIsQuarantinedAndConfirmedNonExecutionIsSettled() throws Exception {
         long id = shorts(VENUS);
         doAnswer(call -> { throw new IllegalStateException("simulated response loss"); }).when(provider).research(any());
@@ -649,6 +813,108 @@ class PlanningExecutionIT {
         assertThat(step(id, ProductionStage.RESEARCH).get("last_error_code")).isEqualTo("EFFECT_REJECTED");
         assertThat(operations(id, ProductionStage.RESEARCH)).isZero();
         verify(provider, never()).research(any());
+    }
+
+    @Test
+    void freezesTwentyScriptsAcrossNewAdoptionsAndReceiptReplay() throws Exception {
+        long id = shorts(NEUTRON);
+        var history = new ArrayList<Long>();
+        for (int i = 0; i < 21; i++) {
+            history.add(0, addAdoptedScript(id, i));
+        }
+        history.addFirst(history.removeLast());
+        var expected = List.copyOf(history.subList(0, 20));
+        var presented = new ArrayList<ScriptInput>();
+        var applyAttempts = new AtomicInteger();
+        try (var otherWorker = Executors.newSingleThreadExecutor()) {
+            doAnswer(call -> {
+                presented.add(call.getArgument(1, ScriptInput.class));
+                if (presented.size() == 1) {
+                    otherWorker.submit(() -> addAdoptedScript(id, 21)).get(10, TimeUnit.SECONDS);
+                }
+                return call.callRealMethod();
+            }).when(port).script(any(), any(), any());
+            doAnswer(call -> {
+                Object result = call.callRealMethod();
+                var receipt = call.getArgument(1, ProductionCostPort.Receipt.class);
+                if (receipt.resultRef().startsWith("planning:") && presented.size() == 1
+                        && applyAttempts.getAndIncrement() == 0) {
+                    throw new IllegalStateException("interrupt SCRIPT apply after settlement");
+                }
+                return result;
+            }).when(AopTestUtils.<PlanningExecutionPort>getUltimateTargetObject(port)).apply(any(), any(), any());
+            assertThat(executor.runOnce("comparison-worker")).isTrue();
+            assertStatus(id, "RECOVERY_REQUIRED");
+            assertThat(step(id, ProductionStage.SCRIPT)).containsEntry("last_error_code", "RECEIPT_APPLY_FAILED");
+            var stored = jdbc.queryForMap("""
+                    SELECT r.input_json, r.input_hash, o.receipt_event_id FROM production_stage_result r
+                    JOIN provider_operation o ON o.id = r.operation_id
+                    JOIN production_step s ON s.id = r.step_id WHERE r.request_id = ? AND s.stage = 'SCRIPT'
+                    """, id);
+            assertThat(((String) stored.get("input_hash"))).isEqualTo(PlanningJson.encode(presented.getFirst()).hash());
+            assertThat(stored.get("receipt_event_id")).isNotNull();
+            otherWorker.submit(() -> addAdoptedScript(id, 22)).get(10, TimeUnit.SECONDS);
+            makeDue(id);
+            assertThat(executor.runOnce("comparison-recovery")).isTrue();
+            assertStatus(id, "SUCCEEDED");
+            assertThat(presented).hasSize(2).containsOnly(presented.getFirst());
+            assertThat(presented.getFirst().recentScripts()).extracting(c -> c.ref().operationId())
+                    .containsExactlyElementsOf(expected);
+            assertThat(stored.get("input_json")).isEqualTo(PlanningJson.encode(presented.getFirst()).json());
+            assertThat(jdbc.queryForMap("""
+                    SELECT o.receipt_event_id, o.applied_at FROM provider_operation o
+                    JOIN production_step s ON s.id = o.production_step_id
+                    WHERE o.production_request_id = ? AND s.stage = 'SCRIPT'
+                    """, id)).containsEntry("receipt_event_id", stored.get("receipt_event_id"))
+                    .doesNotContainEntry("applied_at", null);
+            assertThat(operations(id, ProductionStage.SCRIPT)).isEqualTo(1);
+            verify(provider).writeScript(presented.getFirst());
+        }
+    }
+
+    private long addAdoptedScript(long request, int ordinal) {
+        // Give the lowest operation ID the latest timestamp; other rows exercise the ID tie-break.
+        String key = "comparison-" + request + "-" + ordinal;
+        var reservation = reservations.reserve(new BudgetReservationService.ReserveCommand(
+                key, null, "HISTORY_FIXTURE", "KRW", BigDecimal.ONE)).reservation();
+        reservations.confirm(new BudgetReservationService.EventCommand(reservation.id(), key, BigDecimal.ONE,
+                key, null, null, null, null, Actor.system()));
+        long receipt = jdbc.queryForObject("SELECT id FROM cost_log WHERE reservation_id = ? AND entry_type = 'CONFIRM'",
+                Long.class, reservation.id());
+        return transactions.execute(() -> {
+            jdbc.update("""
+                    INSERT INTO production_request (channel_id, channel_config_id, requested_by, content_type,
+                        pipeline_version, request_key, request_hash, limit_krw, status, created_at)
+                    SELECT channel_id, channel_config_id, requested_by, content_type, pipeline_version, ?,
+                        SHA2(?, 256), limit_krw, 'SUCCEEDED', UTC_TIMESTAMP(6) FROM production_request WHERE id = ?
+                    """, key, key, request);
+            long prior = jdbc.queryForObject("SELECT id FROM production_request WHERE request_key = ?", Long.class, key);
+            jdbc.update("INSERT INTO production_step (production_request_id, stage, status) VALUES (?, 'SCRIPT', 'SUCCEEDED')",
+                    prior);
+            long step = jdbc.queryForObject("SELECT id FROM production_step WHERE production_request_id = ?",
+                    Long.class, prior);
+            jdbc.update("""
+                    INSERT INTO provider_operation (production_request_id, production_step_id, effect_key, request_hash,
+                        reservation_id, status, dispatched_at, evidence_hash, evidence_json, receipt_outcome,
+                        receipt_event_id, receipt_at, applied_at)
+                    VALUES (?, ?, SHA2(?, 256), SHA2(?, 256), ?, 'SETTLED', '2024-12-31 00:00:00',
+                        SHA2('{}', 256), '{}', 'RESULT_ADOPTED', ?, '2024-12-31 00:00:00', ?)
+                    """, prior, step, key, key, reservation.id(), receipt,
+                    ordinal == 0 ? "2025-01-02 00:00:00" : "2025-01-01 00:00:00");
+            long operation = jdbc.queryForObject("SELECT id FROM provider_operation WHERE reservation_id = ?",
+                    Long.class, reservation.id());
+            var script = PlanningJson.body(new Script("en", List.of(new Segment("intro",
+                    "Paint a bridge with yellow stripes", List.of())), List.of("intro"), 45_000,
+                    "speech-estimate-1", "Painting a bridge"));
+            var validation = PlanningJson.body(new Validation(List.of()));
+            jdbc.update("""
+                    INSERT INTO production_stage_result (operation_id, request_id, step_id, schema_version,
+                      input_hash, input_json, body_hash, body_json, validation_json, created_at)
+                    VALUES (?, ?, ?, 1, SHA2('{}', 256), '{}', ?, ?, ?, UTC_TIMESTAMP(6))
+                    """, operation, prior, step, script.hash(), script.json(), validation.json());
+            jdbc.update("UPDATE production_step SET result_ref = ? WHERE id = ?", "planning:" + operation, step);
+            return operation;
+        });
     }
 
     @Test

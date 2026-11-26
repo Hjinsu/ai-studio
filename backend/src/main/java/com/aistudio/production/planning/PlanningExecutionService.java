@@ -27,6 +27,7 @@ import com.aistudio.production.contract.ProductionPlanning.Research;
 import com.aistudio.production.contract.ProductionPlanning.ResearchInput;
 import com.aistudio.production.contract.ProductionPlanning.ResultRef;
 import com.aistudio.production.contract.ProductionPlanning.Scene;
+import com.aistudio.production.contract.ProductionPlanning.SceneDraft;
 import com.aistudio.production.contract.ProductionPlanning.ScenePlan;
 import com.aistudio.production.contract.ProductionPlanning.Scenes;
 import com.aistudio.production.contract.ProductionPlanning.ScenesInput;
@@ -116,35 +117,48 @@ class PlanningExecutionService implements PlanningExecutionPort {
 
     @Override
     public EffectResult research(StepOwner owner, ResearchInput input, BigDecimal maximumKrw) {
-        return execute(owner, ProductionStage.RESEARCH, input, researchInput(owner.requestId()),
-                ResearchInput.class, maximumKrw, PlanningProvider::research);
+        if (!Objects.equals(input, researchInput(owner.requestId()))) {
+            throw invalid();
+        }
+        return execute(owner, ProductionStage.RESEARCH, input,
+                ResearchInput.class, maximumKrw, PlanningProvider::research, (fixed, response) -> response);
     }
 
     @Override
     public EffectResult script(StepOwner owner, ScriptInput input, BigDecimal maximumKrw) {
-        return execute(owner, ProductionStage.SCRIPT, input, scriptInput(owner.requestId()),
-                ScriptInput.class, maximumKrw, PlanningProvider::writeScript);
+        var research = accepted(owner.requestId(), ProductionStage.RESEARCH);
+        // The worker already read the comparison catalog. Only check immutable lineage here.
+        if (!snapshot(owner.requestId()).equals(input.snapshot()) || !VERSION.equals(input.version())
+                || !ref(research).equals(input.researchRef())
+                || !research.bodyHash().equals(PlanningJson.encode(input.research()).hash())
+                || input.recentScripts().size() > ProductionPlanning.SCRIPT_COMPARISON_LIMIT) {
+            throw invalid();
+        }
+        return execute(owner, ProductionStage.SCRIPT, input, ScriptInput.class, maximumKrw,
+                PlanningProvider::writeScript, (fixed, response) -> response);
     }
 
     @Override
     public EffectResult scenes(StepOwner owner, ScenesInput input, BigDecimal maximumKrw) {
-        return execute(owner, ProductionStage.SCENES, input, scenesInput(owner.requestId()),
-                ScenesInput.class, maximumKrw,
-                (adapter, fixed) -> materialize(fixed.script(), adapter.planScenes(fixed)));
-    }
-
-    private <T> EffectResult execute(StepOwner owner, ProductionStage stage, T input, T expected,
-            Class<T> type, BigDecimal maximumKrw, BiFunction<PlanningProvider, T, Object> generate) {
-        if (!Objects.equals(input, expected)) {
+        if (!Objects.equals(input, scenesInput(owner.requestId()))) {
             throw invalid();
         }
+        return execute(owner, ProductionStage.SCENES, input,
+                ScenesInput.class, maximumKrw, PlanningProvider::planScenes,
+                (fixed, response) -> materialize(fixed.script(), response));
+    }
+
+    private <T> EffectResult execute(StepOwner owner, ProductionStage stage, T input,
+            Class<T> type, BigDecimal maximumKrw, BiFunction<PlanningProvider, T, Object> generate,
+            BiFunction<T, Object, Object> normalize) {
         var adapter = provider.getIfAvailable();
         if (adapter == null) {
             return new EffectResult(Disposition.REJECTED, null);
         }
-        PlanningJson.Encoded encoded = PlanningJson.encode(expected);
+        PlanningJson.Encoded encoded = PlanningJson.encode(input);
         T fixed = json.readValue(encoded.json(), type);
-        return cost.executePlanning(owner, stage, encoded, maximumKrw, () -> generate.apply(adapter, fixed));
+        return cost.executePlanning(owner, stage, encoded, maximumKrw, () -> generate.apply(adapter, fixed),
+                response -> normalize.apply(fixed, response));
     }
 
     @Override
@@ -165,7 +179,7 @@ class PlanningExecutionService implements PlanningExecutionPort {
     public void apply(StepOwner owner, Receipt receipt, Validation validation) {
         cost.markReceiptApplied(owner, receipt.operationId());
         var stored = cost.planningResponse(owner, receipt);
-        String encoded = PlanningJson.body(validation).json();
+        String encoded = PlanningValidationRecord.encode(validation);
         if (results.saveValidation(receipt.operationId(), encoded) != 1
                 && !encoded.equals(stored.validationJson())) {
             throw invalid();
@@ -217,6 +231,9 @@ class PlanningExecutionService implements PlanningExecutionPort {
     }
 
     private static String excerpt(String text) {
+        if (text == null) {
+            return "";
+        }
         return text.substring(0, text.offsetByCodePoints(0, Math.min(text.codePointCount(0, text.length()), 600)));
     }
 
@@ -224,15 +241,21 @@ class PlanningExecutionService implements PlanningExecutionPort {
         return new ResultRef(result.operationId(), result.stage(), result.bodyHash());
     }
 
-    private static Scenes materialize(Script script, ScenePlan plan) {
-        if (plan == null || plan.scenes() == null) {
-            return null;
+    private static Scenes materialize(Script script, Object response) {
+        if (!(response instanceof ScenePlan plan) || plan.visualStyle() == null || plan.scenes() == null) {
+            throw new IllegalArgumentException("Missing scene plan fields");
         }
         Map<String, String> narration = new LinkedHashMap<>();
         for (Segment segment : script.segments()) {
             narration.put(segment.id(), segment.narration());
         }
-        List<Scene> scenes = plan.scenes().stream().map(draft -> {
+        List<?> drafts = plan.scenes();
+        List<Scene> scenes = drafts.stream().map(item -> {
+            if (!(item instanceof SceneDraft draft) || draft.id() == null || draft.segmentIds() == null
+                    || !((List<?>) draft.segmentIds()).stream().allMatch(String.class::isInstance)
+                    || draft.visualDescription() == null || draft.imagePrompt() == null || draft.direction() == null) {
+                throw new IllegalArgumentException("Missing scene draft fields");
+            }
             String words = draft.segmentIds().stream().map(id -> narration.getOrDefault(id, ""))
                     .collect(java.util.stream.Collectors.joining(" "));
             return new Scene(draft.id(), draft.order(), draft.segmentIds(), draft.estimatedDurationMs(), words,

@@ -3,10 +3,9 @@ import { chromium, expect as playwrightExpect } from '@playwright/test'
 const expect = playwrightExpect.configure({ timeout: 20_000 })
 const origin = process.env.REVIEW_BROWSER_URL
 const browser = await chromium.launch({ channel: 'msedge' })
-try {
-  const page = await browser.newPage()
+async function signIn(page, loginName) {
   await page.goto(origin)
-  await page.getByLabel('아이디').fill('admin')
+  await page.getByLabel('아이디').fill(loginName)
   await page.getByLabel('비밀번호', { exact: true }).fill(process.env.REVIEW_BROWSER_PASSWORD)
   const login = page.waitForResponse((response) => response.url().endsWith('/api/v1/auth/login'))
   await page.getByRole('button', { name: '로그인' }).click()
@@ -16,6 +15,11 @@ try {
     throw new Error(`Login HTTP ${loginResponse.status()}, session cookie: ${Boolean(headers.cookie)}, CSRF header: ${Boolean(headers['x-xsrf-token'])}`)
   }
   await expect(page.getByRole('heading', { name: '대시보드' })).toBeVisible()
+}
+
+try {
+  const page = await browser.newPage()
+  await signIn(page, 'admin')
 
   async function start(manual) {
     await page.goto(origin + '/production')
@@ -70,12 +74,19 @@ try {
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth))
     .toBeLessThanOrEqual(1)
 
+  const planningUrl = origin + '/api/v1/production-requests/' + manual + '/planning'
+  expect((await page.request.get(planningUrl)).status()).toBe(200)
+  const otherOwner = await browser.newPage()
+  await signIn(otherOwner, 'other-reviewer')
+  expect((await otherOwner.request.get(planningUrl)).status()).toBe(404)
+  await otherOwner.close()
+
   await page.context().clearCookies()
   await page.goto(origin)
   await expect(page.getByRole('heading', { name: '관리자 로그인' })).toBeVisible()
-  const denied = await page.request.get(origin + '/api/v1/production-requests/' + manual + '/planning')
+  const denied = await page.request.get(planningUrl)
   expect(denied.status()).toBe(401)
-  console.log('Live Edge: AUTO, MANUAL, blocked, reload, history, dark/mobile, unauthenticated access passed.')
+  console.log('Live Edge: AUTO, MANUAL, blocked, reload, history, dark/mobile, owner isolation and unauthenticated access passed.')
 } finally {
   await browser.close()
 }

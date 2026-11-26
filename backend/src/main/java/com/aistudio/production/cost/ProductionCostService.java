@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.BiFunction;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 import org.springframework.beans.factory.ObjectProvider;
@@ -158,7 +159,7 @@ public class ProductionCostService implements ProductionCostPort {
     }
 
     public EffectResult executePlanning(StepOwner owner, ProductionStage stage, PlanningJson.Encoded input,
-            BigDecimal maximumKrw, Supplier<Object> generate) {
+            BigDecimal maximumKrw, Supplier<Object> generate, Function<Object, Object> normalize) {
         Step step = mapper.step(owner.requestId(), owner.stepId());
         if (step == null || step.stage() != stage || !isPlanningStage(stage)) {
             throw new ApiException(ErrorCode.INVALID_STATE_TRANSITION);
@@ -166,9 +167,10 @@ public class ProductionCostService implements ProductionCostPort {
         String key = EffectKey.forInput(owner.requestId(), stage, step.targetKey(), step.inputGeneration());
         return execute(owner, key, input.hash(), new PricedRequest("KRW", maximumKrw, null), false, input,
                 (id, priced) -> {
-                    Object response = generate.get();
+                    Object returned = generate.get();
                     PlanningJson.Encoded body;
                     try {
+                        Object response = normalize.apply(returned);
                         Class<?> resultType = switch (stage) {
                             case RESEARCH -> ProductionPlanning.Research.class;
                             case SCRIPT -> ProductionPlanning.Script.class;

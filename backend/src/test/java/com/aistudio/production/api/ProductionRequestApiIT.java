@@ -93,6 +93,8 @@ class ProductionRequestApiIT {
                 .andReturn();
         String location = result.getResponse().getHeader("Location");
         assertThat(location).startsWith(PATH + "/");
+        assertThat(jdbc.queryForObject("SELECT pipeline_version FROM production_request WHERE request_key = ?",
+                String.class, key)).isEqualTo("v2-discovery-1");
 
         mvc.perform(get(location + "/planning").with(ApiTestSupport.as(admin)))
                 .andExpect(status().isOk())
