@@ -2,7 +2,7 @@ name: V2-04 Linux media isolation
 on:
   push:
     branches: [v2/04-safety, v2/04-integration]
-    paths: [backend/**, .github/workflows/ci.yml, .github/workflows/v2-04-linux-media.yml]
+    paths: [backend/**, .dockerignore, .github/workflows/ci.yml, .github/workflows/v2-04-linux-media.yml]
 permissions:
   contents: read
 jobs:
