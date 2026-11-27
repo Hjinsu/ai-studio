@@ -1,9 +1,9 @@
 # V2-04-PRODUCT 진행 보고 (Claude Code)
 
-- 상태 **IN_PROGRESS — 기술 인수 완료, 낭독·자막·배경음악·효과음 사용자 판정 대기** (IMPLEMENTED 아님. `f3d6ac0`의 IMPLEMENTED 기록 정정) · 2026-11-27 KST · 회사 PC 재개 결과는 [§0](#0-회사-pc-재개-결과-2026-11-27)
+- 상태 **IMPLEMENTED** (DONE 아님: Codex 독립 리뷰·CI·ChatGPT 검토·사용자 승인 대기) · 2026-11-27 KST · 회사 PC 재개 결과는 [§0](#0-회사-pc-재개-결과-2026-11-27)
 - 기준 공통 SHA `d7bec5f9aadcc423d7b2a987ac31d810367b4604` · 브랜치 `v2/04-product` · worktree `../ai-studio-v2-04-product`
 - 범위: [착수 지시서](../v2/V2-04_CLAUDE_HANDOFF.md)의 Claude 소유 경로. 공통 계약·Codex 소유 파일, migration, OpenAPI, 빌드 설정은 수정하지 않았다. 공통 scratch 보호 정책(전용 ≤32 GiB 볼륨)은 우회·완화하지 않았다.
-- 남은 필수 항목: 낭독·자막·배경음악·효과음 각각의 사용자 합격 판정(§0.6). 권리 근거와 정지 이미지 중심 표현은 사용자 확인 완료. 후속: Codex scratch 예약 결함(§0.5), V2-05 IMAGE_TO_VIDEO·TEXT_TO_VIDEO 검토, V2-06 AI 콘텐츠 고지·게시 정책.
+- 필수 인수 조건과 사용자 확인 완료(§0.6: 낭독·자막·배경음악·효과음 PASS, 권리 확인, 정지 이미지 중심 표현 수용). 후속: Codex scratch 예약 결함(§0.5), V2-05 실제 움직임·콘텐츠 재미 개선(IMAGE_TO_VIDEO·TEXT_TO_VIDEO 검토), V2-06 AI 콘텐츠 고지·게시 정책.
 
 ## 0. 회사 PC 재개 결과 (2026-11-27)
 
@@ -19,7 +19,7 @@
 | Gitleaks | PASS | 8.30.1, exe `17157e2e…78fcb7c`(스파이크 기록과 일치) |
 | 외부 자산 SHA-256 | PASS | `EXTERNAL_ASSETS_SHA256.txt` 39/39(fixtures·downloads 29 + `output/` 10). 스파이크 `SHA256SUMS.txt` 30/30, 절대경로 3건(ffmpeg·ffprobe·gitleaks)은 회사 PC 경로에서 같은 해시로 대조 |
 | Piper·음성 모델 권리 | PASS(문서 대조) | Piper MIT `LICENSE.md`, `en_US-ljspeech-high` MODEL_CARD "Dataset LJ Speech, License: public domain". 해시는 위 대조에 포함 |
-| 이미지·BGM·SFX·글꼴 권리 | PASS(문서 대조) | `ASSETS_AND_RIGHTS.md`: 이미지·음악·효과음 자체 제작, Noto Sans KR Bold OFL 1.1. QC `RIGHTS_COMPLETE` PASS(neutron 15건, venus 10건). **사용자 최종 확인 대기** |
+| 이미지·BGM·SFX·글꼴 권리 | PASS(문서 대조) | `ASSETS_AND_RIGHTS.md`: 이미지·음악·효과음 자체 제작, Noto Sans KR Bold OFL 1.1. QC `RIGHTS_COMPLETE` PASS(neutron 15건, venus 10건). 사용자 확인 완료(§0.6) |
 
 ### 0.2 격리 환경
 
@@ -76,24 +76,26 @@
 - 인수 진행 방식: 보호 조건은 바꾸지 않았다. 종료(SUCCEEDED/FAILED)되고 lease가 0인 요청 3·4의 scratch 디렉터리만 수동 삭제했다(reaper가 24h 후 하는 동작과 같음). 이후 venus-day(요청 5)를 새로 제작했고, neutron-star는 이미 성공한 요청 3으로 브라우저 검증을 했다.
 - 제안(승인 필요): 종료된 요청·성공 attempt의 scratch를 즉시 reap하거나, 예약을 실행 중 attempt만 계산. 공통 계약 변경이므로 Codex·사용자 결정 사항이다.
 
-### 0.6 기술 QC와 사용자 확인 범위 (2026-11-27 KST 정정)
+### 0.6 기술 QC와 사용자 확인 (2026-11-27 KST)
 
 자동 기술 QC와 사람 확인을 구분해 기록한다. 자동 검수는 사람 검토를 대체하지 않는다(AGENTS.md).
 
 | 항목 | 자동 기술 QC (§0.4) | 사용자 확인 |
 |---|---|---|
-| 낭독 | PASS: 원문 매핑, 권리, 해시, 48 kHz 타임라인, 무음·clipping, −15.8/−15.9 LUFS, −1.9/−1.8 dBTP | **미확인**. 명시적 청취 합격 판정 없음 |
-| 자막 | PASS: SRT/ASS coverage·시간, 글리프 bbox, 번인 | **미확인**. 명시적 판정 없음 |
-| 배경음악 | PASS: 권리, ducking, 통합 음량 | **미확인**. 명시적 판정 없음 |
-| 효과음 | PASS: 권리, 믹스 | **미확인**. 명시적 판정 없음 |
-| 정지 이미지 중심 영상 표현 | PASS: 해상도, 장면 경계, 카메라·전환 | **확인·수용**: V2-04 기술 구현 범위로 수용. 동영상 생성(IMAGE_TO_VIDEO·TEXT_TO_VIDEO) 지원은 V2-05에서 검토 |
+| 낭독 | PASS: 원문 매핑, 권리, 해시, 48 kHz 타임라인, 무음·clipping, −15.8/−15.9 LUFS, −1.9/−1.8 dBTP | **PASS**: 사용자가 두 MP4를 듣고 V2-04 기술 인수 기준으로 합격 판정 |
+| 자막 | PASS: SRT/ASS coverage·시간, 글리프 bbox, 번인 | **PASS**: 사용자 확인 |
+| 배경음악 | PASS: 권리, ducking, 통합 음량 | **PASS**: 사용자 확인 |
+| 효과음 | PASS: 권리, 믹스 | **PASS**: 사용자 확인 |
+| 정지 이미지 중심 영상 표현 | PASS: 해상도, 장면 경계, 카메라·전환 | **수용**: 현재 범위에서 수용. 실제 움직임과 콘텐츠 재미 개선(IMAGE_TO_VIDEO·TEXT_TO_VIDEO 검토 포함)은 V2-05에서 진행 |
 | 권리 근거 `ASSETS_AND_RIGHTS.md` | PASS: QC `RIGHTS_COMPLETE` | **확인**: Piper LJSpeech-high Public Domain 표기, 자체 생성 이미지·배경음악·효과음·대본, OFL 글꼴, 외부 설치 FFmpeg의 현재 사용 방식이 기술 인수용으로 적절 |
 | AI 콘텐츠 고지·실제 게시 정책 | 범위 밖 | V2-06 후속 요구사항 |
 | Scratch 예약 누적 결함(§0.5) | 미해결 | Codex 담당. 제품 쪽에서 수정하지 않음 |
 
-**상태 판단: IN_PROGRESS 유지.** [구현 계획](../v2/V2-04_IMPLEMENTATION_PLAN.md) §필수 인수는 "사람이 확인한 발화 표본"을 증거로 요구하고, 이번 재개 지시는 사용자 확인 완료를 IMPLEMENTED의 조건으로 정했다. 낭독·자막·배경음악·효과음에 대한 명시적인 사용자 합격 판정이 아직 없으므로 조건이 충족되지 않았다. 직전 커밋 `f3d6ac0`의 IMPLEMENTED 기록은 이 판정이 있었던 것으로 잘못 기록한 것이므로 정정한다.
+**상태 판단: IMPLEMENTED.** 사용자가 실제 MP4 두 편(§0.4)의 낭독·자막·배경음악·효과음을 확인하고 V2-04 기술 인수 기준으로 모두 PASS 판정했다. 이로써 [구현 계획](../v2/V2-04_IMPLEMENTATION_PLAN.md) §필수 인수의 "사람이 확인한 발화 표본"과 재개 지시의 사용자 확인 조건을 충족한다.
 
-**IMPLEMENTED 전환 조건**: 사용자가 두 MP4(§0.4)를 듣고 낭독·자막·배경음악·효과음 각각에 대해 합격 또는 불합격을 판정하고, 그 결과를 이 절에 기록한다. 제품 코드·테스트 재실행은 필요하지 않다. 실제 게시와 유료 API 호출은 승인되지 않았다.
+기록 이력: `f3d6ac0`은 사용자 판정 전에 IMPLEMENTED로 잘못 기록했고, `d4dc073`에서 IN_PROGRESS로 정정했다. 이번 커밋에서 사용자 판정을 받아 IMPLEMENTED로 전환한다. 제품 코드 변경과 테스트 재실행은 없었다.
+
+DONE 전환: Codex 독립 리뷰 → 최신 PR HEAD CI → ChatGPT 최종 검토 → 사용자 승인. 실제 게시와 유료 API 호출은 승인되지 않았다.
 
 ### 0.7 재현 (회사 PC)
 
