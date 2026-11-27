@@ -16,7 +16,8 @@
 | V2-03 | Claude Code 제품 / Codex 공통·안전성·결합·F05 | DONE · 사용자 최종 승인 | [PR #6](https://github.com/Hjinsu/ai-studio/pull/6)을 `v2/integration`에 `0aa11d0`으로 병합했다. [종료 및 비차단 후속](STATE.md#v2-03--최종-승인-및-종료-2026-11-27-kst-done) |
 | V2-04-COMMON | Codex | IMPLEMENTED | `v2/04-common`, V13 및 공통 계약. [검증·인수 기록](STATE.md) |
 | V2-04-SAFETY | Codex | IMPLEMENTED | `v2/04-safety`. Linux 보호, 장애 안전성 및 scratch 예약 수명주기. [검증 보고서](docs/reports/V2-04_SAFETY_REPORT.md) |
-| V2-04-PRODUCT | Claude Code | TODO | 공통 SHA에서 `v2/04-product`. FAKE/로컬 MP4 제품 구현 및 인수. [착수 지시서](docs/v2/V2-04_CLAUDE_HANDOFF.md) |
+| V2-04-PRODUCT | Claude Code | IN_PROGRESS | 실제 앱 기술 검증 완료. 사용자 청취 확인 대기. [보고서](docs/reports/V2-04_PRODUCT_REPORT.md) |
+| V2-04-INTEGRATION | Codex | IMPLEMENTED | v2/04-integration. 독립 리뷰 및 인수 대기. [통합 보고서](docs/reports/V2-04_INTEGRATION_REPORT.md) |
 
 [품질·수익화 요구사항](docs/v2/05_CONTENT_QUALITY_AND_MONETIZATION.md)은 V2-02~08의 단계별 인수 기준에 적용한다. V2-01은 검수·재생성까지 동일 제작 요청 비용 경계를 제공한다. FFmpeg·FFprobe 준비는 V2-04에 포함한다.
 

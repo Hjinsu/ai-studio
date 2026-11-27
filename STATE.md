@@ -16,6 +16,12 @@
 ## 인수인계 기록
 작업 ID / 상태 / 변경 파일 / 테스트 명령 및 실제 결과 / 미해결 문제 / 다음 작업 / 필요 환경변수. 커밋 해시는 생성된 경우만 기록.
 
+### V2-04-INTEGRATION — 제품·안전성 결합 (2026-11-27 KST, IMPLEMENTED)
+
+- `v2/04-integration` / `../ai-studio-v2-04-integration`에 Safety `5c303a2aebe87222df6d2b5b8aad182cf70a0716`와 최신 Product `925d736225828c720f11bc95569f84a6a17165f3`를 결합했다. 병합 커밋 `c187b76e68e655a66278b6f2212cce928336c1c6`. Safety IMPLEMENTED, Product IN_PROGRESS.
+- 충돌 해결, 제품 설정, 검증 절차, Windows Job 경계 테스트, V2-05·V2-06 요구사항과 전체 기술 결과를 [통합 보고서](docs/reports/V2-04_INTEGRATION_REPORT.md)에 기록했다. 기존 V13·OpenAPI·생성 타입은 공통 SHA와 일치하며 V13 적용은 격리 DB로 제한했다.
+- 최종 CI HEAD에서 다음 작업은 별도 세션의 독립 리뷰 1회다. 사용자 청취 및 병합 승인과 독립 리뷰 APPROVE가 남았다. Linux의 실제 배포 제품 렌더는 별도 검증이다.
+
 ### V2-04-SAFETY — Scratch 예약 및 정리 결함 (2026-11-27 KST, IMPLEMENTED)
 
 - 사용자 승인 범위는 `v2/04-safety`의 scratch 예약·정리 수명주기다. 기준 Safety `59f22c8ab026029fe2a6c2eb20e2666f6c0a51ec`, Common `d7bec5f9aadcc423d7b2a987ac31d810367b4604`, Product `1c526763d3b14b5f5721bb451e2bc09c6f669a2a`.

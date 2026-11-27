@@ -1,5 +1,7 @@
 # V2-04-PRODUCT 진행 보고 (Claude Code)
 
+> 통합 인수 상태는 IN_PROGRESS다. 아래는 원격 Product 브랜치의 보고 이력이다. 최종 청취 확인에는 이번 통합 지시 및 [작업 상태](../../STATE.md)를 적용한다. §0.5 결함은 [Safety 보고서](V2-04_SAFETY_REPORT.md)의 scratch 수정으로 해결됐다.
+
 - 상태 **IMPLEMENTED** (DONE 아님: Codex 독립 리뷰·CI·ChatGPT 검토·사용자 승인 대기) · 2026-11-27 KST · 회사 PC 재개 결과는 [§0](#0-회사-pc-재개-결과-2026-11-27)
 - 기준 공통 SHA `d7bec5f9aadcc423d7b2a987ac31d810367b4604` · 브랜치 `v2/04-product` · worktree `../ai-studio-v2-04-product`
 - 범위: [착수 지시서](../v2/V2-04_CLAUDE_HANDOFF.md)의 Claude 소유 경로. 공통 계약·Codex 소유 파일, migration, OpenAPI, 빌드 설정은 수정하지 않았다. 공통 scratch 보호 정책(전용 ≤32 GiB 볼륨)은 우회·완화하지 않았다.

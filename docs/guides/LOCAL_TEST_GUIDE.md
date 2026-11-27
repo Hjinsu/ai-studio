@@ -49,3 +49,9 @@ cd frontend && npx vite --host 127.0.0.1 --port 5173      # 프록시 → 127.0.
 rm -rf <TMP>/itdb                                                         # 필요 시 데이터 삭제
 ```
 bootRun·vite 프로세스도 종료하고 8080·5173 포트가 비었는지 확인한다(`Get-NetTCPConnection -State Listen -LocalPort 8080,5173`).
+
+## V2-04 실제 앱 검증
+
+- 위 절차로 loopback 격리 MariaDB에 `ai_studio`를 만들고 V13까지 적용한다. 업무 앱과 겹치지 않는 앱·Vite 포트를 선택한다. 실제 앱용 jar와 FFmpeg·ffprobe·글꼴·카탈로그의 실행 인수는 [제품 보고서 §6](../reports/V2-04_PRODUCT_REPORT.md)를 따른다. 기존 Workspace와 분리된 최대 32 GiB 전용 scratch 볼륨에서 검증용 하위 디렉터리를 사용한다.
+- 관리자 CLI는 대화형 숨김 입력 환경에서 실행한다. 비대화형 인수에서 CLI가 종료 코드 2를 반환하면 격리 DB에만 앱과 같은 BCrypt(12) 해시로 테스트 관리자 행을 만들어 실제 로그인 경로를 검증할 수 있다. 임시 비밀번호 파일과 산출물은 Git 밖에 둔다.
+- `AI_STUDIO_BACKEND_URL`로 Vite의 백엔드를 지정한다. `frontend`에서 `LIVE_URL`, `LIVE_PASSWORD_FILE`, `LIVE_OUT`을 지정해 `node e2e/live-media.mjs`를 실행한다. 두 소재 전체 실행 두 번과 `LIVE_TOPICS=neutron-star` 실행 한 번으로 다섯 편을 확인한다. 결과 디렉터리는 배치마다 고유하게 둔다. 소재 선택 뒤 11개 단계, 브라우저 재생·seek·다운로드 SHA, QC와 scratch 잔존을 확인한다. 검증 사이에는 앱이 정상 정리하도록 둔다.

@@ -48,3 +48,14 @@ Linux는 호스트가 제공하는 전용 cgroup v2 경계에서 생성 시부�
 목록 GET /api/v1/production-requests/{id}/media는 mode, qc.status 및 공개 asset의 id, stage, role, contentType, byteLength, sha256을 제공한다. 파일 GET/HEAD /api/v1/production-requests/{id}/media/{assetId}는 동일 소유권·run·공개 가능 상태를 검증한다. 기본 inline, download=true면 서버 생성 이름의 attachment. 401 UNAUTHORIZED, 타 소유·미확정·다른 run·부재는 404 RESOURCE_NOT_FOUND. 저장 무결성 실패는 접근 차단 후 동일 404와 내부 진단을 사용한다. 응답은 private, no-store 및 nosniff, Accept-Ranges: bytes를 적용한다.
 
 GET은 단일 closed/open/suffix 범위를 206으로 보내고 파일 끝을 초과한 end는 제한한다. 문법이 유효하지만 만족할 수 없는 단일 bytes 범위는 416과 Content-Range: bytes */length다. 미지원 단위·잘못된 문법·다중 범위·If-Range가 있으면 전체 200이다. HEAD는 Range를 무시하고 같은 인증과 전체 길이·MIME을 반환한다. 파일을 보호된 루트에서 열어 위치 기반 제한 스트림으로 전송한다. 확정·복원 때 전체 SHA-256을 검증하고 serve open에서 크기와 파일 식별·변경 정보를 확인한다. 최초 open 또는 변경 감지 시 전체 검증하고 일치하지 않으면 제공을 막는다. 공개 API 응답에 Workspace 경로·프로세스 로그를 포함하지 않는다.
+
+## 제품 fixture 설정
+
+두 속성은 `ai-studio.production.media.product.` 아래에 둔다.
+
+| 설정 | 기본값 및 검증 | 운영 |
+|---|---|---|
+| `fixture-root` | 빈 문자열. 미디어 제품 실행에 읽기 가능한 승인 fixture 디렉터리와 프로필 카탈로그가 필요하며 파일 경로·크기·SHA-256을 검증한다. | Git 밖의 배포 환경에서 주입한다. 권리 확인 자료 및 카탈로그와 함께 관리한다. |
+| `fake-price-krw` | `1`, 0 초과 1,000 이하, 소수점 이하 최대 6자리 | 격리된 FAKE 효과 1건의 모의 KRW다. 기존 비용 원장과 manifest에 연결한다. |
+
+실제 앱 검증은 [격리 테스트 가이드](../guides/LOCAL_TEST_GUIDE.md#v2-04-실제-앱-검증)를 따른다.
