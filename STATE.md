@@ -27,6 +27,8 @@
 
 - 최종 검토 R01~R06은 설계 SHA `e327f20317d2335aa342eae001818ccf6cf7a12d`에서 보완했다. 변경은 상세 계획·저장소 대조·공급자 스파이크와 이 인수 기록이다. 문서 범위·링크·staged diff·Gitleaks를 검증한다. 제품 테스트 미실행, Migration 미생성·미적용. 다음은 무과금 S0 준비, 별도 승인 후 유료 S1~S4다. 제품 구현과 최초 실제 영상은 별도 승인 대기다.
 
+- 사용자 수용 설계 `5d6fa55ffafa09dc29b33950bdffe7c6ac64700d`의 [Claude S0~S4 인수인계](docs/v2/V2-05_SPIKE_CLAUDE_HANDOFF.md)를 문서로 작성했다. 다음 작업은 Claude의 무과금 S0다. 유료 S1~S4는 별도 승인 대기이며 공통 계약·제품은 결과와 최종 설계 승인 이후 착수한다. 제품 테스트 및 Migration 실행 없음.
+
 ### V2-04-BLOCKING-FIXES — 독립 리뷰 B01·B02 수정 (2026-11-27 KST, DONE)
 
 - Claude Code(Codex 사용량 제한으로 위임). 기준 `v2/04-integration` `b9669aae508c71fec7fabeefaab7d1adade09fe0`, 브랜치 `v2/04-blocking-fixes`. 상세·재현 명령: [수정 보고서](docs/reports/V2-04_BLOCKING_FIXES_REPORT.md).
