@@ -580,6 +580,23 @@ class DiscoveryExecutionIT {
         }
     }
 
+    private static java.util.function.Consumer<Long> awaitBothRequests() {
+        var barrier = new CyclicBarrier(2);
+        Set<Long> requests = ConcurrentHashMap.newKeySet();
+        return requestId -> {
+            if (requests.add(requestId)) {
+                try {
+                    barrier.await(10, TimeUnit.SECONDS);
+                } catch (InterruptedException ex) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException(ex);
+                } catch (java.util.concurrent.BrokenBarrierException | java.util.concurrent.TimeoutException ex) {
+                    throw new IllegalStateException(ex);
+                }
+            }
+        };
+    }
+
     private static final Candidate SKY = DiscoveryFixtures.candidate("Rayleigh scattering",
             "Why is the daytime sky blue instead of violet?", "Why the Sky Is Blue, Not Violet",
             "Walk through the scattering mechanism one step at a time with a simple diagram.");
@@ -602,18 +619,11 @@ class DiscoveryExecutionIT {
         choose(first, 1, 200);
         choose(second, 1, 200);
 
-        // both SELECT transactions hold their request lock before either takes the channel lock
-        CyclicBarrier bothLocked = new CyclicBarrier(2);
-        Set<Long> arrived = ConcurrentHashMap.newKeySet();
-        port.beforeLock = requestId -> {
-            if (arrived.add(requestId)) {
-                try {
-                    bothLocked.await(30, TimeUnit.SECONDS);
-                } catch (Exception e) {
-                    throw new IllegalStateException(e);
-                }
-            }
-        };
+        // Complete both claim transactions before holding either request row in SELECT.
+        // Otherwise the claim scan may block on the row held by the first barrier participant.
+        port.beforeInput = awaitBothRequests();
+        // Both SELECT transactions still hold their request lock before either takes the channel lock.
+        port.beforeLock = awaitBothRequests();
         race(List.of("race-1", "race-2"));
 
         List<Long> linked = List.of(first, second).stream()

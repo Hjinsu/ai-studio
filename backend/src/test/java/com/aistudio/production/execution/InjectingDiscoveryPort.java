@@ -22,6 +22,7 @@ import com.aistudio.production.contract.ProductionDiscovery.Response;
 final class InjectingDiscoveryPort implements DiscoveryExecutionPort {
     private final DiscoveryExecutionPort real;
 
+    volatile Consumer<Long> beforeInput = id -> {};
     volatile Consumer<Long> beforeApply = id -> {};
     volatile Consumer<Long> beforeLock = id -> {};
     volatile Consumer<Long> beforeRecord = id -> {};
@@ -33,6 +34,7 @@ final class InjectingDiscoveryPort implements DiscoveryExecutionPort {
     }
 
     void reset() {
+        beforeInput = id -> {};
         beforeApply = id -> {};
         beforeLock = id -> {};
         beforeRecord = id -> {};
@@ -47,6 +49,7 @@ final class InjectingDiscoveryPort implements DiscoveryExecutionPort {
 
     @Override
     public Input input(long requestId) {
+        beforeInput.accept(requestId);
         return real.input(requestId);
     }
 
