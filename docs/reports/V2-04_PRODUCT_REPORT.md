@@ -1,9 +1,9 @@
 # V2-04-PRODUCT 진행 보고 (Claude Code)
 
-- 상태 **IMPLEMENTED** (DONE 아님: Codex 독립 리뷰·CI·ChatGPT 검토·사용자 승인 대기) · 2026-11-27 KST · 회사 PC 재개 결과는 [§0](#0-회사-pc-재개-결과-2026-11-27)
+- 상태 **IN_PROGRESS — 기술 인수 완료, 낭독·자막·배경음악·효과음 사용자 판정 대기** (IMPLEMENTED 아님. `f3d6ac0`의 IMPLEMENTED 기록 정정) · 2026-11-27 KST · 회사 PC 재개 결과는 [§0](#0-회사-pc-재개-결과-2026-11-27)
 - 기준 공통 SHA `d7bec5f9aadcc423d7b2a987ac31d810367b4604` · 브랜치 `v2/04-product` · worktree `../ai-studio-v2-04-product`
 - 범위: [착수 지시서](../v2/V2-04_CLAUDE_HANDOFF.md)의 Claude 소유 경로. 공통 계약·Codex 소유 파일, migration, OpenAPI, 빌드 설정은 수정하지 않았다. 공통 scratch 보호 정책(전용 ≤32 GiB 볼륨)은 우회·완화하지 않았다.
-- 필수 인수 조건과 사용자 확인 완료(§0.6). 후속: Codex scratch 예약 결함(§0.5), V2-05 IMAGE_TO_VIDEO·TEXT_TO_VIDEO 검토, V2-06 AI 콘텐츠 고지·게시 정책.
+- 남은 필수 항목: 낭독·자막·배경음악·효과음 각각의 사용자 합격 판정(§0.6). 권리 근거와 정지 이미지 중심 표현은 사용자 확인 완료. 후속: Codex scratch 예약 결함(§0.5), V2-05 IMAGE_TO_VIDEO·TEXT_TO_VIDEO 검토, V2-06 AI 콘텐츠 고지·게시 정책.
 
 ## 0. 회사 PC 재개 결과 (2026-11-27)
 
@@ -76,17 +76,24 @@
 - 인수 진행 방식: 보호 조건은 바꾸지 않았다. 종료(SUCCEEDED/FAILED)되고 lease가 0인 요청 3·4의 scratch 디렉터리만 수동 삭제했다(reaper가 24h 후 하는 동작과 같음). 이후 venus-day(요청 5)를 새로 제작했고, neutron-star는 이미 성공한 요청 3으로 브라우저 검증을 했다.
 - 제안(승인 필요): 종료된 요청·성공 attempt의 scratch를 즉시 reap하거나, 예약을 실행 중 attempt만 계산. 공통 계약 변경이므로 Codex·사용자 결정 사항이다.
 
-### 0.6 사용자 확인 결과 (2026-11-27 KST) — 완료
+### 0.6 기술 QC와 사용자 확인 범위 (2026-11-27 KST 정정)
 
-| 항목 | 결과 | 사용자 판단 |
+자동 기술 QC와 사람 확인을 구분해 기록한다. 자동 검수는 사람 검토를 대체하지 않는다(AGENTS.md).
+
+| 항목 | 자동 기술 QC (§0.4) | 사용자 확인 |
 |---|---|---|
-| 실제 MP4 두 편 시청(neutron-star `16f7d2da…90c4c6`, venus-day `fcf8d4d8…eb6cb33`) | **PASS** | 사용자가 두 영상을 직접 확인했다. 낭독(Piper LJSpeech 단일 합성 음성)·자막·배경음악·효과음을 포함한 확인 결과를 V2-04 기술 인수로 수용했다 |
-| 정지 이미지 중심 영상 표현(카메라 이동·전환) | **허용(V2-04 범위)** | 몰입감 향상용 IMAGE_TO_VIDEO·TEXT_TO_VIDEO 지원은 **V2-05에서 별도 검토** |
-| 권리 근거 `ASSETS_AND_RIGHTS.md` | **PASS** | Piper LJSpeech-high Public Domain 표기, 자체 생성 이미지·배경음악·효과음·대본, OFL 1.1 글꼴, 외부 설치 FFmpeg(GPLv3, 로컬 실행·미배포)의 현재 사용 방식이 기술 인수용으로 적절하다 |
-| AI 콘텐츠(합성 음성) 고지·실제 게시 정책 검증 | 범위 밖 | **V2-06 후속 요구사항**으로 관리한다 |
-| Scratch 예약 누적 결함(§0.5) | 미해결, Codex 담당 | 제품 쪽에서 직접 수정하지 않는다 |
+| 낭독 | PASS: 원문 매핑, 권리, 해시, 48 kHz 타임라인, 무음·clipping, −15.8/−15.9 LUFS, −1.9/−1.8 dBTP | **미확인**. 명시적 청취 합격 판정 없음 |
+| 자막 | PASS: SRT/ASS coverage·시간, 글리프 bbox, 번인 | **미확인**. 명시적 판정 없음 |
+| 배경음악 | PASS: 권리, ducking, 통합 음량 | **미확인**. 명시적 판정 없음 |
+| 효과음 | PASS: 권리, 믹스 | **미확인**. 명시적 판정 없음 |
+| 정지 이미지 중심 영상 표현 | PASS: 해상도, 장면 경계, 카메라·전환 | **확인·수용**: V2-04 기술 구현 범위로 수용. 동영상 생성(IMAGE_TO_VIDEO·TEXT_TO_VIDEO) 지원은 V2-05에서 검토 |
+| 권리 근거 `ASSETS_AND_RIGHTS.md` | PASS: QC `RIGHTS_COMPLETE` | **확인**: Piper LJSpeech-high Public Domain 표기, 자체 생성 이미지·배경음악·효과음·대본, OFL 글꼴, 외부 설치 FFmpeg의 현재 사용 방식이 기술 인수용으로 적절 |
+| AI 콘텐츠 고지·실제 게시 정책 | 범위 밖 | V2-06 후속 요구사항 |
+| Scratch 예약 누적 결함(§0.5) | 미해결 | Codex 담당. 제품 쪽에서 수정하지 않음 |
 
-필수 인수 조건(전체 테스트, 실제 앱 E2E, 브라우저 검증, 두 MP4 QC·해시, 권리, 사용자 확인)을 모두 충족해 **IMPLEMENTED**로 보고한다. 이후 Codex 독립 리뷰 → 최신 PR HEAD CI → ChatGPT 최종 검토 → 사용자 승인으로 DONE을 판단한다. 실제 게시와 유료 API 호출은 승인되지 않았다.
+**상태 판단: IN_PROGRESS 유지.** [구현 계획](../v2/V2-04_IMPLEMENTATION_PLAN.md) §필수 인수는 "사람이 확인한 발화 표본"을 증거로 요구하고, 이번 재개 지시는 사용자 확인 완료를 IMPLEMENTED의 조건으로 정했다. 낭독·자막·배경음악·효과음에 대한 명시적인 사용자 합격 판정이 아직 없으므로 조건이 충족되지 않았다. 직전 커밋 `f3d6ac0`의 IMPLEMENTED 기록은 이 판정이 있었던 것으로 잘못 기록한 것이므로 정정한다.
+
+**IMPLEMENTED 전환 조건**: 사용자가 두 MP4(§0.4)를 듣고 낭독·자막·배경음악·효과음 각각에 대해 합격 또는 불합격을 판정하고, 그 결과를 이 절에 기록한다. 제품 코드·테스트 재실행은 필요하지 않다. 실제 게시와 유료 API 호출은 승인되지 않았다.
 
 ### 0.7 재현 (회사 PC)
 

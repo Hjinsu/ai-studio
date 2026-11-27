@@ -16,16 +16,16 @@
 ## 인수인계 기록
 작업 ID / 상태 / 변경 파일 / 테스트 명령 및 실제 결과 / 미해결 문제 / 다음 작업 / 필요 환경변수. 커밋 해시는 생성된 경우만 기록.
 
-### V2-04-PRODUCT — 제품 구현·인수 완료 (2026-11-27 KST, IMPLEMENTED)
+### V2-04-PRODUCT — 기술 인수 완료, 사용자 청취 판정 대기 (2026-11-27 KST, IN_PROGRESS)
 
 - Claude Code, 공통 SHA `d7bec5f9aadcc423d7b2a987ac31d810367b4604`, 브랜치 `v2/04-product`. 상세·재현: [진행 보고 §0](docs/reports/V2-04_PRODUCT_REPORT.md). 사용자 지시로 이 브랜치 STATE.md에 직접 기록(통합 시 정리).
 - 완료(체크포인트 `0920437`): `backend/.../production/media/product/`, 프런트 미디어 미리보기, fixture 생성기. 회사 PC 재개 세션에서 `frontend/e2e/live-media.mjs`(실제 앱 인수 스크립트, npm test 제외)를 추가했다. 제품 코드·공통 계약·migration·OpenAPI 변경 없음.
 - 테스트(회사 PC, 격리 MariaDB 3307): `:backend:test` 324/324, `:backend:integrationTest` 259 통과·실패 0·건너뜀 1(기존 환경 게이트 liveEdge), `:backend:bootJar` PASS. frontend lint·typecheck·Vitest 102/102·build PASS. Gitleaks no leaks.
 - **실제 앱 E2E PASS**: bootJar + 공통 보호 실행기(Windows Job Object, 16 GiB 전용 VHDX `S:\s`) + Vite + Edge. 로그인 → 발굴 → UI 소재 선택 → 11단계 각 1회 SUCCEEDED → QC 32/32 → 재생·seek 30 s(206)·장면 이미지/낭독·MP4/SRT 다운로드(목록 SHA 일치)·라이트/다크·모바일. MP4(Git 밖 `C:\Users\PC-94\Downloads\AI-Studio-V2-04-Acceptance\output-pc94-e2e\`): neutron-star `16f7d2da0713288b715b6964a0ed3c91c4ea0bd42121698dfbcaaf445590c4c6`, venus-day `fcf8d4d8d1092d12fd6193a65e2e70b9730fc80683cc6abf6a90805e8eb6cb33`.
 - **결함(Codex 조율, 공통 코드)**: 완료된 scratch attempt 디렉터리가 24h 동안 1 GiB씩 예약에 계산된다. 그래서 16 GiB 볼륨에서 두 번째 요청이 `MEDIA_SCRATCH_UNAVAILABLE`로 FAILED됐다(요청 4). 보호 조건은 유지하고 종료된 요청의 scratch만 수동 정리한 뒤 진행했다. 개선안은 보고서 §0.5(승인 필요).
-- 사용자 확인(보고서 §0.6): 두 MP4 시청, 낭독·자막·배경음악·효과음 확인 결과를 기술 인수로 수용. `ASSETS_AND_RIGHTS.md` 권리 근거(Piper LJSpeech-high Public Domain, 자체 이미지·음악·효과음·대본, OFL 글꼴, 외부 설치 FFmpeg) 적절. 정지 이미지 중심 표현은 V2-04 범위에서 허용.
+- 사용자 확인 범위(보고서 §0.6): 권리 근거 `ASSETS_AND_RIGHTS.md`는 확인됨. 정지 이미지 중심 표현은 V2-04 범위로 수용하고 동영상 생성은 V2-05에서 검토. **낭독·자막·배경음악·효과음 각각의 명시적 사용자 합격 판정은 미확인**이다. 이 네 항목은 자동 기술 QC PASS일 뿐이다. 그래서 `f3d6ac0`의 IMPLEMENTED 기록을 IN_PROGRESS로 정정했다(구현 계획 §필수 인수 "사람이 확인한 발화 표본").
 - 후속(범위 밖): V2-05 IMAGE_TO_VIDEO·TEXT_TO_VIDEO 검토, V2-06 AI 콘텐츠 고지·실제 게시 정책 검증. 실제 게시·유료 API 호출 미승인.
-- 다음 작업: Codex 독립 리뷰(이 브랜치 최종 커밋) → CI → ChatGPT 최종 검토 → 사용자 승인 후 DONE. Codex: §0.5 scratch 예약 누적 결함(공통 코드, 제품에서 미수정), 신규 설정(`product.fixture-root`, `product.fake-price-krw`) 공통 문서 등록, TASKS.md V2-04-PRODUCT 상태 반영, `v2/04-safety` 통합.
+- 다음 작업: 사용자가 두 MP4의 낭독·자막·배경음악·효과음을 각각 판정 → 보고서 §0.6에 기록 → IMPLEMENTED 보고 → Codex 독립 리뷰 → CI → ChatGPT 최종 검토 → 사용자 승인 후 DONE. 제품 코드 수정·테스트 재실행 불필요. Codex: §0.5 scratch 예약 누적 결함(공통 코드, 제품에서 미수정), 신규 설정(`product.fixture-root`, `product.fake-price-krw`) 공통 문서 등록, TASKS.md V2-04-PRODUCT 상태 반영, `v2/04-safety` 통합.
 
 ### V2-04-COMMON — 공통 계약 구현 (2026-11-27 KST, IMPLEMENTED)
 
