@@ -54,7 +54,9 @@
 - 사용자 승인 기준 ac193284d127d78154777879c5e77da5266dafd2에서 별도 v2/05-common worktree로 착수했다. 설계 단계 종료 및 승인 기록을 갱신했다. 기존 v2/05-design worktree의 상세 계획 미스테이지 삭제를 보존했다.
 - 1차 공통 변경은 v2-media-2 순서·채널 오디오/자막 옵션, 미디어 어댑터·동적 장면/오디오 타입, 수동 Worker 입력/초안/검수 lineage와 원자 파일 발행, 현재 lease에서 DB 중복 적용 방지, V14의 요청 상한·영상 자산·작업 ID 저장 및 제한된 앱 권한이다.
 - 제품 공통 기준 SHA는 아직 확정하지 않았다. 다음은 기존 discovery/planning 결과 채택 경로에 수동 교환을 연결하고 신규 프로필의 발행·수집 API 및 유료 어댑터 permit/receipt·조회/UNKNOWN 복구를 통합하는 일이다. 신규 프로필의 공개 활성화, 외부 Worker 무인 반복, 실제 유료 API, 운영 DB 적용은 하지 않았다.
-- Java 21, 별도 loopback MariaDB, V2-04 로컬 FFmpeg fixture로 검증한다. 이전 중간 실행의 V14 버전/이력 기대치 불일치를 정정했다. 사용자 운영 DB, main 및 integration 병합은 범위 밖이다.
+- Java 21과 별도 loopback MariaDB에서 Worker reclaim/stale/rollback/중복 적용 집중 통합 테스트 PASS. 로컬 전체 FFmpeg 실행은 집중 테스트와 출력 폴더가 겹쳐 결과 집계 실패. CI Windows 초기 fixture 경로 실패를 실제 경로 사용으로 수정했으며 제품의 경로 가드는 유지했다. 사용자 운영 DB, main 및 integration 병합은 범위 밖이다.
+- 코드 검증 기준 dc8fb3b574d7399ed6889f14a07d71af6ecd4988. 로컬 FFmpeg fixture를 사용한 B01 기간 만료 미발송 종료와 B02 마지막 QC 재시작 복구 2/2 통과. [GitHub CI](https://github.com/Hjinsu/ai-studio/actions/runs/46031716233)의 Linux 단위·격리 통합과 Windows 단위, OpenAPI·Gitleaks 및 프런트 검증 통과를 확인했다. 전체 워크플로 상태는 실행 기록을 참조한다.
+- V10 DISCOVER 및 V12 계획 결과의 유료 receipt 필수 귀속과 무과금 Worker의 연결에는 핵심 소유권 변경이 필요하다. DECISIONS의 상호 배타적 소유 근거 제안에 대한 승인 전 SELECT/계획 채택 연결은 보류한다. 아직 공통 완료 및 Claude 착수 기준 SHA를 발급하지 않았다.
 
 ### V2-04-BLOCKING-FIXES — 독립 리뷰 B01·B02 수정 (2026-11-27 KST, DONE)
 
