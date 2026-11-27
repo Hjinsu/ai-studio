@@ -33,6 +33,9 @@
 
 - 외부 Worker의 별도 검증 방향 수용을 [검증 계획서](docs/v2/V2-05_EXTERNAL_AI_WORKER_VALIDATION_PLAN.md)에 기록했다. 로컬·원격 설계 SHA와 Claude 스파이크 SHA가 각각 일치하며, 기존 설계 파일은 양쪽 커밋에 있고 로컬 미스테이지 삭제만 확인했다. 다음은 별도 작업 배정과 W01 공식 조건 확인이다. 제품·DB·스케줄러 변경, CLI 호출, 무인 실행 및 파일 복구 없음.
 
+- 외부 Worker 1차 검증. 문서 푸시 기준 `3979d624f2cfb3162d8c6f68d62cda401a52a3d5`. 별도 임시 폴더에서 `codex login status`는 ChatGPT(72ms), `claude auth status`는 claude.ai Pro/firstParty(637ms)로 확인. 계정별 추가 크레딧 소비·자동 충전 차단은 미입증이며 무인 운영의 이용 조건도 미확정이다. 실제 모델 실행을 보류해 초안·검수 품질/시간/구독 사용량은 미측정, 이번 검증의 유료 API·모델 호출은 0건이다.
+- 기존 S1 TOPIC-A/B 원문으로 임시 PowerShell 파일 왕복을 모의 검증했다(126ms). 요청·모의 초안·모의 검수본 JSON의 같은 폴더 내 임시 쓰기·flush·이동, ID/버전 및 SHA-256 계보 일치, 표본 원문 해시 보존을 확인했다. 실제 CLI 파일 작업, 장애 복구와 제품 테스트는 미검증이다. 다음은 계정별 추가 과금 차단을 증명한 뒤 승인 범위의 일회성 생성/검수를 진행하는 것이다. 기존 미스테이지 삭제, DB·Migration·제품 코드 및 스케줄러 상태를 유지했다.
+
 ### V2-04-BLOCKING-FIXES — 독립 리뷰 B01·B02 수정 (2026-11-27 KST, DONE)
 
 - Claude Code(Codex 사용량 제한으로 위임). 기준 `v2/04-integration` `b9669aae508c71fec7fabeefaab7d1adade09fe0`, 브랜치 `v2/04-blocking-fixes`. 상세·재현 명령: [수정 보고서](docs/reports/V2-04_BLOCKING_FIXES_REPORT.md).
