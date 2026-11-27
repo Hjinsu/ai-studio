@@ -40,6 +40,8 @@
 
 - 외부 Worker 2차 재개에서 사용자 제공 과금 설정을 기록하고 Claude S1 초안 2건 및 요청-초안 해시 검증을 완료했다. Codex 기본 구독 연결의 내부 재시도 차단 방법 미확인으로 독립 검수는 보류했다. [재개 결과 및 증거](docs/reports/V2-05_EXTERNAL_AI_WORKER_ROUND2.md). 제품 테스트·DB·Migration 실행 없음. 다음은 Codex 재시도 차단 방법 확인과 검수 완료다.
 
+- 사용자 승인으로 구독 CLI 내부 재시도를 허용한 뒤 기존 Claude 초안 2건의 Codex 일회성 검수를 완료했다. 스크립트 재호출 0, resultScript 스키마·해시 및 원본 보존 확인. [결과](docs/reports/V2-05_EXTERNAL_AI_WORKER_ROUND2.md). 제품 테스트·DB·Migration 없음. 무인 반복 및 제품 통합은 별도 승인 대기다.
+
 ### V2-04-BLOCKING-FIXES — 독립 리뷰 B01·B02 수정 (2026-11-27 KST, DONE)
 
 - Claude Code(Codex 사용량 제한으로 위임). 기준 `v2/04-integration` `b9669aae508c71fec7fabeefaab7d1adade09fe0`, 브랜치 `v2/04-blocking-fixes`. 상세·재현 명령: [수정 보고서](docs/reports/V2-04_BLOCKING_FIXES_REPORT.md).
