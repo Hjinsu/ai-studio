@@ -1,196 +1,219 @@
-# V2-05 S0 공급자 스파이크 무과금 준비 보고서
+# V2-05 S0 공급자 스파이크 무과금 준비 보고서 (최종)
 
-**IMPLEMENTED (S0 문서·로컬 준비, 사용자 수용)** · 2026-11-27 · 담당 Claude Code · 브랜치 `v2/05-spike` · 기준 `4539848`(설계 SHA `5d6fa55`) · [인수인계](../v2/V2-05_SPIKE_CLAUDE_HANDOFF.md) · [스파이크 계약](../v2/V2-05_PROVIDER_SPIKE.md)
+**IMPLEMENTED (S0 문서·로컬 준비)** · 2026-11-27 · 담당 Claude Code · 브랜치 `v2/05-spike` · 기준 `4539848`(설계 SHA `5d6fa55`) · [인수인계](../v2/V2-05_SPIKE_CLAUDE_HANDOFF.md) · [스파이크 계약](../v2/V2-05_PROVIDER_SPIKE.md)
 
-S0에서 보낸 유료 호출, 생성 요청, 테스트 요청은 모두 0건이다. 계정 생성·결제·충전도 하지 않았고, 제품 코드·migration·DB는 건드리지 않았다. 공개 문서만 읽었다. 원문 근거와 상태(VERIFIED / NOT_VERIFIED / UNKNOWN)는 작업 폴더의 `S0/sources.md`에 있다.
+S0에서 보낸 유료 호출, 생성 요청, 테스트 요청은 모두 0건이다. 계정 생성·결제·충전도 하지 않았고, 제품 코드·DB·migration은 건드리지 않았다. 공개 문서만 읽었다. 원문 근거와 상태(VERIFIED / NOT_VERIFIED / UNKNOWN)는 작업 폴더의 `S0/sources.md`에 있다.
 
-## 0. 사용자 결정 반영 (2026-11-27)
+**현재 승인되지 않은 것**: 유료 API 호출, 결제, 충전, 제품 코드 구현, DB·migration 변경. 보고를 마치면 사용자 승인을 기다린다.
 
-사용자가 S0 결과를 수용하고 아래 변경을 지시했다. **유료 호출과 충전은 여전히 승인되지 않았다.** 계정과 결제는 사용자가 직접 준비하며, 사용자의 최종 호출 승인 뒤에 S1~S4를 시작한다.
+## 0. 사용자 결정 누적 (2026-11-27)
 
-| 항목 | 이전 | 반영 |
-|---|---|---|
-| 실험비 상한 S1 / S2 / S3 / S4 | 150 / 40 / 250 / 2,700원 | **150 / 50 / 300 / 3,000원** |
-| 전체 실험비 상한 제안 | 3,140원 | **3,500원** |
-| 일반 운영 영상당 상한 | 3,000원 | 3,000원(변경 없음) |
-| T2V 비교(S4-WANT2V-FALL) | 유지 여부 미정 | **유지** |
-| S1 Anthropic 비교 후보 | claude-haiku-4-5-20251001 | **claude-haiku-5-5** |
-| Chirp 3 HD 단가 | NOT_VERIFIED | 공개 $30/1M 문자를 사용자가 확인 |
-| S3 Gemini 이미지(Nano Lite) | 조건부 | 최대 청구액을 입증할 수 없어 **HOLD**(3회) |
-| fal Wan 해상도 | 720p 명시 | 모든 Wan 호출에 `resolution: "720p"`를 명시하도록 실행 규칙에 고정 |
+| 항목 | 결정 |
+|---|---|
+| 실험비 상한 | 전체 **3,500원** 유지. S1 150원, S3 300원, S4 3,000원. S2는 개별 상한 없이 총 상한의 잔여분 안에서 배정 |
+| 운영 영상당 상한 | **3,000원** 유지 |
+| T2V 비교 | 유지(S4-WANT2V-FALL) |
+| S1 Anthropic 후보 | `claude-haiku-5-5`(Haiku 4.5 대체) |
+| S3 Gemini 이미지(Nano Lite) | 최대 청구액을 입증할 수 없어 **HOLD** |
+| fal Wan 해상도 | 호출 계획에 `resolution: "720p"` 명시 |
+| **TTS 공급자·음성** | **Gemini `gemini-3.8-flash-tts`, 음성 Puck, ko-KR, single speaker.** Chirp 3 HD와 ElevenLabs는 대체 후보로 보류. 오디션 없음. 모델과 음성은 채널 설정으로 관리(하드코딩 금지) |
+| **S2 실험** | Puck으로 7회(A 1, B 1, C 전체 1, C 장면별 4). 전체 합성과 장면별 합성의 품질을 비교 |
+| **기본 음성 연출 프롬프트** | 사용자 지정 STYLE-BASE에 장면별 조정을 덧붙임(동적) |
+| **자막** | **IFNOVA는 자막 없이 제작.** 자체 자막·SRT·FFmpeg 자막 삽입 비활성. STT·forced alignment 검토 제외. S2 평가에서 자막 정렬 제거, 관련 API 비용 제외. V2-04 자막 구현은 남기고 채널별 토글로 관리(IFNOVA 기본 OFF). YouTube 자동 자막·번역·더빙은 V2-06 검토 대상 |
+| 비용 계약 | 최대 청구액과 예상 청구액을 구분한다. 입력·출력·세금·환율·수수료·실패·재생성을 포함한다. 2027-01-01 가격 인상을 반영한다. **"초과 시 중단"은 최대 비용 보장으로 표현하지 않는다.** 최대액을 보수적으로 확정할 수 없으면 해당 호출을 보류한다 |
 
 ## 1. 작업 폴더 (저장소 밖)
 
-`C:\Users\rlead\AI-Studio-V2-05-Spike\` — OneDrive 동기화 폴더 밖에 두었다. 생성 미디어와 청구 증빙은 이 폴더에만 저장하고 Git에는 넣지 않는다.
+`C:\Users\rlead\AI-Studio-V2-05-Spike\` — OneDrive 밖에 두었다. 생성 미디어와 청구 증빙은 이 폴더에만 두고 Git에 넣지 않는다.
 
 ```
-S0/ sources.md · call-plan.json · calls.jsonl(빈 원장) · evaluation.md(빈 평가표) · manifest.json · report.md(이 보고서 사본)
-    samples/ script-topics.md · s1-script-prompt.md · tts-samples.md · tts-samples.json · image-prompts.md · motion-prompts.md
+S0/ sources.md · call-plan.json(v3) · calls.jsonl(빈 원장) · evaluation.md(빈 평가표) · manifest.json · report.md(이 보고서 사본)
+    samples/ script-topics.md · s1-script-prompt.md · tts-samples.md(v3) · tts-samples.json · image-prompts.md · motion-prompts.md
 S1/ S2/ S3/ S4/  calls.jsonl(빈 원장). 실행 결과는 각 폴더에 저장
 ```
 
-`calls.jsonl`의 한 줄 형식은 `{"callId","sentAtUtc","provider","model","requestIdOrJobId","status":"SUCCEEDED|FAILED|TIMEOUT|CANCELLED|UNKNOWN","billedUnits","billedUsd","evidenceRef","outputFiles":[{"path","sha256","bytes"}],"notes"}`다. 키, 토큰, 서명 URL, 결제 개인정보는 기록하지 않는다.
+`calls.jsonl`의 한 줄 형식은 `{"callId","sentAtUtc","provider","model","requestIdOrJobId","status":"SUCCEEDED|FAILED|TIMEOUT|CANCELLED|UNKNOWN","usage","billedUsd","priceTableEntry","evidenceRef","outputFiles":[{"path","sha256","bytes","durationMs"}],"notes"}`다. 키, 토큰, 서명 URL, 결제 개인정보는 기록하지 않는다.
 
-## 2. 필요한 계정과 가입 링크 (사용자 준비)
+## 2. 필요한 API 계정과 환경변수 (최종)
 
-| 공급자 | 실험 | 가입·콘솔 | 결제 방식 |
-|---|---|---|---|
-| Google AI Studio (Gemini API) | S1 | https://aistudio.google.com/apikey | Cloud 결제 계정을 연결한 유료 등급(후불). 무료 등급의 텍스트는 학습에 쓰이므로 사용하지 않는다 |
-| Google Cloud (Text-to-Speech) | S2 | https://console.cloud.google.com/ → API 라이브러리에서 Cloud Text-to-Speech API 사용 설정 | 위와 같은 Cloud 결제 계정(후불) |
-| OpenAI API | S1 | https://platform.openai.com/ | 선불 크레딧 |
-| Anthropic (Claude Console) | S1 | https://platform.claude.com/ | 선불 크레딧 |
-| fal | S3, S4 | https://fal.ai/dashboard | 선불 크레딧 |
-| Runway Developer | S4 | https://dev.runway.com/ | 선불 크레딧(프로젝트 단위) |
+| 공급자 | 실험 | 콘솔 | 결제 | 환경변수 |
+|---|---|---|---|---|
+| Google AI Studio (Gemini API) | S1 텍스트, S2 TTS | https://aistudio.google.com/apikey | **선불, 최소 $5**(최대 $5,000). API keys 또는 Projects 화면의 "Set up billing" | `GEMINI_API_KEY` |
+| OpenAI API | S1 | https://platform.openai.com/ | 선불, 최소 $5(기본 $10) | `OPENAI_API_KEY` |
+| Anthropic (Claude Console) | S1 | https://platform.claude.com/ | 선불, 최소액 NOT_VERIFIED | `ANTHROPIC_API_KEY` |
+| fal | S3, S4 | https://fal.ai/dashboard | 선불, 최소액 NOT_VERIFIED | `FAL_KEY` |
+| Runway Developer | S4 | https://dev.runway.com/ | 선불, 최소 $10 | `RUNWAYML_API_SECRET` |
 
-Gemini와 Cloud TTS는 같은 스파이크 전용 Google Cloud 프로젝트 하나로 묶을 것을 권장한다. Nano Lite가 보류되었으므로 S3에서 Gemini는 쓰지 않는다. ElevenLabs는 기본 호출 목록에 없으므로 가입하지 않아도 된다.
+- **필요 없어진 것**: Google Cloud Text-to-Speech(Chirp 3 HD)와 ADC(`GOOGLE_CLOUD_PROJECT`). Chirp은 보류 대상이고 Gemini API 키로는 쓸 수 없는 별도 API다. ElevenLabs 계정도 필요 없다.
+- **Gemini 키 하나로 텍스트·이미지·TTS를 모두 쓸 수 있는지**:
+  - 모든 Gemini API 키는 Cloud 프로젝트 하나에 묶인다.
+  - 2026-05-28 이후 AI Studio에서 만든 키는 auth key이며, 기본적으로 Generative Language API(Gemini API)로 제한된다.
+  - 세 모델(텍스트, 이미지, TTS)은 모두 이 API에 속하고 문서에 모델별 키 제한이 없다. 그래서 **공통으로 쓸 수 있다고 판단**한다.
+  - 다만 "키 하나로 모든 모델"이라는 명시 문장은 찾지 못했다(NOT_VERIFIED). 첫 호출에서 확인한다.
+  - 무제한 standard key는 Gemini API가 거부하므로 AI Studio에서 새로 만든 키를 쓴다.
+- **확인된 최소 충전액 합계**: $20(Gemini $5 + OpenAI $5 + Runway $10), 약 37,026원(부가세·수수료 포함 환산). 여기에 Anthropic과 fal의 최소액이 더해진다. 크레딧은 환불되지 않고 대개 1년 안에 만료된다. 실험 소비액(선택안 A 기준 최대 3,286원)과 카드 결제액은 다르다.
 
-## 3. API 키 발급 절차와 환경변수 이름
-
-| 환경변수 | 발급 위치·절차 |
-|---|---|
-| `GEMINI_API_KEY` | AI Studio → Get API key → 스파이크 전용 Cloud 프로젝트를 선택해 키 생성 → 프로젝트 결제 상태가 Paid인지 확인 |
-| `GOOGLE_CLOUD_PROJECT` (+ ADC) | 키 대신 ADC를 쓴다. gcloud CLI 설치 후 `gcloud auth application-default login`, `gcloud auth application-default set-quota-project <프로젝트ID>`. 자격증명 파일은 `%APPDATA%\gcloud\`에 저장되며 저장소 밖이다 |
-| `OPENAI_API_KEY` | Platform → 스파이크 전용 Project 생성 → API keys → 프로젝트 범위 키 생성 |
-| `ANTHROPIC_API_KEY` | Console → 스파이크 전용 Workspace 생성 → API Keys → 워크스페이스 범위 키 생성 |
-| `FAL_KEY` | fal 대시보드 → Keys → 키 생성(`key_id:key_secret` 형식 한 줄) |
-| `RUNWAYML_API_SECRET` | dev.runway.com → 프로젝트 생성 → API Keys 탭 → 키 생성. 키는 생성할 때 한 번만 보인다 |
-
-키는 비밀번호 관리자에 보관하고, 실행할 PowerShell 세션에만 넣는다. `setx`나 `.env` 파일, 채팅 입력은 쓰지 않는다.
+### 키 주입 (PowerShell 세션 환경변수만 사용)
 
 ```powershell
-# 화면·기록에 남지 않게 세션 변수로만 주입한다 (변수 이름만 바꿔 반복)
 $s = Read-Host -AsSecureString "GEMINI_API_KEY"
 $env:GEMINI_API_KEY = [Runtime.InteropServices.Marshal]::PtrToStringBSTR([Runtime.InteropServices.Marshal]::SecureStringToBSTR($s))
 Remove-Variable s
 [bool]$env:GEMINI_API_KEY   # True만 확인. 값은 출력하지 않는다
 ```
 
-계정마다 권장하는 지출 차단 설정:
-- 자동 충전(auto-recharge, auto-reload)을 모두 끈다.
-- OpenAI는 프로젝트 예산, Anthropic은 워크스페이스 지출 한도를 최소로 설정한다.
-- Google Cloud는 예산 알림을 설정한다. 알림은 지출을 막지 못하므로 호출 수 제한은 실행기에서 건다.
+- 키는 비밀번호 관리자에 보관한다. `setx`나 `.env` 파일, 채팅 입력, 로그는 쓰지 않는다.
+- 모든 계정에서 자동 충전을 끈다.
+- OpenAI 프로젝트 예산과 Anthropic 워크스페이스 한도를 최소로 설정한다.
 
-## 4. 결제와 최소 충전 금액
+## 3. 비용 산정 원칙
 
-| 공급자 | 최소 결제 | 상태 | 비고 |
-|---|---|---|---|
-| OpenAI | $5 (기본 $10) | VERIFIED | 1년 만료, 환불 불가 |
-| Runway | $10 | VERIFIED | 1 credit = $0.01 |
-| Anthropic | 미확인 | NOT_VERIFIED | Console Billing에서 확인. 1년 만료, 환불 불가 |
-| fal | 미확인 | NOT_VERIFIED | 대시보드 Billing에서 확인. 365일 만료. 잔액이 임계값 미만이면 계정이 잠김 |
-| Google (Gemini + TTS) | 선불 없음(후불 카드 등록) | NOT_VERIFIED | 신규 계정 무료 체험 크레딧 금액은 확인하지 못함 |
+- **최대 청구액**: 문서화된 하드 한도(최대 토큰, 출력 한도)나 고정 단가(초, MP, 크레딧)로만 산정한다. 근거가 없거나 예산을 넘으면 HOLD한다. "초과 시 중단" 규칙은 안전 장치로만 두고 최대액 근거로 쓰지 않는다.
+- **포함 항목**:
+  - 입력 토큰과 출력(오디오 포함)
+  - 환율 1,650 KRW/USD
+  - 부가세 1.10배, 카드 수수료 1.02배 → **1,851.3 KRW/USD**
+  - 원 단위 올림
+  - 크레딧과 무료량은 차감하기 전 정가
+- **실패 비용**:
+  - 실패한 호출도 최대액이 청구된다고 가정한다.
+  - Gemini 4xx/5xx와 fal 5xx는 과금되지 않는다고 문서에 있다. 이 차이는 여유분으로만 취급한다.
+  - fal 422는 과금될 수 있다.
+  - Runway는 RUNNING 상태에서 취소하면 환불되지 않고, FAILED 과금 여부는 NOT_VERIFIED다.
+- **재생성 비용**:
+  - 자동 재생성은 금지한다.
+  - 재생성은 건마다 별도 승인을 받고 같은 총 상한(3,500원)에서 차감한다. 남는 여유분은 6절에 표시했다.
+- **예상 청구액**: 정상 동작을 가정한 추정치다. 승인·예약에는 쓰지 않는다.
 
-**실험 소비액과 카드 결제액은 다르다.** 실험이 실제로 쓰는 금액은 최대 2,900원이다. 하지만 선불 공급자 네 곳의 최소 충전액은 확인된 것만 $15(OpenAI $5 + Runway $10, 약 27,770원)이고, Anthropic과 fal의 최소액이 더해진다. 남은 크레딧은 환불되지 않고 1년 안에 만료된다.
+## 4. 가격표 적용 기간 관리
+
+- 가격표는 항목마다 다음을 기록한다(`call-plan.json` `priceTable`):
+  - `sku`, `unit`, `price`, `currency`
+  - `effectiveFromUtc`, `effectiveToUtc`
+  - 공급자가 쓴 기간 문구(`statedPeriod`), 시간대 명시 여부(`tzStated`)
+  - 출처 URL, 확인 시각
+- Gemini 3.8 Flash TTS의 공개 문구:
+  - 입력 $0.50, 출력 $9.00/1M "through December 31, 2026"
+  - 입력 $1.00, 출력 $18.00/1M "starting January 1, 2027"
+  - 시간대 표기는 없다.
+- **보수적 경계**: 가장 이른 시간대(UTC+14)의 2027-01-01 00:00, 곧 **2026-12-31T10:00:00Z**부터 새 단가를 적용한다.
+  - 호출 시각이 경계 전후 24시간 안이면 높은 단가로 예약한다.
+  - 따라서 2026 단가로 받은 승인은 **2026-12-30T10:00:00Z(KST 2026-12-30 19:00) 전에 발송·완료되는 호출**에만 유효하다.
+- 호출 직전에 가격 페이지를 다시 확인한다. 바뀌었으면 새 항목을 추가하고 이전 항목은 닫는다(덮어쓰지 않음). 원장에는 실제로 적용한 가격표 항목을 남긴다.
 
 ## 5. 실험별 호출 목록과 최대 청구액
 
-환산 가정: 1,650 KRW/USD × 부가세 1.10 × 해외 카드 수수료 1.02 = **1,851.3 KRW/USD**(전부 포함, 보수적). 크레딧과 무료량을 차감하기 전의 정가로 계산했고, 원 단위 미만은 올렸다. 전체 파라미터는 `S0/call-plan.json`에 있다.
+| 호출 ID | 모델·SKU | 고정 파라미터 | 최대 근거 | 최대 원(2026 / 2027) | 상태 |
+|---|---|---|---|---:|---|
+| S1-GEM-A/B | gemini-3.1-flash-lite | 입력 ≤6k, max_output_tokens 2000(thought 포함), minimal | 문서: 출력 상한에 thought 포함 | 9 / 9 ×2 | 계정 준비 후 |
+| S1-OAI-A/B | gpt-5.4-mini-2026-03-17 | 입력 ≤6k, max_output_tokens 2000(reasoning 포함), effort low | 문서: reasoning 포함 | 25 / 25 ×2 | 계정 준비 후 |
+| S1-ANT-A/B | claude-haiku-5-5 | 입력 ≤6k, max_tokens 2000, effort low | 문서: "hard cap on total output ... thinking combined" | 3 / 3 ×2 | 계정 준비 후 |
+| S2-GEMTTS-A, B, CFULL, C1~C4 (7회) | gemini-3.8-flash-tts · Puck | 입력 ≤1,500, max_output_tokens는 설정하지만 오디오 적용 근거 없음 | 문서상 출력 한도 16,384토큰 | 275 / 549 ×7 | **HOLD**(6절) |
+| S2-GEMTTS-CAPTEST | gemini-3.8-flash-tts · Puck | TTS-B, max_output_tokens 250 | 출력 한도 16,384토큰 | 275 / 549 | **선택안 A**(승인 요청 가능) |
+| S3-FLUX-1~3 | fal-ai/flux/schnell | 720×1280(1MP로 올림), 1장 | 고정 단가 | 6 ×3 | 계정 준비 후 |
+| S3-NANO-1~3 | gemini-3.1-flash-lite-image | — | 근거 없음 | UNBOUNDED | HOLD |
+| S4-WANI2V-ROTATE/FALL | wan/v2.6/image-to-video/flash | 5s, **720p**, 무음, prompt expansion off | 고정 단가 $0.05/s | 463 ×2 | 계정 준비 후 |
+| S4-RUNWAY-ROTATE/FALL | gen4_turbo | 5s, 720:1280 | 25 credits | 463 ×2 | 계정 준비 후 |
+| S4-WANT2V-FALL | wan/v2.6/text-to-video | 5s, **720p**, 9:16, multi_shots off | 고정 단가 $0.10/s | 926 | 계정 준비 후 |
 
-| 호출 ID | 모델·SKU | 고정 파라미터 | 최대 USD | 최대 원 | 상태 |
-|---|---|---|---:|---:|---|
-| S1-GEM-A/B | gemini-3.1-flash-lite | 입력 ≤6k, maxOutputTokens 2000, thinking minimal, 도구 없음 | 0.0045 ×2 | 9 ×2 | 계정 준비 후 |
-| S1-OAI-A/B | gpt-5.4-mini-2026-03-17 | 입력 ≤6k, max_output_tokens 2000(추론 포함), effort low | 0.0135 ×2 | 25 ×2 | 계정 준비 후 |
-| S1-ANT-A/B | **claude-haiku-5-5** | 입력 ≤6k, max_tokens 2000, effort low, temperature·top_p·top_k 생략 | 0.0016 ×2 | 3 ×2 | 계정 준비 후 |
-| S2-CHIRP-A/B | ko-KR-Chirp3-HD-Algieba | ≤300 청구 문자(표본은 159자, 141자), text 입력 | 0.009 ×2 | 17 ×2 | 계정 준비 후 |
-| S3-FLUX-1~3 | fal-ai/flux/schnell | 720×1280(1MP로 올림), 1장, 4 steps | 0.003 ×3 | 6 ×3 | 계정 준비 후 |
-| S3-NANO-1~3 | gemini-3.1-flash-lite-image | 9:16, 1024px | UNBOUNDED | — | **HOLD** |
-| S4-WANI2V-ROTATE/FALL | wan/v2.6/image-to-video/flash | 5s, **resolution 720p**, generate_audio false, prompt expansion off | 0.25 ×2 | 463 ×2 | 계정 준비 후 |
-| S4-RUNWAY-ROTATE/FALL | gen4_turbo | 5s, ratio 720:1280 (25 credits) | 0.25 ×2 | 463 ×2 | 계정 준비 후 |
-| S4-WANT2V-FALL | wan/v2.6/text-to-video | 5s, **resolution 720p**, aspect_ratio 9:16, multi_shots false | 0.50 | 926 | 계정 준비 후 |
+## 6. 총 실험비와 S2 보류 근거
 
-## 6. 총 실험비 상한
+| 구분 | 호출 | 최대(2026 단가) | 최대(2027 단가) | 예상 |
+|---|---:|---:|---:|---:|
+| S1 | 6 | 73 | 73 | 약 35 |
+| S3 (FLUX) | 3 | 17 | 17 | 17 |
+| S4 | 5 | 2,777 | 2,777 | 약 2,777(고정 단가) |
+| **S1+S3+S4 소계** | 14 | **2,867** | **2,867** | |
+| S2 7회 (보수적) | 7 | **1,921** | **3,842** | 약 52 / 103 |
+| S2에 배정 가능한 잔여(3,500 − 2,867) | | **633** | **633** | |
 
-| 실험 | 승인 요청 호출 | 보류 | 최대 USD | 환율만 적용 | 전부 포함 | 상한 | 판정 |
-|---|---:|---:|---:|---:|---:|---:|---|
-| S1 | 6 | 0 | 0.0392 | 65 | 73 | 150 | 이내 |
-| S2 | 2 | 0 | 0.018 | 30 | 34 | 50 | 이내 |
-| S3 | 3 | 3 | 0.009 | 15 | 17 | 300 | 이내 |
-| S4 | 5 | 0 | 1.50 | 2,475 | 2,777 | 3,000 | 이내 |
-| 합계 | **16** | 3 | 1.5662 | 2,585 | **2,900** | **3,500** | 이내 |
+**S2 7회는 HOLD다.**
+- Gemini TTS에서 `max_output_tokens`가 오디오 출력을 제한한다는 공식 근거가 없다. 그래서 호출당 최대액은 문서상 출력 한도 16,384토큰(오디오 약 655초 분량)으로 잡아야 한다.
+- 이렇게 잡은 7회 최대액(1,921원)이 총 상한의 잔여분(633원)을 넘는다.
+- 예상 비용은 약 52원이지만, 원칙상 예상치로 승인할 수 없다.
 
-- 원래 계획한 19회 가운데 16회만 승인 요청 대상이다. 보류한 Nano 3회는 승인 요청과 합계에서 뺐다.
-- 실험 상한은 일반 운영 영상당 상한(3,000원)과 별개다. S4 단독 상한 3,000원은 영상 한 편 제작비가 아니라 5초 클립 5개를 비교하는 비용이다.
-- 보류한 Nano를 나중에 다시 넣을 경우의 참고값: 모델 출력 한도 4,096토큰 전부를 이미지 단가로 계산하면 $0.12313/회(228원)이고 3회면 684원이다. 이 경우 S3 상한 300원을 넘는다. 출력 한도가 실제로 적용된다는 근거도 없다.
+**사용자 선택안**:
 
-## 7. 공급자별 미확인 사항과 실행 전 재확인 항목
+| 선택안 | 내용 | 최대(2026) | 총계 | 비고 |
+|---|---|---:|---:|---|
+| **A. 출력 제한 검증 후 진행** | ① CAPTEST 1회: 약 22초 분량의 TTS-B를 max_output_tokens 250(약 10초)으로 요청한다. 오디오가 잘리고 청구 출력이 ≤250인지 확인한다. ② 결과를 본 사용자가 출력 상한을 인정하면, 7회를 상한 기준 최대액으로 다시 승인한다 | ① 275 + ② 144 = **419** | **3,286** | 3,500원 안. 재생성 여유 214원. 한 번의 관측일 뿐 공식 보장은 아니므로 ②로 갈지는 사용자가 판단한다. 2027 단가면 549 + 287로 총 3,703원이 되어 초과하므로 **경계 시각 전에 끝내야 한다** |
+| B. 총 상한 상향 | S2 7회를 보수적 최대로 승인 | 1,921 | 4,788 (2027: 6,709) | 사용자가 정한 "3,500원 유지"와 충돌 |
+| C. 공식 근거를 기다림 | Google 문서 갱신이나 지원 답변으로 오디오 출력 상한을 확인한 뒤 진행 | — | — | 일정 지연 |
+| D. 부분 실행 | 잔여 633원 안에서 2회만(예: CFULL + C3) | 550 | 3,417 | 장면별 비교가 불완전해짐 |
 
-실행 전 공통 재확인(계정이 준비된 뒤 사용자 콘솔에서):
-- 계정에 실제 적용되는 단가와 할인·무료량
-- 모델 접근 권한과 리전 가용성
-- 계정 등급별 rate limit과 토큰 한도
-- 부가세 적용 여부
-- 자동 충전이 꺼져 있는지
+권장은 A다. 이 결과는 S2만의 문제가 아니라 **운영 원가에도 직결된다**(9절 C04).
 
-공개 문서만으로는 이 항목들을 확인할 수 없다.
+**S2를 제외한 승인 요청 가능 합계**: 14회, 최대 2,867원. 선택안 A의 CAPTEST를 넣으면 15회, 3,141원이다. 재생성 여유는 359원이다.
 
-- **Gemini (S1)**
-  - maxOutputTokens에 thinking이 포함되는지 확인하지 못했다.
-  - 다른 모델 일부는 2026-12-01에 가격이 오른다. 호출 직전에 다시 확인한다.
-- **Gemini 이미지 (S3, HOLD)**
-  - thinking을 끌 수 없고 예산 파라미터가 없다.
-  - 9:16 토큰 수가 공개되어 있지 않다.
-  - 요청당 이미지 수를 제어하는 방법을 확인하지 못했다.
-  - 출력 한도 4,096토큰이 이미지와 thinking에 적용되는지 근거가 없다.
-  - 다시 시도하려면 공식 문서나 공급자 답변으로 요청당 상한을 입증해야 한다.
-- **Google TTS**
-  - 공개 단가는 사용자가 확인했다. 계정 적용 단가와 무료량은 확인하지 못했다.
-  - SSML 지원 여부가 문서끼리 충돌하므로 text 입력만 쓴다.
-  - timepoint 지원은 UNKNOWN이다.
-  - 정확한 음성 이름은 실행 전에 무료 voices.list로 확인한다.
-- **OpenAI**
-  - reasoning 토큰 과금 문구를 원문으로 확인하지 못했다. 상한은 output 단가로 계산했다.
-  - Services Agreement의 출력 권리를 다시 확인하지 않았다.
-- **Anthropic Haiku 5.5**
-  - 날짜 스냅샷이 없어 alias만 쓴다. 재현성을 위해 응답의 model 필드를 기록한다.
-  - adaptive thinking이 기본으로 켜져 있다.
-  - 모델 페이지에는 max_tokens에 thinking이 포함되는지 적혀 있지 않다. 그래서 **S1에서는 S1-ANT-A를 가장 먼저 실행**하고 usage를 확인한다. 청구 출력이 2,000토큰을 넘으면 초과 청구로 보고 S1의 나머지 호출을 모두 중단한다. 이때 노출액은 출력 128K 기준 최대 약 $0.0646(120원)이며 S1 상한 150원 안에 들어간다. 이 호출을 나중에 실행하면 최악의 경우 9+25+120 = 154원으로 상한을 넘으므로 순서를 바꾸지 않는다.
-  - rate limit 등급과 최소 충전액을 확인하지 못했다.
+## 7. 공급자별 미확인 사항
+
+- **Gemini TTS**
+  - 출력 상한이 오디오에 적용되는지 확인되지 않았다(6절).
+  - 스타일 필드 이름(`speech_metadata.style`)은 요약본에서만 확인했다.
+  - GA 여부가 표기되어 있지 않다.
+  - 가격 변경의 시간대가 표기되어 있지 않다.
+  - TTS 전용 실패 과금 문장은 없고 일반 결제표만 있다.
+- **Gemini 텍스트**
+  - 출력 상한 문서가 Interactions API 표기다. generateContent의 같은 필드에 같은 의미가 적용되는지 호출 직전에 확인한다.
+  - thinking을 완전히 끌 수는 없고 minimal이 가장 낮은 단계다.
+- **Gemini 이미지**: HOLD(이전과 같음).
+- **OpenAI**: Services Agreement의 출력 권리를 다시 확인하지 않았다.
+- **Anthropic**: 최소 충전액과 rate limit 등급을 확인하지 못했다. 날짜 스냅샷이 없어 응답의 model 필드를 기록한다.
 - **fal**
-  - 진행 중 작업을 취소할 때의 과금은 UNKNOWN이다. 422는 과금될 수 있다.
-  - Wan I2V 무음 할인율은 문서 안에서 서로 충돌한다. 그래서 표시 단가를 상한으로 썼다.
+  - 진행 중 작업 취소 시 과금은 UNKNOWN이다. 422는 과금될 수 있다.
   - I2V 세로 출력이 입력 이미지 비율을 따르는지 확인하지 못했다.
-  - Wan의 resolution 기본값은 1080p다. 모든 Wan 호출에 `720p`를 명시한다. 실행기는 이 필드가 없으면 발송을 거부한다.
   - 최소 충전액을 확인하지 못했다.
-- **Runway**
-  - RUNNING 상태에서 취소하면 환불되지 않는다.
-  - FAILED 작업의 과금 여부와 크레딧 만료는 NOT_VERIFIED다. `cost.credits`로 사후 확인한다.
-  - 출력 URL은 24~48시간 뒤 만료되므로 즉시 내려받는다.
+- **Runway**: FAILED 과금 여부와 크레딧 만료를 확인하지 못했다.
 - **공통**
-  - 모든 SKU에서 제출 멱등성과 응답을 잃은 뒤의 복구는 UNKNOWN이다. 그래서 자동 재제출을 금지한다.
+  - 제출 멱등성과 응답을 잃은 뒤의 복구는 UNKNOWN이다.
+  - 한국 계정의 부가세 적용, 리전, 계정별 실제 단가와 한도는 계정이 준비된 뒤 콘솔에서 확인한다.
 
 ## 8. 실험 표본과 평가 기준
 
-- **S1**: TOPIC-A "지구가 1초 만에 자전을 멈춘다면"과 TOPIC-B "달에서 망치와 깃털을 떨어뜨리면"이다. FACT는 NASA NSSDCA와 NASA Science 페이지로 고정했다. 적도 속도 약 1,674km/h(465m/s)는 NASA의 반지름과 자전 주기로 계산한 값으로 표시했다. NASA 페이지에서 확인되지 않은 1971년은 대본에 쓰지 않는다. 세 모델(Gemini Flash-Lite, GPT-5.4 mini, Haiku 5.5)은 같은 프롬프트와 JSON 스키마를 쓴다.
-- **S2**: 159자와 141자의 표본 두 개다. 숫자, 소수, 단위(km, m/s²), 약어(NASA), 고유명사(아폴로 15호)를 넣었고, 핵심 용어 9개의 기대 발음표를 붙였다. 문장 cue 6개는 silencedetect로 잰 값과 사람이 표시한 값을 비교하며, 합격 기준은 편차 ≤250ms다.
-- **S3**: 공통 STYLE 블록을 적용한 세로 프롬프트 3개다. 지금은 FLUX만 실행하므로 공급자 간 비교 없이 FLUX 품질만 판정한다(3개 중 2개 이상 합격). IMG-2와 IMG-3의 FLUX 채택본이 S4 시작 이미지가 된다.
-- **S4**: ROTATE(정지 후 머그가 관성으로 이탈)와 FALL(동시 착지 후 어깨 으쓱)이다. I2V 2종에는 같은 시작 이미지 해시를 쓰고, FALL은 T2V 1회를 추가한다. 카메라는 고정하고 negative prompt를 붙였다.
-- **평가표**: `S0/evaluation.md`. 각 항목 1~5점이며 합격선은 4/5다. 카메라만 움직인 결과는 운동 점수 1점이다.
+- **S1**: TOPIC-A(자전 정지), TOPIC-B(달의 망치·깃털). FACT는 NASA로 고정했다. 세 모델에 같은 프롬프트와 JSON 스키마를 쓴다.
+- **S2**: Gemini Puck으로 TTS-A(전문용어), TTS-B(숫자·단위·약어), TTS-C 코미디 대본(전체 1회, 장면별 4회)을 합성한다.
+  - 연출은 STYLE-BASE에 장면별 조정을 붙이고, 대본 안에 `<short pause>`, `<sigh>`, `<laugh>` 같은 태그를 넣는다.
+  - 평가 8개 항목: 대화체 자연스러움, 능청 유머, 감정·억양, 농담·반전 타이밍, 전문용어 발음, 장면 사이 목소리 일관성, 실제 음성 길이, 실제 청구 비용. **자막 정렬 항목은 제거했다.**
+- **S3·S4**: 공통 그림체를 적용한 세로 프롬프트 3개, 회전·낙하 동작. 카메라만 움직인 결과는 운동 점수 1점이다.
+- 평가표는 `S0/evaluation.md`에 있다.
 
-## 9. S1~S4 착수 가능 여부
+## 9. Codex 인계 항목 (기존 설계와 달라진 사항)
+
+공통 설계·계약·migration은 Codex 담당이다. 아래는 사용자 결정과 S0 발견에 따른 변경 제안이다. 반영하려면 사용자 승인이 필요하다.
+
+| ID | 변경 | 영향을 받는 기존 문서 | 제안 |
+|---|---|---|---|
+| C01 | TTS 공급자·음성을 채널 설정으로 관리 | V2-05_IFNOVA_CONTENT(단일 음성 설정), V2-05_PROVIDER_SPIKE(Chirp 기본안), 06_AI_PROVIDER_AND_PRICING | 채널 프로필 불변 설정에 `ttsProvider`, `ttsModel`, `ttsVoice`, `ttsLanguage`, `ttsSpeakerMode`, `ttsStyleBase`, `ttsFallbackProviders`(비활성)를 둔다. IFNOVA는 gemini-3.8-flash-tts / Puck / ko-KR / single. 프로필 해시와 영수증에 남긴다. 코드에 하드코딩하지 않는다 |
+| C02 | 장면별 음성 연출의 동적 조정 | V2-05_IMPLEMENTATION_PLAN(SCENES 필드) | SCENES 출력에 장면별 `voiceStyleAdjustment`와 허용 인라인 태그를 추가한다. 태그는 허용 목록만 통과시키는 검증을 한다. AI 출력을 실행 입력으로 쓰지 않는다는 원칙은 유지한다 |
+| C03 | **IFNOVA 자막 OFF, 채널별 토글** | V2-05_IFNOVA_CONTENT(자막 강조, 번인/SRT 출력 프로필, 초기 인수의 자막), V2-04 ASS·SRT 계약 | 채널 설정에 `subtitlesEnabled`(IFNOVA 기본 false)를 둔다. false일 때의 처리: ① 자막 생성·SRT·ASS 단계는 `SKIPPED`(사유: CHANNEL_SUBTITLES_DISABLED)로 기록하고 실패로 보지 않는다. ② 렌더에 자막 필터를 넣지 않는다. ③ QC의 자막 항목은 해당 없음으로 처리한다. ④ manifest에 subtitles=OFF를 남긴다. ⑤ 재시작 복구 때도 SKIP 상태를 그대로 유지한다. V2-04 자막 코드와 계약은 지우지 않는다. 장면 자막 강조 필드는 선택 항목으로 바꾼다. STT·forced alignment는 범위에서 뺀다. YouTube 자동 자막·번역·더빙은 V2-06 |
+| C04 | **비용 예약 원칙: 문서화된 하드 한도나 고정 단가만 인정** | V2-05_IMPLEMENTATION_PLAN(비용 예약), 공통 비용 계약 | 근거 없는 상한(예: 오디오에 적용되는지 확인되지 않은 max_output_tokens)으로는 예약하지 않는다. **운영 영향**: Gemini TTS는 호출 1회의 보수적 예약이 275원(2027년 549원)이다. 장면마다 TTS를 따로 부르면 장면 6개 기준 1,650원(2027년 3,294원)이 예약되어 영상당 3,000원 상한을 위협한다. 그래서 TTS 호출 수를 최소화(대본 전체 1회 합성)하는 설계를 검토하거나, 출력 상한의 공식 근거를 확보해야 한다. S2의 CFULL과 C1~C4 비교 결과를 근거로 쓴다 |
+| C05 | 가격표 적용 기간 | 공통 가격표·비용 계약 | 가격 항목에 `effectiveFromUtc`/`effectiveToUtc`, `statedPeriod`, `tzStated`, 출처, 확인 시각을 둔다. 시간대가 없으면 UTC+14 경계를 쓰고, 경계 전후 24시간은 높은 단가로 예약한다. 항목은 추가만 하고 덮어쓰지 않는다. 영수증에 적용한 항목 ID를 남긴다 |
+| C06 | 공급자·모델 변경 | V2-05_PROVIDER_SPIKE, V2-05_SPIKE_CLAUDE_HANDOFF | S1 Haiku 4.5를 Haiku 5.5로 교체(`output_config.effort`, temperature 등 생략). Nano Lite HOLD. Chirp 3 HD와 ElevenLabs는 대체 후보로 보류. 1차 공급자 조합의 TTS를 Gemini TTS로 변경 |
+| C07 | Gemini 유료 등급은 선불(최소 $5) | V2-05_SPIKE_CLAUDE_HANDOFF(계정 표) | 후불 가정을 정정한다. Gemini 크레딧 잔액도 비용 경계 확인 대상에 넣는다. 키 하나(`GEMINI_API_KEY`, auth key)를 텍스트·TTS에 공통으로 쓰고, Cloud TTS는 별도 API다 |
+| C08 | 필수 파라미터 검증 | V2-05 어댑터 설계 | fal Wan `resolution`(기본 1080p), T2V `aspect_ratio`·`multi_shots`처럼 기본값이 비용이나 규격을 바꾸는 필드는 어댑터에서 반드시 명시하게 하고, 빠지면 발송을 거부한다 |
+| C09 | 스파이크 호출 목록·금액 갱신 | V2-05_PROVIDER_SPIKE, V2-05_SPIKE_CLAUDE_HANDOFF, TASKS.md, STATE.md, DECISIONS.md | 이 보고서 5~6절 기준으로 갱신한다(통합 담당 Codex). TASKS에 `V2-05-SPIKE | Claude Code | S0 IMPLEMENTED, S1~S4 사용자 승인 대기`를 추가한다 |
+
+## 10. S1~S4 착수 가능 여부
 
 **지금은 착수할 수 없다.** 사용자의 계정 준비와 최종 호출 승인이 모두 필요하다.
 
 | 실험 | 계획 상태 | 착수 조건 |
 |---|---|---|
-| S1 | 준비 완료 | Google·OpenAI·Anthropic 계정, 결제, 키. 호출 승인(최대 73원, 상한 150원) |
-| S2 | 준비 완료 | Cloud TTS API 사용 설정과 ADC, 계정 단가 확인. 호출 승인(최대 34원, 상한 50원) |
-| S3 | FLUX 3회 준비 완료, Nano 3회 HOLD | fal 충전. 호출 승인(최대 17원, 상한 300원) |
-| S4 | 준비 완료 | S3 채택 이미지, fal·Runway 충전. 호출 승인(최대 2,777원, 상한 3,000원) |
+| S1 | 준비 완료(6회, 최대 73원) | Gemini·OpenAI·Anthropic 계정, 선불 충전, 키. 호출 승인 |
+| S2 | **HOLD**(7회). 선택안 A의 CAPTEST만 승인 요청 가능(최대 275원) | 6절의 A~D 중 선택. A를 택하면 경계 시각 전에 실행 |
+| S3 | FLUX 3회 준비 완료(최대 17원), Nano HOLD | fal 충전. 호출 승인 |
+| S4 | 준비 완료(5회, 최대 2,777원) | S3 채택 이미지, fal·Runway 충전. 호출 승인 |
 
-## 10. 검증과 비밀정보
+## 11. 검증과 비밀정보
 
-- 비용표는 BigInt 정수 연산 스크립트로 다시 만들었고 원화는 올림 처리했다. 결과는 `call-plan.json`에 있다. 표본 글자 수도 스크립트로 셌다. 작업 폴더 파일의 SHA-256은 `manifest.json`에 있다.
-- 비밀정보 검사: 키 패턴(sk-, AIza 등)과 개인 이메일을 grep했고 일치하는 것이 없었다. 저장소에서 바뀐 것은 이 보고서 파일 하나다. 생성 미디어, 키, 결제 증빙은 없다.
-- 공통 파일(STATE.md, TASKS.md, DECISIONS.md)은 통합 담당자(Codex)가 반영한다. 제안 내용은 다음과 같다.
-  - TASKS.md에 `V2-05-SPIKE | Claude Code | S0 IMPLEMENTED(사용자 수용), S1~S4 계정 준비·호출 승인 대기`를 추가한다.
-  - DECISIONS.md에 S1 Anthropic 후보를 Haiku 5.5로 바꾼 것, 실험 상한 3,500원(운영 3,000원 유지), Nano Lite HOLD를 기록한다.
-  - [스파이크 계약](../v2/V2-05_PROVIDER_SPIKE.md)과 [인수인계](../v2/V2-05_SPIKE_CLAUDE_HANDOFF.md)의 호출 목록과 금액을 이 보고서 기준으로 갱신한다.
+- 비용표는 BigInt 정수 연산 스크립트로 다시 만들었다(`call-plan.json` schema v3). 원화는 올림이며, 2026과 2027 단가를 모두 계산했다. 표본 글자 수와 입력 토큰 추정은 스크립트로 냈다. 작업 폴더 해시는 `manifest.json`에 있다.
+- 비밀정보 검사: 키 패턴(sk-, sk-ant-, AIza, ya29.)과 개인 이메일을 grep했고 일치하는 것이 없었다. 저장소 변경은 이 보고서 하나다. 키, 생성 미디어, 결제 증빙은 없다.
 
-## 11. 다음 작업 (다른 PC에서 재개할 때)
+## 12. 다음 작업 (다른 PC에서 재개할 때)
 
-1. 사용자가 계정과 결제를 준비하고 키를 세션에만 주입한다.
-2. 7절의 공통 재확인 항목을 콘솔에서 점검하고, 호출 직전에 가격 페이지를 다시 확인한다.
-3. 사용자에게 최종 호출 승인을 받고 `call-plan.json`의 approvalStatus를 갱신한다.
-4. 실행기는 스파이크 전용 스크립트로 작업 폴더에서 돌린다. 제품 코드는 쓰지 않는다. 재시도 0, 순차 실행으로 S1 → S2 → S3 → S4 순서로 진행한다. S1 안에서는 S1-ANT-A를 첫 호출로 둔다(7절).
-5. 각 호출 뒤 `calls.jsonl`, `manifest.json`, `evaluation.md`를 채운다.
-6. 표본 원문은 작업 폴더에만 있다. 다른 PC에서는 `C:\Users\rlead\AI-Studio-V2-05-Spike\`를 통째로 복사하고 `S0/manifest.json`의 해시와 대조한다.
+1. 사용자가 6절의 S2 선택안과 실험별 호출 승인을 결정한다.
+2. 사용자가 계정·선불 충전·키를 준비하고 키를 세션에만 주입한다. 자동 충전은 끈다.
+3. 콘솔에서 계정별 실제 단가, 한도, 부가세를 확인한다. 호출 직전에는 가격 페이지를 다시 확인하고 `priceTable`을 갱신한다.
+4. 스파이크 전용 실행 스크립트를 작업 폴더에서 돌린다. 제품 코드는 쓰지 않는다. 재시도 0, 순차 실행, `call-plan.json`의 `executionOrder`를 따른다.
+5. 호출마다 `calls.jsonl`, `manifest.json`, `evaluation.md`를 채운다.
+6. 다른 PC에서는 `C:\Users\rlead\AI-Studio-V2-05-Spike\`를 통째로 복사하고 해시를 대조한다.
