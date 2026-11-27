@@ -1,6 +1,7 @@
 package com.aistudio.production.execution;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.doAnswer;
@@ -97,6 +98,7 @@ import com.aistudio.production.contract.ProductionPlanning.Segment;
 import com.aistudio.production.contract.ProductionPlanning.Source;
 import com.aistudio.production.contract.ProductionSelectionPort;
 import com.aistudio.production.contract.ProductionStage;
+import com.aistudio.production.contract.WorkerExchange;
 import com.aistudio.production.discovery.DiscoveryFixtures;
 import com.aistudio.production.discovery.DiscoveryRules;
 import com.aistudio.production.discovery.RuleBasedDiscoveryEvaluator;
@@ -168,6 +170,53 @@ class PlanningExecutionIT {
             } catch (IOException ex) {
                 throw new UncheckedIOException(ex);
             }
+    }
+
+    @Autowired
+    ManualWorkerExchange workerExchange;
+
+    @Test
+    void exchangeRejectsStaleLeaseAndAppliesOnlyOnceAfterReclaim() {
+        var fixtures = new com.aistudio.content.ContentFixtures(jdbc);
+        long channel = fixtures.channel();
+        long config = fixtures.config(channel, 1);
+        String key = "worker-exchange-" + UUID.randomUUID();
+        jdbc.update("""
+                INSERT INTO production_request (channel_id, channel_config_id, requested_by, content_type,
+                    pipeline_version, request_key, request_hash, limit_krw, status, lease_owner, lease_epoch,
+                    lease_until, created_at)
+                VALUES (?, ?, ?, 'SHORTS', 'v2-media-2', ?, SHA2(?, 256), 3000, 'RUNNING', 'first', 1,
+                    UTC_TIMESTAMP(6) + INTERVAL 2 MINUTE, UTC_TIMESTAMP(6))
+                """, channel, config, fixtures.admin(), key, key);
+        long request = jdbc.queryForObject("SELECT id FROM production_request WHERE request_key = ?", Long.class, key);
+        jdbc.update("""
+                INSERT INTO production_step (production_request_id, stage, status, attempts)
+                VALUES (?, 'DISCOVER', 'RUNNING', 1)
+                """, request);
+        long step = jdbc.queryForObject("SELECT id FROM production_step WHERE production_request_id = ?", Long.class,
+                request);
+        var first = new ProductionCostPort.StepOwner(request, step, "first", 1);
+        var next = new ProductionCostPort.StepOwner(request, step, "second", 2);
+        String hash = com.aistudio.content.command.CanonicalJson.sha256Hex("{}");
+        var issued = workerExchange.issue(first, ProductionStage.DISCOVER, "{}");
+        assertThat(issued.identity().inputSha256()).isEqualTo(hash);
+        assertThat(issued.canonicalInput()).isEqualTo("{}");
+
+        jdbc.update("UPDATE production_request SET lease_owner = 'second', lease_epoch = 2 WHERE id = ?", request);
+        assertThat(workerExchange.issue(next, ProductionStage.DISCOVER, "{\"new\":true}")).isEqualTo(issued);
+        var draft = new WorkerExchange.Draft(issued.identity(), "{}", hash);
+        var review = new WorkerExchange.Review(issued.identity(), hash, "{}", hash);
+        assertThatThrownBy(() -> workerExchange.adopt(first, ProductionStage.DISCOVER, draft, review, ignored -> {}))
+                .isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> workerExchange.adopt(next, ProductionStage.DISCOVER, draft, review, ignored -> {
+            throw new IllegalArgumentException("Reject invalid stage payload");
+        })).isInstanceOf(IllegalArgumentException.class);
+        var applied = new AtomicInteger();
+        assertThat(workerExchange.adopt(next, ProductionStage.DISCOVER, draft, review,
+                ignored -> applied.incrementAndGet())).isTrue();
+        assertThat(workerExchange.adopt(next, ProductionStage.DISCOVER, draft, review,
+                ignored -> applied.incrementAndGet())).isFalse();
+        assertThat(applied.get()).isEqualTo(1);
     }
 
     @TestConfiguration

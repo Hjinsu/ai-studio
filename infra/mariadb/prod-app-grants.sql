@@ -33,3 +33,8 @@ GRANT UPDATE (state, lease_epoch, attempt_no, operation_id, execution_proof_json
     execution_proof_sha256, recovery_deadline_at, failure_code, updated_at) ON @DB@.production_media_item TO '@APP_USER@'@'@APP_HOST@';
 GRANT SELECT, INSERT ON @DB@.production_media_asset TO '@APP_USER@'@'@APP_HOST@';
 GRANT UPDATE (state, finalized_at) ON @DB@.production_media_asset TO '@APP_USER@'@'@APP_HOST@';
+
+GRANT SELECT, INSERT ON @DB@.production_worker_exchange TO '@APP_USER@'@'@APP_HOST@';
+GRANT UPDATE (draft_sha256, result_sha256, applied_at) ON @DB@.production_worker_exchange TO '@APP_USER@'@'@APP_HOST@';
+GRANT SELECT, INSERT ON @DB@.production_provider_job TO '@APP_USER@'@'@APP_HOST@';
+GRANT UPDATE (next_poll_at) ON @DB@.production_provider_job TO '@APP_USER@'@'@APP_HOST@';

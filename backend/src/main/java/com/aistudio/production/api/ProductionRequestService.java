@@ -18,6 +18,7 @@ import com.aistudio.production.contract.ProductionDiscovery;
 import com.aistudio.production.contract.ProductionDiscovery.EvaluatedCandidate;
 import com.aistudio.production.contract.ProductionDiscovery.Mode;
 import com.aistudio.production.contract.ProductionStage;
+import com.aistudio.production.contract.RealMediaProfile;
 import com.aistudio.production.contract.MediaProfile;
 import com.aistudio.production.contract.PlanningJson;
 import com.aistudio.production.media.MediaAvailability;
@@ -128,7 +129,7 @@ class ProductionRequestService {
                         : discoveryEnabled ? shortsPipeline : "v2-fixed-1";
                 mapper.insert(channelId, configId, actorId, type, pipeline, key, hash, limit);
                 ProductionRequestMapper.Request request = mapper.byKey(key);
-                for (ProductionStage stage : ProductionStage.values()) {
+                for (ProductionStage stage : RealMediaProfile.order(pipeline)) {
                     mapper.addStep(request.id(), stage);
                 }
                 if (discoveryEnabled) {

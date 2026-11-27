@@ -18,7 +18,7 @@ public final class MediaMime {
             case SOURCE_AUDIO, PCM_AUDIO -> WAV.contains(mime);
             case SRT -> SUBRIP.contains(mime);
             case ASS -> "text/plain".equals(mime) || "text/x-ssa".equals(mime);
-            case MP4 -> "video/mp4".equals(mime);
+            case SOURCE_VIDEO, NORMALIZED_VIDEO, MP4 -> "video/mp4".equals(mime);
             case ALIGNMENT, MEDIA_METADATA, QC_REPORT, MANIFEST -> "application/json".equals(mime);
         };
     }

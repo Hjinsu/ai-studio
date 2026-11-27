@@ -49,6 +49,13 @@
 - 2026-11-28 V2-05 최종 통합 설계와 착수 준비를 PROPOSED로 정리했다. 설계 브랜치 기준 8e945e6, 원격 V2-04 통합 e51e649, Claude S2~S4 d4d42e1. 변경 문서는 [최종 설계](docs/v2/V2-05_FINAL_DESIGN.md), 공통 계획, Claude 인수인계, 오디오/IFNOVA 계약, v2 색인, STATE·TASKS·DECISIONS다. 기존 상세 계획은 양쪽 커밋에 같은 blob으로 남고 로컬 미스테이지 삭제를 보존했다. 이번 구현 기준은 새 최종 설계 문서다.
 - 정적 Git 범위·링크·diff 및 Gitleaks 검증. 제품 테스트, DB 변경·Migration 실행, 추가 스파이크 및 API 호출 없음. 실제 청구 대조 및 보호 렌더 인수 미완료. 다음은 사용자 최종 설계·착수 승인 후 Codex 공통 계약 구현, 공통 SHA 동결 후 Claude 제품 작업이다.
 
+### V2-05-COMMON · IN_PROGRESS (2026-11-28 KST)
+
+- 사용자 승인 기준 ac193284d127d78154777879c5e77da5266dafd2에서 별도 v2/05-common worktree로 착수했다. 설계 단계 종료 및 승인 기록을 갱신했다. 기존 v2/05-design worktree의 상세 계획 미스테이지 삭제를 보존했다.
+- 1차 공통 변경은 v2-media-2 순서·채널 오디오/자막 옵션, 미디어 어댑터·동적 장면/오디오 타입, 수동 Worker 입력/초안/검수 lineage와 원자 파일 발행, 현재 lease에서 DB 중복 적용 방지, V14의 요청 상한·영상 자산·작업 ID 저장 및 제한된 앱 권한이다.
+- 제품 공통 기준 SHA는 아직 확정하지 않았다. 다음은 기존 discovery/planning 결과 채택 경로에 수동 교환을 연결하고 신규 프로필의 발행·수집 API 및 유료 어댑터 permit/receipt·조회/UNKNOWN 복구를 통합하는 일이다. 신규 프로필의 공개 활성화, 외부 Worker 무인 반복, 실제 유료 API, 운영 DB 적용은 하지 않았다.
+- Java 21, 별도 loopback MariaDB, V2-04 로컬 FFmpeg fixture로 검증한다. 이전 중간 실행의 V14 버전/이력 기대치 불일치를 정정했다. 사용자 운영 DB, main 및 integration 병합은 범위 밖이다.
+
 ### V2-04-BLOCKING-FIXES — 독립 리뷰 B01·B02 수정 (2026-11-27 KST, DONE)
 
 - Claude Code(Codex 사용량 제한으로 위임). 기준 `v2/04-integration` `b9669aae508c71fec7fabeefaab7d1adade09fe0`, 브랜치 `v2/04-blocking-fixes`. 상세·재현 명령: [수정 보고서](docs/reports/V2-04_BLOCKING_FIXES_REPORT.md).

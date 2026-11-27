@@ -237,3 +237,7 @@ ChatGPT APPROVE WITH MINOR FIXES 및 사용자 승인. V10의 `production_discov
 사용자 공급자 결정은 Claude 구독 Worker와 Codex 검수, Gemini Flash TTS/Puck, fal FLUX Schnell, Wan I2V Flash 우선이다. 사용자 실행 파일 교환을 지원한다. 무인 반복은 이용 조건 확인 전 비활성화하며 예약은 V2-07 범위다. T2V 기본 OFF, Nano Banana 비용 근거 확보 전 OFF, 기타 공급자는 BACKLOG다. IFNOVA 자체 자막은 기본 OFF다.
 
 편당 3,000원, 기존 lease·fencing·ledger·복구를 유지한다. Gemini TTS 출력 cap 1회 관측은 공식 최대 청구 보장이 아니며, Gemini/fal 실청구 대조는 미완료다. 로컬 상업용 음원과 동작 큐 검수를 채택할 계획이다. 공통·제품 구현 및 운영 활성화는 각각 승인 대기다. [최종 설계](docs/v2/V2-05_FINAL_DESIGN.md)
+
+## V2-05 최종 설계 및 공통 착수 승인 (2026-11-28 KST)
+
+사용자는 `ac193284d127d78154777879c5e77da5266dafd2`의 최종 상세 설계를 승인하고 설계 단계를 종료했다. Codex의 공통 계약과 안전장치 구현을 별도 v2/05-common worktree에 승인했다. 기존 worktree의 미스테이지 삭제는 보존한다. V14 테스트는 격리 DB에 한정한다. 실제 유료 발송, Worker 무인 반복, 유료 API 자동 전환은 비활성화하며 main 및 integration 병합은 별도 승인 대상이다.

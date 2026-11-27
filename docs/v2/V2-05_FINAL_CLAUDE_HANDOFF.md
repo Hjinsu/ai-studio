@@ -1,6 +1,6 @@
 # V2-05 구현 작업 분할 및 Claude 인수인계
 
-**PROPOSED · 구현 착수 승인 대기** · [최종 설계](V2-05_FINAL_DESIGN.md) · [공통 계약 계획](V2-05_FINAL_COMMON_PLAN.md)
+**설계 승인 · 제품 착수 대기** · [최종 설계](V2-05_FINAL_DESIGN.md) · [공통 계약 계획](V2-05_FINAL_COMMON_PLAN.md)
 
 | 작업 | 담당 및 파일 소유권 | 선행/병렬 범위 | 인수 조건 |
 |---|---|---|---|
@@ -8,6 +8,10 @@
 | V2-05-ADAPTER | Claude. 승인된 미디어 공급자 어댑터 패키지와 모의 HTTP 테스트 | 공통 SHA 이후 `v2/05-product` 계열 별도 worktree. 승인된 mock 포트로 UI·렌더와 병렬 검증 가능 | Gemini TTS/FLUX/Wan 스키마·사용량·가격 및 실패·불명 처리 |
 | V2-05-PRODUCT | Claude. Worker 제품 흐름, production/media/product, 프론트엔드 페이지·공통 UI 소비 코드, 제품 테스트 | 공통 타입 동결 후 Worker·렌더·UI를 서로 겹치지 않는 경로에서 분리 가능. 공통 DB/API 변경은 Codex에 요청 | 사용자 실행 파일 왕복, 믹스·동작 큐·권리·자막 OFF, 실제 보호 렌더 및 UI 인수 |
 | V2-05-INTEGRATION / REVIEW | Codex. 별도 통합 worktree의 충돌 조정·검증 보고서. 독립 리뷰는 구현/통합과 분리된 Codex 세션 | 공통·제품 HEAD 수용 후. 동일 작업 트리 동시 수정 금지 | 최신 HEAD CI, 스코프별 회귀, 독립 리뷰, 사용자 확인 및 병합 승인 |
+
+### 진행 중인 공통 브랜치
+
+승인 기준 `ac193284d127d78154777879c5e77da5266dafd2`, 공통 브랜치 `v2/05-common`. 이 브랜치의 중간 커밋은 제품 분기 기준으로 확정되지 않았다. 채택 경로와 신규 공급자 permit·receipt 통합, API 계약 및 회귀 완료 후 공통 SHA를 인계한다. 기존 공개 요청은 V2-04 경로를 유지한다.
 
 ### Claude 구현 순서
 

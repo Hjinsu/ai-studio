@@ -50,6 +50,11 @@ public record ChannelSettings(
         }
         if (providerOptions != null) {
             rejectSecretKeys(providerOptions, "providerOptions");
+            try {
+                ChannelMediaOptions.from(providerOptions);
+            } catch (IllegalArgumentException e) {
+                throw ApiException.validation("providerOptions.realMedia", e.getMessage());
+            }
         }
     }
 

@@ -6,6 +6,7 @@ import java.util.function.Predicate;
 
 import com.aistudio.production.contract.ProductionStage;
 import com.aistudio.production.contract.ProductionStatus;
+import com.aistudio.production.contract.RealMediaProfile;
 import com.aistudio.production.contract.StepStatus;
 import com.aistudio.production.execution.ExecutionMapper.StepRow;
 
@@ -54,7 +55,12 @@ final class StepPlanner {
      */
     static Action next(List<StepRow> steps, boolean cancelRequested, boolean awaitingChoice,
             Function<ProductionStage, StageWork.Kind> kinds, Predicate<StepRow> persisted) {
-        requireFixedOrder(steps);
+        return next(steps, cancelRequested, awaitingChoice, kinds, persisted, null);
+    }
+
+    static Action next(List<StepRow> steps, boolean cancelRequested, boolean awaitingChoice,
+            Function<ProductionStage, StageWork.Kind> kinds, Predicate<StepRow> persisted, String pipeline) {
+        requireFixedOrder(steps, RealMediaProfile.order(pipeline));
         for (StepRow step : steps) {
             if (step.status() == StepStatus.RECOVERY_REQUIRED) {
                 return new Recover(step);
@@ -100,15 +106,14 @@ final class StepPlanner {
         return new Finish(ProductionStatus.SUCCEEDED);
     }
 
-    private static void requireFixedOrder(List<StepRow> steps) {
-        ProductionStage[] stages = ProductionStage.values();
-        if (steps.size() != stages.length) {
-            throw new IllegalStateException("A production request must have exactly " + stages.length + " steps");
+    private static void requireFixedOrder(List<StepRow> steps, List<ProductionStage> stages) {
+        if (steps.size() != stages.size()) {
+            throw new IllegalStateException("A production request must have exactly " + stages.size() + " steps");
         }
-        for (int i = 0; i < stages.length; i++) {
+        for (int i = 0; i < stages.size(); i++) {
             StepRow step = steps.get(i);
-            if (step.stage() != stages[i] || step.inputGeneration() != 1) {
-                throw new IllegalStateException("Steps are not in the fixed V2-01 order");
+            if (step.stage() != stages.get(i) || step.inputGeneration() != 1) {
+                throw new IllegalStateException("Steps are not in the fixed pipeline order");
             }
         }
     }

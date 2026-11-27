@@ -198,7 +198,8 @@ public class ProductionExecutor implements AutoCloseable {
             StepPlanner.Action action = StepPlanner.next(snapshot.steps(), snapshot.request().cancelRequested(),
                     snapshot.awaitingChoice(), stage -> snapshot.request().media() && MediaFlow.stage(stage)
                             ? (MediaFlow.paidStage(stage) ? StageWork.Kind.EFFECT : StageWork.Kind.LOCAL)
-                            : work.kind(stage), step -> snapshot.persisted().contains(step.id()));
+                            : work.kind(stage), step -> snapshot.persisted().contains(step.id()),
+                    snapshot.request().pipelineVersion());
             switch (action) {
                 case StepPlanner.Recover recover -> {
                     boolean more = isDiscover(snapshot.request(), recover.step())

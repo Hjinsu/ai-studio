@@ -18,9 +18,9 @@
 | V2-04-SAFETY | Codex | DONE | `v2/04-safety`. Linux 보호, 장애 안전성 및 scratch 예약 수명주기. [검증 보고서](docs/reports/V2-04_SAFETY_REPORT.md) |
 | V2-04-PRODUCT | Claude Code | DONE | 실제 앱 기술 검증 및 사용자 인수 PASS. Product `925d736225828c720f11bc95569f84a6a17165f3`. [보고서](docs/reports/V2-04_PRODUCT_REPORT.md) |
 | V2-04-INTEGRATION | Codex | DONE | v2/04-integration. B01·B02 RESOLVED, 독립 리뷰 APPROVE. 최종 CI 통과 및 사용자 인수·병합 승인으로 v2/integration에 반영. [통합 보고서](docs/reports/V2-04_INTEGRATION_REPORT.md) |
-| V2-05-DESIGN | Codex | PROPOSED | 기술 스파이크·사용자 결정 통합. 사용자 최종 설계 및 구현 승인 대기. [최종 상세 설계](docs/v2/V2-05_FINAL_DESIGN.md) |
+| V2-05-DESIGN | Codex | DONE · 사용자 승인 | 승인 기준 ac193284d127d78154777879c5e77da5266dafd2. [최종 상세 설계](docs/v2/V2-05_FINAL_DESIGN.md) |
 | V2-05-SPIKE | Claude Code / Codex | IMPLEMENTED | S2~S4 14회 실행, Nano 3회 보류. S1 구독 Worker 일회성 완료. 실제 청구 대조와 사용자 최종 영상 인수 남음. [검증 근거](docs/v2/V2-05_FINAL_DESIGN.md#기준과-적용-범위) |
-| V2-05-COMMON | Codex | BLOCKED | 최종 설계 및 착수 승인 후 공통 계약 구현. [공통 계획](docs/v2/V2-05_FINAL_COMMON_PLAN.md) |
+| V2-05-COMMON | Codex | IN_PROGRESS | v2/05-common. 계약 및 DB 안전 기반 구현 중. [공통 계획](docs/v2/V2-05_FINAL_COMMON_PLAN.md) |
 | V2-05-ADAPTER / V2-05-PRODUCT | Claude Code | BLOCKED | 사용자 착수 승인 및 공통 SHA 이후. [구현 인수인계](docs/v2/V2-05_FINAL_CLAUDE_HANDOFF.md) |
 | V2-05-INTEGRATION / REVIEW | Codex | BLOCKED | 공통·제품 변경 이후 통합 회귀, 별도 세션 독립 검수 및 사용자 승인. [검증 조건](docs/v2/V2-05_FINAL_CLAUDE_HANDOFF.md#검증-및-사용자-인수) |
 

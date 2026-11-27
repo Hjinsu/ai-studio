@@ -41,7 +41,8 @@ class MigrationConventionTest {
             Map.entry("V10__create_production_discovery.sql", "83878c9553675f259e14421462f183f7bfb99bcdcfe3d3f4508785fe85debccc"),
             Map.entry("V11__preserve_discovery_rechecks.sql", "f124242b3a3ae274528a811a015b375a2f202a9e45d59440fb17e07f9f8a3e32"),
             Map.entry("V12__create_production_stage_result.sql", "ddb685a9df80db7adc38d5e1d65eac2d3b3385594b659a37ebaf7555787ec7fc"),
-            Map.entry("V13__create_production_media.sql", "ef17f6be6104c5a9f46b37e98d696e45c87ac3cf456b740eb653bbe38fdf770c"));
+            Map.entry("V13__create_production_media.sql", "ef17f6be6104c5a9f46b37e98d696e45c87ac3cf456b740eb653bbe38fdf770c"),
+            Map.entry("V14__real_production_contract.sql", "d419183b66b0366606f3e13450cbc83423babc8514dbf262dc989828e2ce2433"));
 
     /** V1은 ADR-014 이전 기준선이므로 collation 규칙 검사에서 제외한다 (수정 금지). */
     private static final List<String> COLLATION_RULE_EXEMPT = List.of("V1__initial_baseline.sql");
@@ -151,7 +152,11 @@ class MigrationConventionTest {
                         assertThat(qualified).isIn("production_media_item.target_key",
                                 "production_media_item.input_sha256", "production_media_item.execution_proof_sha256",
                                 "production_media_asset.role", "production_media_asset.relative_path",
-                                "production_media_asset.sha256", "production_media_asset.final_role");
+                                "production_media_asset.sha256", "production_media_asset.final_role",
+                                "production_worker_exchange.input_sha256", "production_worker_exchange.selection_sha256",
+                                "production_worker_exchange.draft_sha256", "production_worker_exchange.result_sha256",
+                                "production_provider_job.provider_namespace", "production_provider_job.provider_job_id",
+                                "production_provider_job.submission_sha256");
                     } else {
                         assertThat(collation).as("%s: %s collation", name, qualified).isEqualTo("utf8mb4_unicode_ci");
                     }
