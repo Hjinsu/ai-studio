@@ -45,6 +45,7 @@ interface WorkerExchangeMapper {
                 AND r.lease_owner = #{owner.leaseOwner} AND r.lease_epoch = #{owner.leaseEpoch}
                 AND r.lease_until > UTC_TIMESTAMP(6) AND r.cancel_requested_at IS NULL
                 AND s.status IN ('RUNNING','RECOVERY_REQUIRED') AND s.attempts = w.attempt_no
+                AND w.issued_epoch = r.lease_epoch
                 AND (r.selection_hash <=> w.selection_sha256) AND w.applied_at IS NULL
             """)
     int apply(@Param("owner") StepOwner owner, @Param("jobId") long jobId, @Param("draftHash") String draftHash,

@@ -42,7 +42,8 @@ class MigrationConventionTest {
             Map.entry("V11__preserve_discovery_rechecks.sql", "f124242b3a3ae274528a811a015b375a2f202a9e45d59440fb17e07f9f8a3e32"),
             Map.entry("V12__create_production_stage_result.sql", "ddb685a9df80db7adc38d5e1d65eac2d3b3385594b659a37ebaf7555787ec7fc"),
             Map.entry("V13__create_production_media.sql", "ef17f6be6104c5a9f46b37e98d696e45c87ac3cf456b740eb653bbe38fdf770c"),
-            Map.entry("V14__real_production_contract.sql", "d419183b66b0366606f3e13450cbc83423babc8514dbf262dc989828e2ce2433"));
+            Map.entry("V14__real_production_contract.sql", "d419183b66b0366606f3e13450cbc83423babc8514dbf262dc989828e2ce2433"),
+            Map.entry("V15__production_result_ownership.sql", "bbb72cfad8e82df493460e75450bac758ec0176afc45e9690db2e60fc422b0d4"));
 
     /** V1은 ADR-014 이전 기준선이므로 collation 규칙 검사에서 제외한다 (수정 금지). */
     private static final List<String> COLLATION_RULE_EXEMPT = List.of("V1__initial_baseline.sql");

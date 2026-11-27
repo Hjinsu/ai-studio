@@ -22,6 +22,12 @@ public interface DiscoveryExecutionPort {
         }
     }
 
+    /** Adopts an evaluated Worker response in the current fenced transaction. */
+    default void applyWorker(StepOwner owner, long exchangeId, String body, String hash,
+            List<EvaluatedCandidate> evaluations) {
+        throw new UnsupportedOperationException("Worker discovery adoption is unavailable");
+    }
+
     boolean manualMode(long requestId);
 
     Input input(long requestId);

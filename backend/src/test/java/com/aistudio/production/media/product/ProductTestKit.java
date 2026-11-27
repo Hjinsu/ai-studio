@@ -91,9 +91,9 @@ final class ProductTestKit {
     static PlanningResultMapper planning(Planned planned) {
         PlanningResultMapper mapper = mock(PlanningResultMapper.class);
         String validation = PlanningJson.encode(new ProductionPlanning.Validation(List.of())).json();
-        when(mapper.accepted(anyLong(), eq(ProductionStage.SCRIPT))).thenReturn(new PlanningResultMapper.Applied(1,
+        when(mapper.accepted(anyLong(), eq(ProductionStage.SCRIPT))).thenReturn(new PlanningResultMapper.Applied(1L, null,
                 ProductionStage.SCRIPT, planned.scriptBody().hash(), planned.scriptBody().json(), validation));
-        when(mapper.accepted(anyLong(), eq(ProductionStage.SCENES))).thenReturn(new PlanningResultMapper.Applied(2,
+        when(mapper.accepted(anyLong(), eq(ProductionStage.SCENES))).thenReturn(new PlanningResultMapper.Applied(2L, null,
                 ProductionStage.SCENES, planned.scenesBody().hash(), planned.scenesBody().json(), validation));
         return mapper;
     }

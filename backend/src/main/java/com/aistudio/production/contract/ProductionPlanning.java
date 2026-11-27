@@ -7,7 +7,7 @@ public final class ProductionPlanning {
     public static final String PIPELINE = "v2-planning-1";
 
     public static boolean supportsPipeline(String version) {
-        return PIPELINE.equals(version) || MediaProfile.PIPELINE.equals(version);
+        return PIPELINE.equals(version) || MediaProfile.PIPELINE.equals(version) || RealMediaProfile.PIPELINE.equals(version);
     }
     public static final int VERSION = 1;
     public static final int MAX_BODY_BYTES = 128 * 1024;
@@ -27,7 +27,20 @@ public final class ProductionPlanning {
             long channelConfigId, String selectionHash, String language, String strategy,
             String audience, String narrationStyle, String visualStyle, int targetSeconds) {}
 
-    public record ResultRef(long operationId, ProductionStage stage, String bodyHash) {}
+    @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+    public record ResultRef(Long operationId, ProductionStage stage, String bodyHash, Long workerExchangeId) {
+        public ResultRef {
+            if ((operationId == null) == (workerExchangeId == null)
+                    || (operationId != null && operationId <= 0)
+                    || (workerExchangeId != null && workerExchangeId <= 0)) {
+                throw new IllegalArgumentException("Exactly one planning result owner is required");
+            }
+        }
+
+        public ResultRef(long operationId, ProductionStage stage, String bodyHash) {
+            this(operationId, stage, bodyHash, null);
+        }
+    }
     public record InputVersion(String promptVersion, String rulesVersion, String providerVersion) {}
 
     public record ResearchInput(Snapshot snapshot, InputVersion version, int candidateId, String discoveryHash,
@@ -56,7 +69,13 @@ public final class ProductionPlanning {
     public record Scene(String id, int order, List<String> segmentIds, int estimatedDurationMs,
             String narration, String visualDescription, String imagePrompt, String direction,
             String transition, String subtitleText) {}
-    public record Scenes(String visualStyle, List<Scene> scenes) {}
+    public record Scenes(String visualStyle, List<Scene> scenes,
+            @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+            DynamicScenePlan dynamicPlan) {
+        public Scenes(String visualStyle, List<Scene> scenes) {
+            this(visualStyle, scenes, null);
+        }
+    }
 
     public record Finding(Severity severity, String code, String location, List<String> references, String correction) {}
     public record Validation(List<Finding> findings) {

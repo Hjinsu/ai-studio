@@ -58,6 +58,8 @@
 - 코드 검증 기준 dc8fb3b574d7399ed6889f14a07d71af6ecd4988. 로컬 FFmpeg fixture를 사용한 B01 기간 만료 미발송 종료와 B02 마지막 QC 재시작 복구 2/2 통과. [GitHub CI](https://github.com/Hjinsu/ai-studio/actions/runs/46031716233)의 Linux 단위·격리 통합과 Windows 단위, OpenAPI·Gitleaks 및 프런트 검증 통과를 확인했다. 전체 워크플로 상태는 실행 기록을 참조한다.
 - V10 DISCOVER 및 V12 계획 결과의 유료 receipt 필수 귀속과 무과금 Worker의 연결에는 핵심 소유권 변경이 필요하다. DECISIONS의 상호 배타적 소유 근거 제안에 대한 승인 전 SELECT/계획 채택 연결은 보류한다. 아직 공통 완료 및 Claude 착수 기준 SHA를 발급하지 않았다.
 
+- 잔여 공통 구현 승인 기준 73095da387f42707a21cd0f5127e8010d2a4b65a. V15 유료/Worker 배타 소유권, DISCOVER/SELECT·계획 결과 채택, 3,000원 상한, 공급자 permit/receipt와 기존 job의 UNKNOWN 증거 연결을 추가했다. 초기 단위와 격리 MariaDB 집중 테스트에서 V15 업그레이드, DISCOVER→SELECT, 지문 변경, 부분 롤백, mock 발송 및 동일 ID 복구를 확인했다. 전체 V2-04/FFmpeg 독립 회귀 및 최종 CI 확인 후 공통 SHA를 확정한다. 제품 구현·운영 DB·유료 호출·무인 실행 없음.
+
 ### V2-04-BLOCKING-FIXES — 독립 리뷰 B01·B02 수정 (2026-11-27 KST, DONE)
 
 - Claude Code(Codex 사용량 제한으로 위임). 기준 `v2/04-integration` `b9669aae508c71fec7fabeefaab7d1adade09fe0`, 브랜치 `v2/04-blocking-fixes`. 상세·재현 명령: [수정 보고서](docs/reports/V2-04_BLOCKING_FIXES_REPORT.md).

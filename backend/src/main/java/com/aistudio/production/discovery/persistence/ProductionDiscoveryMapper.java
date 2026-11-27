@@ -14,7 +14,8 @@ public interface ProductionDiscoveryMapper {
 
     record Snapshot(long channelId, long channelConfigId, String language, int candidateCount, int rulesVersion) {}
 
-    record Generated(long operationId, String responseJson, String responseHash) {}
+    record Generated(Long operationId, String responseJson, String responseHash, Long workerExchangeId,
+            boolean workerApplied) {}
 
     @Select("""
             SELECT r.channel_id, r.channel_config_id, d.language, d.candidate_count, d.rules_version
@@ -24,17 +25,29 @@ public interface ProductionDiscoveryMapper {
     Snapshot snapshot(long id);
 
     @Select("""
-            SELECT provider_operation_id AS operation_id, response_json, response_hash
-            FROM production_discovery WHERE production_request_id = #{id} AND response_json IS NOT NULL
+            SELECT d.provider_operation_id AS operation_id, d.response_json, d.response_hash, d.worker_exchange_id,
+                   w.applied_at IS NOT NULL AND w.result_sha256 = d.response_hash AS worker_applied
+            FROM production_discovery d LEFT JOIN production_worker_exchange w
+              ON w.id = d.worker_exchange_id AND w.production_request_id = d.production_request_id
+            WHERE d.production_request_id = #{id} AND d.response_json IS NOT NULL
             """)
     Generated generated(long id);
 
     @Update("""
             UPDATE production_discovery SET provider_operation_id = #{operationId}, response_json = #{body},
                 response_hash = #{hash}, generated_at = UTC_TIMESTAMP(6)
-            WHERE production_request_id = #{id} AND provider_operation_id IS NULL
+            WHERE production_request_id = #{id} AND provider_operation_id IS NULL AND worker_exchange_id IS NULL
             """)
     int saveResponse(long id, long operationId, String body, String hash);
+
+    @Update("""
+            UPDATE production_discovery SET worker_exchange_id = #{workerId}, response_json = #{body},
+                response_hash = #{hash}, generated_at = UTC_TIMESTAMP(6), evaluation_json = #{evaluation},
+                evaluated_at = UTC_TIMESTAMP(6), version = version + 1
+            WHERE production_request_id = #{id} AND provider_operation_id IS NULL AND worker_exchange_id IS NULL
+                AND response_json IS NULL AND evaluation_json IS NULL
+            """)
+    int adoptWorker(long id, long workerId, String body, String hash, String evaluation);
 
     @Update("""
             UPDATE production_discovery SET evaluation_json = #{evaluation}, evaluated_at = UTC_TIMESTAMP(6),

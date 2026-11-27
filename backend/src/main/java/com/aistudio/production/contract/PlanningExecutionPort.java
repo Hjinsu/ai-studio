@@ -12,6 +12,12 @@ import com.aistudio.production.contract.ProductionPlanning.Validation;
 
 /** Executor boundary. Apply joins the fenced transaction and marks the receipt applied. */
 public interface PlanningExecutionPort {
+    /** Joins the current Worker adoption transaction with a validated planning body. */
+    default void applyWorker(StepOwner owner, long workerId, ProductionStage stage,
+            String fixedInput, String body, Validation validation) {
+        throw new UnsupportedOperationException("Worker planning adoption is unavailable");
+    }
+
     record CandidateResult(ProductionStage stage, Object body) {}
 
     ResearchInput researchInput(long requestId);

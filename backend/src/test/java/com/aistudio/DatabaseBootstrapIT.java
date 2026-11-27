@@ -50,7 +50,7 @@ class DatabaseBootstrapIT {
     void allMigrationsAreAppliedOnCleanDatabase() {
         List<String> versions = jdbcTemplate.queryForList(
                 "SELECT version FROM flyway_schema_history WHERE success = 1 ORDER BY installed_rank", String.class);
-        assertThat(versions).containsExactly("1", "2", "3", "4", "5", "6", "9", "10", "11", "12", "13", "14");
+        assertThat(versions).containsExactly("1", "2", "3", "4", "5", "6", "9", "10", "11", "12", "13", "14", "15");
         assertThat(flyway.info().pending()).isEmpty();
     }
 

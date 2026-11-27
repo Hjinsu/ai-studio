@@ -99,6 +99,8 @@ import com.aistudio.production.contract.ProductionPlanning.Source;
 import com.aistudio.production.contract.ProductionSelectionPort;
 import com.aistudio.production.contract.ProductionStage;
 import com.aistudio.production.contract.WorkerExchange;
+import com.aistudio.production.contract.ProductionMediaSupplier;
+import com.aistudio.production.contract.RealMediaEffectPort;
 import com.aistudio.production.discovery.DiscoveryFixtures;
 import com.aistudio.production.discovery.DiscoveryRules;
 import com.aistudio.production.discovery.RuleBasedDiscoveryEvaluator;
@@ -126,6 +128,7 @@ import tools.jackson.databind.json.JsonMapper;
         "ai-studio.production.executor.recovery-recheck=PT1H",
         "ai-studio.production.planning-enabled=true",
         "ai-studio.production.media.enabled=true",
+        "ai-studio.production.media.real-dispatch-enabled=true",
         "ai-studio.production.media.fixture-catalog=it-fixture-1",
         "ai-studio.production.media.voice-id=it-voice" })
 @AutoConfigureMockMvc
@@ -210,13 +213,168 @@ class PlanningExecutionIT {
                 .isInstanceOf(IllegalStateException.class);
         assertThatThrownBy(() -> workerExchange.adopt(next, ProductionStage.DISCOVER, draft, review, ignored -> {
             throw new IllegalArgumentException("Reject invalid stage payload");
+        })).isInstanceOf(IllegalStateException.class);
+        jdbc.update("UPDATE production_step SET attempts = 2 WHERE id = ?", step);
+        var replacement = workerExchange.issue(next, ProductionStage.DISCOVER, "{}");
+        var newDraft = new WorkerExchange.Draft(replacement.identity(), "{}", hash);
+        var newReview = new WorkerExchange.Review(replacement.identity(), hash, "{}", hash);
+        assertThatThrownBy(() -> workerExchange.adopt(next, ProductionStage.DISCOVER, newDraft, newReview, ignored -> {
+            throw new IllegalArgumentException("Reject invalid stage payload");
         })).isInstanceOf(IllegalArgumentException.class);
         var applied = new AtomicInteger();
-        assertThat(workerExchange.adopt(next, ProductionStage.DISCOVER, draft, review,
+        assertThat(workerExchange.adopt(next, ProductionStage.DISCOVER, newDraft, newReview,
                 ignored -> applied.incrementAndGet())).isTrue();
-        assertThat(workerExchange.adopt(next, ProductionStage.DISCOVER, draft, review,
+        assertThat(workerExchange.adopt(next, ProductionStage.DISCOVER, newDraft, newReview,
                 ignored -> applied.incrementAndGet())).isFalse();
         assertThat(applied.get()).isEqualTo(1);
+    }
+
+    @Autowired WorkerStageAdoption workerAdoption;
+    @Autowired RealMediaEffectPort realEffects;
+    @Test
+    void reviewedWorkerDiscoveryUsesExistingSelectWithoutCreatingCostEvidence() throws Exception {
+        discover(VENUS);
+        long request = create("SHORTS", ",\"candidateCount\":5,\"selectionMode\":\"AUTO\"");
+        jdbc.update("""
+                UPDATE production_request SET pipeline_version = 'v2-media-2', lease_owner = 'manual',
+                    lease_epoch = 1, lease_until = UTC_TIMESTAMP(6) + INTERVAL 2 MINUTE, status = 'RUNNING'
+                WHERE id = ?
+                """, request);
+        long step = jdbc.queryForObject("SELECT id FROM production_step WHERE production_request_id = ? AND stage = 'DISCOVER'",
+                Long.class, request);
+        jdbc.update("UPDATE production_step SET status = 'RUNNING', attempts = 1 WHERE id = ?", step);
+        var owner = new ProductionCostPort.StepOwner(request, step, "manual", 1);
+        var input = discoveryPort.input(request);
+        String fixed = PlanningJson.encode(new com.aistudio.production.contract.WorkerDiscoveryRequest(
+                input, channel, "Science", "3000", 1, List.of(), List.of("visualPotential"))).json();
+        var issued = workerExchange.issue(owner, ProductionStage.DISCOVER, fixed);
+        var malformed = PlanningJson.encode(Map.of("version", 1));
+        var badDraft = new WorkerExchange.Draft(issued.identity(), malformed.json(), malformed.hash());
+        var badReview = new WorkerExchange.Review(issued.identity(), malformed.hash(), malformed.json(), malformed.hash());
+        assertThatThrownBy(() -> workerAdoption.adopt(owner, fixed, badDraft, badReview))
+                .isInstanceOf(RuntimeException.class);
+        var canonical = PlanningJson.encode(discovery.responses.apply(input));
+        var draft = new WorkerExchange.Draft(issued.identity(), canonical.json(), canonical.hash());
+        var review = new WorkerExchange.Review(issued.identity(), canonical.hash(), canonical.json(), canonical.hash());
+        assertThat(workerAdoption.adopt(owner, fixed, draft, review)).isTrue();
+        assertThat(workerAdoption.adopt(owner, fixed, draft, review)).isFalse();
+        assertThat(jdbc.queryForObject("SELECT worker_exchange_id FROM production_discovery WHERE production_request_id = ?",
+                Long.class, request)).isEqualTo(issued.identity().jobId());
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM provider_operation WHERE production_request_id = ?",
+                Integer.class, request)).isZero();
+
+        long select = jdbc.queryForObject("SELECT id FROM production_step WHERE production_request_id = ? AND stage = 'SELECT'",
+                Long.class, request);
+        assertThat(executor.selectWorker(new ProductionCostPort.StepOwner(request, select, "manual", 1))).isTrue();
+        assertThat(jdbc.queryForObject("SELECT status FROM production_step WHERE id = ?", String.class, select))
+                .isEqualTo("SUCCEEDED");
+        assertThat(jdbc.queryForObject("SELECT selection_hash FROM production_request WHERE id = ?", String.class, request))
+                .matches("[0-9a-f]{64}");
+        var before = port.researchInput(request);
+        long research = jdbc.queryForObject(
+                "SELECT id FROM production_step WHERE production_request_id = ? AND stage = 'RESEARCH'",
+                Long.class, request);
+        jdbc.update("UPDATE production_step SET status = 'RUNNING', attempts = 1 WHERE id = ?", research);
+        var researchOwner = new ProductionCostPort.StepOwner(request, research, "manual", 1);
+        var inputJson = PlanningJson.encode(before);
+        var researchJob = workerExchange.issue(researchOwner, ProductionStage.RESEARCH, inputJson.json());
+        jdbc.update("UPDATE production_request SET selection_hash = SHA2('changed', 256) WHERE id = ?", request);
+        var researchDraft = new WorkerExchange.Draft(researchJob.identity(), canonical.json(), canonical.hash());
+        var researchReview = new WorkerExchange.Review(researchJob.identity(), canonical.hash(), canonical.json(), canonical.hash());
+        assertThatThrownBy(() -> workerAdoption.adopt(researchOwner, inputJson.json(), researchDraft, researchReview))
+                .isInstanceOf(IllegalStateException.class);
+        jdbc.update("UPDATE production_request SET selection_hash = ? WHERE id = ?", before.snapshot().selectionHash(), request);
+        assertThatThrownBy(() -> jdbc.update("UPDATE production_request SET limit_krw = 3001 WHERE id = ?", request))
+                .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+
+        long other = create("SHORTS", ",\"candidateCount\":5,\"selectionMode\":\"AUTO\"");
+        assertThatThrownBy(() -> jdbc.update("""
+                UPDATE production_discovery SET worker_exchange_id = ?, response_json = ?, response_hash = ?,
+                    generated_at = UTC_TIMESTAMP(6) WHERE production_request_id = ?
+                """, issued.identity().jobId(), canonical.json(), canonical.hash(), other))
+                .isInstanceOf(org.springframework.dao.DataAccessException.class);
+        assertThatThrownBy(() -> jdbc.update("""
+                UPDATE production_discovery SET response_json = ?, response_hash = ?, generated_at = UTC_TIMESTAMP(6)
+                WHERE production_request_id = ?
+                """, canonical.json(), canonical.hash(), other))
+                .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+
+        verifyRealSupplierLifecycle(request);
+    }
+
+    private void verifyRealSupplierLifecycle(long request) {
+        long step = jdbc.queryForObject("SELECT id FROM production_step WHERE production_request_id = ? AND stage = 'IMAGE'",
+                Long.class, request);
+        jdbc.update("UPDATE production_step SET status = 'RUNNING', attempts = 1 WHERE id = ?", step);
+        var owner = new ProductionCostPort.StepOwner(request, step, "manual", 1);
+        var encoded = PlanningJson.encode(Map.of("sku", "fixture-image", "providerNamespace", "fixture-account",
+                "priceVersion", "approved-fixture"));
+        long first = insertRealMediaItem(request, step, "image:first", encoded);
+        long second = insertRealMediaItem(request, step, "image:second", encoded);
+        var supplier = org.mockito.Mockito.mock(ProductionMediaSupplier.class);
+        org.mockito.Mockito.when(supplier.capability()).thenReturn(new ProductionMediaSupplier.Capability(
+                "fixture-account", "fixture-image", ProductionMediaSupplier.Output.IMAGE, true, false, 0, 1280, 1280));
+        var job = new ProductionMediaSupplier.JobId("fixture-account", "fixture-job-" + request);
+        org.mockito.Mockito.when(supplier.submit(any(), any())).thenReturn(
+                new ProductionMediaSupplier.Accepted(job), new ProductionMediaSupplier.Unknown());
+        org.mockito.Mockito.when(supplier.poll(job)).thenReturn(new ProductionMediaSupplier.Observation(
+                ProductionMediaSupplier.JobState.SUCCEEDED, null));
+        org.mockito.Mockito.when(supplier.retrieve(job)).thenReturn(new MediaEffectPort.ProviderResult(
+                new MediaEffectPort.ExecutionProof("fixture-request", "fixture-result", BigDecimal.ONE, "KRW",
+                        "isolated receipt"), Ports.payloads(ProductionStage.IMAGE)));
+        var quote = new ProductionMediaSupplier.Quote("fixture-image", "approved-fixture", "KRW",
+                BigDecimal.ONE, java.time.Instant.now().plusSeconds(120));
+        var item = new MediaEffectPort.Item(owner, first);
+        assertThat(realEffects.executeReal(item, quote, supplier).disposition())
+                .isEqualTo(ProductionCostPort.Disposition.WAITING);
+        var result = realEffects.recoverReal(item, supplier);
+        assertThat(result.disposition()).isEqualTo(ProductionCostPort.Disposition.RECEIPT);
+        assertThat(result.receipt().outcome()).isEqualTo(ProductionCostPort.Outcome.RESULT_ADOPTED);
+        assertThat(realEffects.recoverReal(item, supplier).receipt()).isEqualTo(result.receipt());
+        mediaEffects.apply(item, result.receipt().operationId());
+
+        var unknownItem = new MediaEffectPort.Item(owner, second);
+        assertThat(realEffects.executeReal(unknownItem, quote, supplier).disposition())
+                .isEqualTo(ProductionCostPort.Disposition.RECOVERY_REQUIRED);
+        assertThat(realEffects.executeReal(unknownItem, quote, supplier).disposition())
+                .isEqualTo(ProductionCostPort.Disposition.RECOVERY_REQUIRED);
+        assertThat(realEffects.recoverReal(unknownItem, supplier).disposition())
+                .isEqualTo(ProductionCostPort.Disposition.RECOVERY_REQUIRED);
+        verify(supplier, times(2)).submit(any(), any());
+        verify(supplier, times(1)).poll(job);
+        assertThat(jdbc.queryForObject("""
+                SELECT COUNT(*) FROM provider_operation
+                WHERE production_request_id = ? AND status = 'UNKNOWN'
+                """, Integer.class, request)).isEqualTo(1);
+        long unknown = jdbc.queryForObject("""
+                SELECT id FROM provider_operation WHERE production_request_id = ? AND status = 'UNKNOWN'
+                """, Long.class, request);
+        var recoveredJob = new ProductionMediaSupplier.JobId("fixture-account", "confirmed-" + unknown);
+        var evidence = com.aistudio.content.command.CanonicalJson.sha256Hex("independently confirmed fixture job");
+        assertThatThrownBy(() -> realEffects.attachKnownJob(unknown, recoveredJob, evidence, Actor.system()))
+                .isInstanceOf(com.aistudio.shared.api.ApiException.class);
+        realEffects.attachKnownJob(unknown, recoveredJob, evidence, Actor.admin(admin.id()));
+        realEffects.attachKnownJob(unknown, recoveredJob, evidence, Actor.admin(admin.id()));
+        org.mockito.Mockito.when(supplier.poll(recoveredJob)).thenReturn(new ProductionMediaSupplier.Observation(
+                ProductionMediaSupplier.JobState.SUCCEEDED, null));
+        org.mockito.Mockito.when(supplier.retrieve(recoveredJob)).thenReturn(new MediaEffectPort.ProviderResult(
+                new MediaEffectPort.ExecutionProof("confirmed-request", "confirmed-result", BigDecimal.ONE, "KRW",
+                        "confirmed receipt"), Ports.payloads(ProductionStage.IMAGE)));
+        var recovered = realEffects.recoverReal(unknownItem, supplier);
+        assertThat(recovered.receipt().operationId()).isEqualTo(unknown);
+        assertThat(recovered.receipt().outcome()).isEqualTo(ProductionCostPort.Outcome.RESULT_ADOPTED);
+        verify(supplier, times(2)).submit(any(), any());
+        verify(supplier, times(1)).poll(recoveredJob);
+    }
+
+    private long insertRealMediaItem(long request, long step, String target, PlanningJson.Encoded encoded) {
+        jdbc.update("""
+                INSERT INTO production_media_item (production_request_id, production_step_id, target_key,
+                    generation, ordinal, kind, input_json, input_sha256, state, lease_epoch, created_at, updated_at)
+                VALUES (?, ?, ?, 1, 1, 'IMAGE', ?, ?, 'PENDING', 0, UTC_TIMESTAMP(6), UTC_TIMESTAMP(6))
+                """, request, step, target, encoded.json(), encoded.hash());
+        return jdbc.queryForObject("SELECT id FROM production_media_item WHERE production_step_id = ? AND target_key = ?",
+                Long.class, step, target);
     }
 
     @TestConfiguration

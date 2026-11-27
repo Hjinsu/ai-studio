@@ -652,6 +652,19 @@ public class ProductionExecutor implements AutoCloseable {
         }
     }
 
+    /** Runs existing selection for a user-driven request under its explicit lease. */
+    public boolean selectWorker(ProductionCostPort.StepOwner owner) {
+        var lease = new Lease(owner.requestId(), owner.leaseOwner(), owner.leaseEpoch());
+        var request = transactions.execute(() -> mapper.lock(owner.requestId()));
+        if (request == null || !com.aistudio.production.contract.RealMediaProfile.PIPELINE.equals(request.pipelineVersion())) {
+            throw new IllegalArgumentException("Expected a Worker production request");
+        }
+        var step = mapper.steps(owner.requestId()).stream()
+                .filter(row -> row.id() == owner.stepId() && row.stage() == ProductionStage.SELECT)
+                .findFirst().orElseThrow(() -> new IllegalArgumentException("Expected owned SELECT step"));
+        return runDiscoverySelect(lease, request, step);
+    }
+
     enum SelectOutcome { LINKED, WAITING, FAILED, CANCELLED }
 
     /**

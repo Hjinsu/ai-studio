@@ -1,6 +1,7 @@
 package com.aistudio.production.cost;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -16,6 +17,7 @@ import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.aistudio.audit.AuditService;
 import com.aistudio.audit.AuditService.Actor;
 import com.aistudio.budget.BudgetReservationService;
 import com.aistudio.budget.BudgetReservationService.DispatchBudget;
@@ -27,6 +29,10 @@ import com.aistudio.production.contract.EffectKey;
 import com.aistudio.production.contract.MediaEffectPort;
 import com.aistudio.production.media.storage.MediaMetadata;
 import com.aistudio.production.contract.MediaProfile;
+import com.aistudio.production.contract.ProductionMediaBudget;
+import com.aistudio.production.contract.ProductionMediaSupplier;
+import com.aistudio.production.contract.RealMediaEffectPort;
+import com.aistudio.production.contract.RealMediaProfile;
 import com.aistudio.production.contract.MediaStore;
 import com.aistudio.production.media.storage.WorkspaceMediaStore;
 import com.aistudio.production.media.MediaAvailability;
@@ -54,7 +60,7 @@ import com.aistudio.shared.db.LockRetryingTransactions;
 import tools.jackson.databind.json.JsonMapper;
 
 @Service
-public class ProductionCostService implements ProductionCostPort, MediaEffectPort {
+public class ProductionCostService implements ProductionCostPort, MediaEffectPort, RealMediaEffectPort {
     private record Dispatch(EffectResult replay, PricedRequest send) {}
     private record EvidenceRecord(String key, Evidence evidence) {}
     private record Completion(Evidence evidence, String body) {}
@@ -71,6 +77,9 @@ public class ProductionCostService implements ProductionCostPort, MediaEffectPor
     private final MediaCostMapper media;
     private final String mediaRoot;
     private final MediaAvailability mediaAvailability;
+    private final ProductionProviderJobMapper jobs;
+    private final AuditService audit;
+    private final boolean realDispatchEnabled;
 
     private record StoredMediaProof(String effectKey, String requestHash, String providerRequestId,
             String providerResultId, String amount,
@@ -83,7 +92,8 @@ public class ProductionCostService implements ProductionCostPort, MediaEffectPor
             LockRetryingTransactions transactions, com.aistudio.production.cost.FakeProvider provider, JsonMapper json,
             ProductionDiscoveryMapper discovery, ObjectProvider<DiscoveryProvider> discoveryProvider,
             PlanningResultMapper planning, MediaCostMapper media,
-            @Value("${ai-studio.production.media.storage-root:}") String mediaRoot, MediaAvailability mediaAvailability) {
+            @Value("${ai-studio.production.media.storage-root:}") String mediaRoot, MediaAvailability mediaAvailability, ProductionProviderJobMapper jobs, AuditService audit,
+            @Value("${ai-studio.production.media.real-dispatch-enabled:false}") boolean realDispatchEnabled) {
         this.mapper = mapper;
         this.budget = budget;
         this.control = control;
@@ -96,6 +106,9 @@ public class ProductionCostService implements ProductionCostPort, MediaEffectPor
         this.media = media;
         this.mediaRoot = mediaRoot;
         this.mediaAvailability = mediaAvailability;
+        this.jobs = jobs;
+        this.audit = audit;
+        this.realDispatchEnabled = realDispatchEnabled;
     }
 
     @Override
@@ -288,7 +301,7 @@ public class ProductionCostService implements ProductionCostPort, MediaEffectPor
         if (planningEffect != (planningInput != null)) {
             throw new ApiException(ErrorCode.INVALID_STATE_TRANSITION);
         }
-        boolean mediaEffect = MediaProfile.PIPELINE.equals(request.pipelineVersion())
+        boolean mediaEffect = mediaPipeline(request.pipelineVersion())
                 && (step.stage() == ProductionStage.IMAGE || step.stage() == ProductionStage.TTS);
         if (mediaEffect != (mediaItem != null) || (mediaItem != null
                 && (mediaItem.kind() != step.stage() || mediaItem.generation() != step.inputGeneration()))) {
@@ -460,7 +473,7 @@ public class ProductionCostService implements ProductionCostPort, MediaEffectPor
                     }
                 }
                 var stored = discovery.generated(requestId);
-                if (stored == null || stored.operationId() != operationId
+                if (stored == null || !Objects.equals(stored.operationId(), operationId)
                         || !normalized.resultHash().equals(stored.responseHash())
                         || !normalized.resultHash().equals(CanonicalJson.sha256Hex(stored.responseJson()))
                         || !("discovery:" + requestId).equals(normalized.resultRef())) {
@@ -502,6 +515,9 @@ public class ProductionCostService implements ProductionCostPort, MediaEffectPor
             operation = transactions.execute(() -> {
                 control.shared();
                 Request request = requireRequest(owner.requestId());
+                if (!MediaProfile.PIPELINE.equals(request.pipelineVersion())) {
+                    throw new ApiException(ErrorCode.INVALID_STATE_TRANSITION, "Fixture profile required.");
+                }
                 Step step = requireStep(owner);
                 MediaCostMapper.Item frozen = requireMediaItem(item);
                 String key = EffectKey.forInput(request.id(), step.stage(), frozen.targetKey(), frozen.generation());
@@ -540,6 +556,202 @@ public class ProductionCostService implements ProductionCostPort, MediaEffectPor
         return recover(item);
     }
 
+    private static boolean mediaPipeline(String pipeline) {
+        return MediaProfile.PIPELINE.equals(pipeline) || RealMediaProfile.PIPELINE.equals(pipeline);
+    }
+
+    private record RealSend(MediaCostMapper.Item item, Operation operation) {}
+
+    @Override
+    public EffectResult executeReal(MediaEffectPort.Item item, ProductionMediaSupplier.Quote quote,
+            ProductionMediaSupplier supplier) {
+        if (!realDispatchEnabled || !mediaAvailability.ready()) {
+            return recover(item);
+        }
+        if (quote == null || !quote.validUntil().isAfter(Instant.now()) || quote.maximumAmount().signum() <= 0) {
+            return result(Disposition.REJECTED);
+        }
+        var capability = supplier.capability();
+        var owner = item.owner();
+        var priced = new PricedRequest(Money.currency("currency", quote.currency()), Money.original(quote.maximumAmount()), null);
+        RealSend pending;
+        try {
+            pending = transactions.execute(() -> {
+                control.shared();
+                var request = requireRequest(owner.requestId());
+                requireStep(owner);
+                var frozen = requireMediaItem(item);
+                var contract = json.readTree(frozen.inputJson());
+                if (!RealMediaProfile.PIPELINE.equals(request.pipelineVersion()) || !matchesCapability(frozen, capability)
+                        || !quote.sku().equals(capability.sku()) || !quote.sku().equals(contract.path("sku").asText())
+                        || !quote.priceVersion().equals(contract.path("priceVersion").asText())
+                        || !capability.namespace().equals(contract.path("providerNamespace").asText())) {
+                    throw new ApiException(ErrorCode.INVALID_STATE_TRANSITION, "Supplier or quote differs from frozen input.");
+                }
+                var operation = reserve(owner, mediaKey(item, frozen), pricedHash(frozen.inputSha256(), priced),
+                        priced, false, null, frozen);
+                return new RealSend(frozen, operation);
+            });
+        } catch (ApiException e) {
+            if (e.errorCode() == ErrorCode.BUDGET_EXCEEDED || e.errorCode() == ErrorCode.POLICY_VIOLATION
+                    || e.errorCode() == ErrorCode.PREREQUISITE_NOT_MET) {
+                return result(Disposition.REJECTED);
+            }
+            throw e;
+        }
+        var operation = pending.operation();
+        if (operation == null) {
+            return result(Disposition.REJECTED);
+        }
+        Dispatch permit = transactions.execute(() -> permit(owner, operation.id(), priced,
+                quote.validUntil().isAfter(Instant.now())));
+        if (permit.send() == null) {
+            return permit.replay() != null && permit.replay().disposition() == Disposition.RECEIPT
+                    ? permit.replay() : recoverReal(item, supplier);
+        }
+        try {
+            var frozen = pending.item();
+            var response = supplier.submit(new ProductionMediaSupplier.Permit(operation.id(), mediaKey(item, frozen),
+                    frozen.inputSha256(), quote), frozen.inputJson());
+            if (response instanceof ProductionMediaSupplier.Completed completed) {
+                return completeReal(item, operation, completed.result());
+            }
+            if (response instanceof ProductionMediaSupplier.Accepted accepted && capability.asynchronous()
+                    && capability.namespace().equals(accepted.jobId().namespace())) {
+                var job = accepted.jobId();
+                transactions.run(() -> {
+                    control.shared();
+                    requireRequest(owner.requestId());
+                    Instant now = Instant.now();
+                    jobs.insert(new ProductionProviderJobMapper.Job(operation.id(), job.namespace(), job.value(), now,
+                            CanonicalJson.sha256(Map.of("jobId", job.value(), "namespace", job.namespace())), now));
+                });
+                return result(Disposition.WAITING);
+            }
+        } catch (RuntimeException e) {
+            quarantine(operation);
+            return result(Disposition.RECOVERY_REQUIRED);
+        }
+        quarantine(operation);
+        return result(Disposition.RECOVERY_REQUIRED);
+    }
+
+    @Override
+    public EffectResult recoverReal(MediaEffectPort.Item item, ProductionMediaSupplier supplier) {
+        var replay = recover(item);
+        if (replay.disposition() != Disposition.RECOVERY_REQUIRED) {
+            return replay;
+        }
+        var owner = item.owner();
+        var capability = supplier.capability();
+        var operation = transactions.execute(() -> {
+            var request = requireRequest(owner.requestId());
+            requireStep(owner);
+            var frozen = requireMediaItem(item);
+            var contract = json.readTree(frozen.inputJson());
+            if (!RealMediaProfile.PIPELINE.equals(request.pipelineVersion()) || frozen.operationId() == null
+                    || frozen.executionProofSha256() != null || !matchesCapability(frozen, capability)
+                    || !capability.sku().equals(contract.path("sku").asText())
+                    || !capability.namespace().equals(contract.path("providerNamespace").asText())) {
+                return null;
+            }
+            return mapper.operation(frozen.operationId());
+        });
+        if (operation == null || !operation.dispatched()) {
+            return replay;
+        }
+        var stored = jobs.find(operation.id());
+        if (stored == null || !stored.providerNamespace().equals(capability.namespace())) {
+            return replay;
+        }
+        if (stored.nextPollAt() != null && stored.nextPollAt().isAfter(Instant.now())) {
+            return result(Disposition.WAITING);
+        }
+        var job = new ProductionMediaSupplier.JobId(stored.providerNamespace(), stored.providerJobId());
+        try {
+            var observed = supplier.poll(job);
+            return switch (observed.state()) {
+                case PENDING -> {
+                    var now = Instant.now();
+                    var due = observed.nextPollAt();
+                    transactions.run(() -> jobs.defer(owner, operation.id(),
+                            due == null || !due.isAfter(now) ? now.plusSeconds(2) : due));
+                    yield result(Disposition.WAITING);
+                }
+                case UNKNOWN -> {
+                    quarantine(operation);
+                    yield replay;
+                }
+                case SUCCEEDED, FAILED, CANCELLED -> completeReal(item, operation, supplier.retrieve(job));
+            };
+        } catch (RuntimeException e) {
+            return replay;
+        }
+    }
+
+    @Override
+    public void attachKnownJob(long operationId, ProductionMediaSupplier.JobId job, String evidenceSha256, Actor actor) {
+        if (actor == null || actor.type() != AuditService.ActorType.ADMIN || actor.userId() == null
+                || evidenceSha256 == null || !evidenceSha256.matches("[0-9a-f]{64}")) {
+            throw new ApiException(ErrorCode.POLICY_VIOLATION, "Administrative evidence is required.");
+        }
+        Long requestId = mapper.requestId(operationId);
+        if (requestId == null) {
+            throw new ApiException(ErrorCode.RESOURCE_NOT_FOUND);
+        }
+        transactions.run(() -> {
+            control.shared();
+            var request = requireRequest(requestId);
+            var operation = mapper.operation(operationId);
+            Long itemId = media.byOperation(operationId);
+            if (!RealMediaProfile.PIPELINE.equals(request.pipelineVersion()) || !operation.dispatched()
+                    || itemId == null) {
+                throw new ApiException(ErrorCode.INVALID_STATE_TRANSITION);
+            }
+            var item = media.lock(requestId, operation.productionStepId(), itemId);
+            if (item == null || !job.namespace().equals(json.readTree(item.inputJson()).path("providerNamespace").asText())) {
+                throw new ApiException(ErrorCode.INVALID_STATE_TRANSITION, "Supplier namespace differs.");
+            }
+            var existing = jobs.find(operationId);
+            if (existing != null) {
+                if (!existing.providerNamespace().equals(job.namespace()) || !existing.providerJobId().equals(job.value())
+                        || !existing.submissionSha256().equals(evidenceSha256)) {
+                    throw new ApiException(ErrorCode.RESOURCE_CONFLICT, "Conflicting supplier job evidence.");
+                }
+                return;
+            }
+            if (!"UNKNOWN".equals(operation.status()) || operation.evidenceHash() != null) {
+                throw new ApiException(ErrorCode.INVALID_STATE_TRANSITION, "Operation is not awaiting job evidence.");
+            }
+            Instant now = Instant.now();
+            jobs.insert(new ProductionProviderJobMapper.Job(operationId, job.namespace(), job.value(), now,
+                    evidenceSha256, now));
+            audit.record(actor, "PRODUCTION_PROVIDER_JOB_ATTACHED", "provider_operation", operationId,
+                    Map.of("evidenceSha256", evidenceSha256));
+        });
+    }
+
+    private EffectResult completeReal(MediaEffectPort.Item item, Operation operation, MediaEffectPort.ProviderResult returned) {
+        recordMediaProof(item, operation, returned.proof());
+        try {
+            stageMedia(item, returned.payloads());
+        } catch (IOException e) {
+            return result(Disposition.RECOVERY_REQUIRED);
+        } catch (IllegalArgumentException e) {
+            return finalizeMedia(item, List.of(), true);
+        }
+        return recover(item);
+    }
+
+    private static boolean matchesCapability(MediaCostMapper.Item item, ProductionMediaSupplier.Capability capability) {
+        return switch (capability.output()) {
+            case NARRATION -> item.kind() == ProductionStage.TTS;
+            case IMAGE -> item.kind() == ProductionStage.IMAGE && !item.targetKey().startsWith("video:");
+            case IMAGE_TO_VIDEO -> item.kind() == ProductionStage.IMAGE && item.targetKey().startsWith("video:");
+            case TEXT_TO_VIDEO -> false;
+        };
+    }
+
     private MediaCostMapper.Item requireMediaItem(MediaEffectPort.Item item) {
         StepOwner owner = item.owner();
         var found = media.lock(owner.requestId(), owner.stepId(), item.itemId());
@@ -555,7 +767,7 @@ public class ProductionCostService implements ProductionCostPort, MediaEffectPor
             control.shared();
             Request request = requireRequest(item.owner().requestId());
             var frozen = requireMediaItem(item);
-            if (!MediaProfile.PIPELINE.equals(request.pipelineVersion()) || !Objects.equals(frozen.operationId(), operation.id())
+            if (!mediaPipeline(request.pipelineVersion()) || !Objects.equals(frozen.operationId(), operation.id())
                     || proof.providerResultId() == null || proof.providerResultId().isBlank()
                     || proof.providerResultId().length() > 128) {
                 throw new ApiException(ErrorCode.INVALID_STATE_TRANSITION);
@@ -584,9 +796,9 @@ public class ProductionCostService implements ProductionCostPort, MediaEffectPor
             }
             return requireMediaItem(item);
         });
-        if (payloads == null || !roles(frozen.kind()).equals(payloads.stream()
+        if (payloads == null || !roles(frozen).equals(payloads.stream()
                 .map(MediaEffectPort.Payload::role).collect(java.util.stream.Collectors.toSet()))
-                || payloads.size() != roles(frozen.kind()).size()) {
+                || payloads.size() != roles(frozen).size()) {
             throw new IllegalArgumentException("Incomplete media bundle");
         }
         var store = mediaStore();
@@ -644,7 +856,7 @@ public class ProductionCostService implements ProductionCostPort, MediaEffectPor
             return finalizeMedia(item, List.of(), true);
         }
         var assets = snapshot.assets();
-        if (!roles(snapshot.item().kind()).equals(assets.stream()
+        if (!roles(snapshot.item()).equals(assets.stream()
                 .map(MediaCostMapper.Asset::role).collect(java.util.stream.Collectors.toSet()))) {
             return snapshot.item().expired() ? finalizeMedia(item, List.of(), true) : result(Disposition.RECOVERY_REQUIRED);
         }
@@ -773,8 +985,11 @@ public class ProductionCostService implements ProductionCostPort, MediaEffectPor
         return new MediaStore.FileIdentity(asset.byteLength(), asset.sha256());
     }
 
-    private static java.util.Set<MediaStore.Role> roles(ProductionStage stage) {
-        return stage == ProductionStage.IMAGE
+    private static java.util.Set<MediaStore.Role> roles(MediaCostMapper.Item item) {
+        if (item.kind() == ProductionStage.IMAGE && item.targetKey().startsWith("video:")) {
+            return java.util.Set.of(MediaStore.Role.SOURCE_VIDEO, MediaStore.Role.NORMALIZED_VIDEO);
+        }
+        return item.kind() == ProductionStage.IMAGE
                 ? java.util.Set.of(MediaStore.Role.SOURCE_IMAGE, MediaStore.Role.NORMALIZED_IMAGE)
                 : java.util.Set.of(MediaStore.Role.SOURCE_AUDIO, MediaStore.Role.PCM_AUDIO, MediaStore.Role.ALIGNMENT);
     }
@@ -839,7 +1054,12 @@ public class ProductionCostService implements ProductionCostPort, MediaEffectPor
 
     private BigDecimal limit(Request request) {
         BigDecimal active = mapper.typeLimit(request.channelId(), request.contentType());
-        return active == null ? null : active.min(request.limitKrw());
+        if (active == null) {
+            return null;
+        }
+        BigDecimal effective = active.min(request.limitKrw());
+        return RealMediaProfile.PIPELINE.equals(request.pipelineVersion())
+                ? ProductionMediaBudget.requestLimit(effective) : effective;
     }
 
     private static Evidence normalize(Operation operation, String key, Evidence evidence) {

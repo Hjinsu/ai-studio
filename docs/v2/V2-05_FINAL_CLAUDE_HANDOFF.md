@@ -11,8 +11,11 @@
 
 ### 진행 중인 공통 브랜치
 
-승인 기준 `ac193284d127d78154777879c5e77da5266dafd2`, 공통 브랜치 `v2/05-common`. 이 브랜치의 중간 커밋은 제품 분기 기준으로 확정되지 않았다. 채택 경로와 신규 공급자 permit·receipt 통합, API 계약 및 회귀 완료 후 공통 SHA를 인계한다. 기존 공개 요청은 V2-04 경로를 유지한다.
+승인 기준 `ac193284d127d78154777879c5e77da5266dafd2`, 공통 브랜치 `v2/05-common`. 검증 완료 SHA를 인계받은 후 분기한다.
 
+- 사용자 실행 파일 교환은 `ManualWorkerExchange.issue`, `WorkerStageAdoption.adopt` 계약을 사용한다. 요청/초안/검수본의 해시와 동일 schemaVersion·request/step·attempt·epoch를 전달한다. DISCOVER 이후 `ProductionExecutor.selectWorker`가 기존 SELECT를 수행한다. Worker SCENES는 기존 씬과 동적 계획의 장면/segment 경계를 일치시킨다. RESEARCH는 서버가 보유한 검증 문서를 `TrustedDocuments`로 제공해야 한다. 계정 토큰과 CLI 호출은 서버에 연결하지 않는다.
+- 미디어 어댑터는 `ProductionMediaSupplier` 및 `RealMediaEffectPort`를 사용한다. 동결 item의 `sku`, `providerNamespace`, `priceVersion`과 승인 quote를 일치시킨다. 동영상 item 키는 `video:` 접두사와 SOURCE_VIDEO/NORMALIZED_VIDEO를 사용한다. UNKNOWN은 운영 증거가 확인된 뒤 권한 있는 경로에서 job ID를 연결한다. 실제 발송 설정은 기본 OFF다.
+- 앱의 사용자 실행 진입점, 파일 수집 UI, 승인된 문서/실제 공급자, 오디오·혼합 렌더 제품 동작은 제품 소유 범위다. 유료 운영 및 무인 반복은 별도 승인 대상이다.
 ### Claude 구현 순서
 
 1. 승인된 공통 SHA·포트를 확인하고 mock으로 사용자 실행 파일 내보내기/가져오기, 검수 결과와 라이브러리/오디오 큐 UI를 연결한다. SELECT 우회와 stale 결과를 차단한다.

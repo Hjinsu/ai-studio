@@ -48,6 +48,8 @@ import tools.jackson.databind.json.JsonMapper;
 class PlanningExecutionService implements PlanningExecutionPort {
     private static final InputVersion VERSION = new InputVersion("planning-prompt-1", "planning-rules-1",
             "fake-planning-1");
+    private static final InputVersion WORKER_VERSION = new InputVersion("planning-prompt-1", "planning-rules-1",
+            "subscription-worker-1");
     private static final InputVersion SCENES_VERSION = new InputVersion("scenes-prompt-2", "scenes-rules-2",
             "fake-scenes-2");
 
@@ -78,7 +80,9 @@ class PlanningExecutionService implements PlanningExecutionPort {
         var response = discovery.generated(requestId);
         if (batch == null || batch.selectedCandidateId() == null || response == null
                 || !PlanningJson.matches(response.responseJson(), response.responseHash())
-                || !cost.appliedDiscoveryReceipt(requestId, response.operationId(), response.responseHash())) {
+                || !(response.operationId() != null
+                        ? cost.appliedDiscoveryReceipt(requestId, response.operationId(), response.responseHash())
+                        : response.workerExchangeId() != null && response.workerApplied())) {
             throw invalid();
         }
         int candidateId = batch.selectedCandidateId();
@@ -87,7 +91,7 @@ class PlanningExecutionService implements PlanningExecutionPort {
             throw invalid();
         }
         var candidate = candidates.get(candidateId - 1);
-        return new ResearchInput(snapshot, VERSION, candidateId, response.responseHash(), candidate.centralQuestion(),
+        return new ResearchInput(snapshot, response.workerExchangeId() == null ? VERSION : WORKER_VERSION, candidateId, response.responseHash(), candidate.centralQuestion(),
                 candidate.angle(), candidate.outline(), candidate.evidencePlan(),
                 candidate.assertions().stream().map(claim -> claim.assertion()).toList());
     }
@@ -102,7 +106,7 @@ class PlanningExecutionService implements PlanningExecutionPort {
         var research = accepted(requestId, ProductionStage.RESEARCH);
         var comparisons = results.recentScripts(requestId, ProductionPlanning.SCRIPT_COMPARISON_LIMIT)
                 .stream().map(this::comparison).toList();
-        return new ScriptInput(snapshot(requestId), VERSION, ref(research),
+        return new ScriptInput(snapshot(requestId), research.workerExchangeId() == null ? VERSION : WORKER_VERSION, ref(research),
                 json.readValue(research.bodyJson(), Research.class), comparisons);
     }
 
@@ -114,7 +118,7 @@ class PlanningExecutionService implements PlanningExecutionPort {
             return fixed;
         }
         var script = accepted(requestId, ProductionStage.SCRIPT);
-        return new ScenesInput(snapshot(requestId), SCENES_VERSION, ref(script), json.readValue(script.bodyJson(), Script.class));
+        return new ScenesInput(snapshot(requestId), script.workerExchangeId() == null ? SCENES_VERSION : WORKER_VERSION, ref(script), json.readValue(script.bodyJson(), Script.class));
     }
 
     @Override
@@ -188,6 +192,26 @@ class PlanningExecutionService implements PlanningExecutionPort {
         }
     }
 
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void applyWorker(StepOwner owner, long workerId, ProductionStage stage,
+            String fixedInput, String body, Validation validation) {
+        Object expected = switch (stage) {
+            case RESEARCH -> researchInput(owner.requestId());
+            case SCRIPT -> scriptInput(owner.requestId());
+            case SCENES -> scenesInput(owner.requestId());
+            default -> throw invalid();
+        };
+        var input = PlanningJson.encode(expected);
+        if (validation.blocked() || !input.json().equals(fixedInput)
+                || body.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > ProductionPlanning.MAX_BODY_BYTES
+                || results.adoptWorker(workerId, owner.requestId(), owner.stepId(), ProductionPlanning.VERSION,
+                        input.hash(), fixedInput, com.aistudio.content.command.CanonicalJson.sha256Hex(body), body,
+                        PlanningValidationRecord.encode(validation)) != 1) {
+            throw invalid();
+        }
+    }
+
     private Snapshot snapshot(long requestId) {
         var snapshot = results.snapshot(requestId);
         if (snapshot == null) {
@@ -240,7 +264,7 @@ class PlanningExecutionService implements PlanningExecutionPort {
     }
 
     private static ResultRef ref(PlanningResultMapper.Applied result) {
-        return new ResultRef(result.operationId(), result.stage(), result.bodyHash());
+        return new ResultRef(result.operationId(), result.stage(), result.bodyHash(), result.workerExchangeId());
     }
 
     private static Scenes materialize(Script script, Object response) {

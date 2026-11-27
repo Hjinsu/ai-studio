@@ -49,6 +49,9 @@ public class ManualWorkerExchange {
         var job = exchanges.latest(owner);
         Identity expected = identity(owner, stage, job);
         WorkerExchange.verifyLineage(expected, draft, review);
+        if (job.issuedEpoch() != owner.leaseEpoch()) {
+            throw new IllegalStateException("Worker result belongs to an earlier lease");
+        }
         if (job.applied()) {
             if (!Objects.equals(job.draftSha256(), draft.payloadSha256())
                     || !Objects.equals(job.resultSha256(), review.payloadSha256())) {

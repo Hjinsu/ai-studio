@@ -247,3 +247,7 @@ ChatGPT APPROVE WITH MINOR FIXES 및 사용자 승인. V10의 `production_discov
 V10의 `ck_pd_response`는 DISCOVER 응답 존재와 유료 provider_operation 연결을 묶는다. SELECT의 `lockForSelection`도 적용된 유료 receipt를 요구한다. V12의 `production_stage_result`는 operation_id가 PK/FK이며 후속 결과 참조도 operation ID를 해시와 함께 사용한다. 수동 구독 Worker에 가짜 비용 operation을 만들면 승인된 원장·결과 귀속 계약과 충돌한다.
 
 제안은 V10 후보·평가·선정의 단일 경로를 보존하면서 작업 결과가 실제 paid operation 또는 이미 채택한 Worker exchange 중 하나에만 귀속되도록 별도 신규 migration에서 상호 배타적 소유 근거를 추가하는 것이다. 계획 결과 참조에는 출처 종류·ID·본문 해시를 고정한다. 기존 유료 행과 SELECT 잠금·지문·receipt 검증은 보존한다. Worker 채택은 현재 request lease에서 소유권·후보/선정 지문·stage/attempt·검증 결과를 같은 트랜잭션에서 대조한다. 기존 결과 저장소의 핵심 소유권 변경이므로 사용자 승인 전 연결을 중단한다. 구독 작업에 비용 원장을 합성하거나 평행 소재 시스템을 만들지 않는다.
+
+### V2-05 Worker 결과 귀속 승인 (2026-11-28 KST)
+
+사용자가 73095da387f42707a21cd0f5127e8010d2a4b65a의 상호 배타적 소유권 변경안을 승인했다. V10·V12·V14를 보존하고 V15로 유료 operation 또는 채택 Worker exchange 소유권을 추가한다. 기존 receipt와 비용 원장, SELECT 및 선정 지문 검증은 유지한다. 이전 epoch의 Worker 결과는 새 lease에서 적용할 수 없다. 테스트 DB 및 Mock 공급자만 사용한다.

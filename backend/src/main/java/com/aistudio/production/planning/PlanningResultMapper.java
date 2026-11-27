@@ -12,9 +12,9 @@ import com.aistudio.production.contract.ProductionPlanning.Snapshot;
 
 @Mapper
 public interface PlanningResultMapper {
-    record Stored(long operationId, long requestId, long stepId, int schemaVersion, String inputHash,
+    record Stored(Long operationId, long requestId, long stepId, int schemaVersion, String inputHash,
             String inputJson, String bodyHash, String bodyJson, String validationJson) {}
-    record Applied(long operationId, ProductionStage stage, String bodyHash, String bodyJson,
+    record Applied(Long operationId, Long workerExchangeId, ProductionStage stage, String bodyHash, String bodyJson,
             String validationJson) {}
 
     @Insert("""
@@ -23,6 +23,16 @@ public interface PlanningResultMapper {
             VALUES (#{operationId}, #{requestId}, #{stepId}, #{version}, #{hash}, #{json}, UTC_TIMESTAMP(6))
             """)
     void begin(long operationId, long requestId, long stepId, int version, String hash, String json);
+
+    @Insert("""
+            INSERT INTO production_stage_result
+                (worker_exchange_id, request_id, step_id, schema_version, input_hash, input_json,
+                    body_hash, body_json, validation_json, created_at)
+            VALUES (#{workerId}, #{requestId}, #{stepId}, #{version}, #{inputHash}, #{inputJson}, #{bodyHash},
+                    #{body}, #{validation}, UTC_TIMESTAMP(6))
+            """)
+    int adoptWorker(long workerId, long requestId, long stepId, int version, String inputHash, String inputJson,
+            String bodyHash, String body, String validation);
 
     @Select("""
             SELECT operation_id, request_id, step_id, schema_version, input_hash, input_json,
@@ -44,9 +54,11 @@ public interface PlanningResultMapper {
     int saveValidation(long operationId, String json);
 
     @Select("""
-            SELECT r.operation_id, s.stage, r.body_hash, r.body_json, r.validation_json
+            SELECT r.operation_id, r.worker_exchange_id, s.stage, r.body_hash, r.body_json, r.validation_json
             FROM production_stage_result r
-            JOIN provider_operation o ON o.id = r.operation_id
+            LEFT JOIN provider_operation o ON o.id = r.operation_id
+            LEFT JOIN production_worker_exchange w ON w.id = r.worker_exchange_id AND w.production_request_id = r.request_id
+                AND w.production_step_id = r.step_id
             JOIN production_step s ON s.id = r.step_id AND s.production_request_id = r.request_id
             WHERE r.request_id = #{requestId} AND o.status = 'SETTLED'
                 AND o.receipt_outcome = 'RESULT_ADOPTED' AND o.applied_at IS NOT NULL
@@ -63,19 +75,23 @@ public interface PlanningResultMapper {
             JOIN content_run r ON r.id = p.run_id AND r.content_id = p.content_id
             JOIN content_revision v ON v.id = r.content_revision_id AND v.content_id = r.content_id
             JOIN channel_config c ON c.id = p.channel_config_id AND c.channel_id = p.channel_id
-            WHERE p.id = #{requestId} AND p.pipeline_version IN ('v2-planning-1', 'v2-media-1')
+            WHERE p.id = #{requestId} AND p.pipeline_version IN ('v2-planning-1', 'v2-media-1', 'v2-media-2')
             """)
     Snapshot snapshot(long requestId);
 
     @Select("""
-            SELECT r.operation_id, s.stage, r.body_hash, r.body_json, r.validation_json
+            SELECT r.operation_id, r.worker_exchange_id, s.stage, r.body_hash, r.body_json, r.validation_json
             FROM production_stage_result r
-            JOIN provider_operation o ON o.id = r.operation_id
+            LEFT JOIN provider_operation o ON o.id = r.operation_id
+            LEFT JOIN production_worker_exchange w ON w.id = r.worker_exchange_id AND w.production_request_id = r.request_id
+                AND w.production_step_id = r.step_id
             JOIN production_step s ON s.id = r.step_id AND s.production_request_id = r.request_id
             WHERE r.request_id = #{requestId} AND s.stage = #{stage}
-                AND s.status = 'SUCCEEDED' AND s.result_ref = CONCAT('planning:', o.id)
-                AND o.status = 'SETTLED' AND o.receipt_outcome = 'RESULT_ADOPTED'
-                AND o.applied_at IS NOT NULL AND r.validation_json IS NOT NULL
+                AND s.status = 'SUCCEEDED' AND r.validation_json IS NOT NULL
+                AND ((s.result_ref = CONCAT('planning:', o.id) AND o.status = 'SETTLED'
+                    AND o.receipt_outcome = 'RESULT_ADOPTED' AND o.applied_at IS NOT NULL)
+                 OR (s.result_ref = CONCAT('worker:', w.id) AND w.applied_at IS NOT NULL
+                    AND w.result_sha256 = r.body_hash))
             """)
     Applied accepted(long requestId, ProductionStage stage);
 
@@ -93,18 +109,22 @@ public interface PlanningResultMapper {
     ProductionStage stage(long requestId, long stepId);
 
     @Select("""
-            SELECT r.operation_id, s.stage, r.body_hash, r.body_json, r.validation_json
+            SELECT r.operation_id, r.worker_exchange_id, s.stage, r.body_hash, r.body_json, r.validation_json
             FROM production_request current_request
             JOIN production_request p ON p.channel_id = current_request.channel_id
                 AND p.id != current_request.id
             JOIN production_step s ON s.production_request_id = p.id AND s.stage = 'SCRIPT'
             JOIN production_stage_result r ON r.step_id = s.id AND r.request_id = p.id
-            JOIN provider_operation o ON o.id = r.operation_id
+            LEFT JOIN provider_operation o ON o.id = r.operation_id
+            LEFT JOIN production_worker_exchange w ON w.id = r.worker_exchange_id AND w.production_request_id = r.request_id
+                AND w.production_step_id = r.step_id
             WHERE current_request.id = #{requestId} AND s.status = 'SUCCEEDED'
-                AND s.result_ref = CONCAT('planning:', o.id) AND o.status = 'SETTLED'
-                AND o.receipt_outcome = 'RESULT_ADOPTED' AND o.applied_at IS NOT NULL
                 AND r.validation_json IS NOT NULL
-            ORDER BY o.applied_at DESC, o.id DESC LIMIT #{limit}
+                AND ((s.result_ref = CONCAT('planning:', o.id) AND o.status = 'SETTLED'
+                    AND o.receipt_outcome = 'RESULT_ADOPTED' AND o.applied_at IS NOT NULL)
+                 OR (s.result_ref = CONCAT('worker:', w.id) AND w.applied_at IS NOT NULL
+                    AND w.result_sha256 = r.body_hash))
+            ORDER BY COALESCE(o.applied_at, w.applied_at) DESC, r.id DESC LIMIT #{limit}
             """)
     List<Applied> recentScripts(long requestId, int limit);
 }

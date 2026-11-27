@@ -53,13 +53,16 @@ class DatabaseUpgradeIT {
                 request);
         var latest = Flyway.configure().dataSource(old.dataSource()).locations("classpath:db/migration")
                 .cleanDisabled(true).load();
-        assertThat(latest.migrate().migrationsExecuted).isEqualTo(3);
-        assertThat(latest.info().current().getVersion().getVersion()).isEqualTo("14");
+        assertThat(latest.migrate().migrationsExecuted).isEqualTo(4);
+        assertThat(latest.info().current().getVersion().getVersion()).isEqualTo("15");
         assertThat(jdbc.queryForMap("SELECT * FROM production_request WHERE id = ?", request)).isEqualTo(requestBefore);
         assertThat(jdbc.queryForList("SELECT * FROM production_step WHERE production_request_id = ?", request))
                 .isEqualTo(stepsBefore);
-        assertThat(jdbc.queryForMap("SELECT * FROM production_discovery WHERE production_request_id = ?", request))
-                .isEqualTo(discoveryBefore);
+        var upgradedDiscovery = jdbc.queryForMap("SELECT * FROM production_discovery WHERE production_request_id = ?",
+                request);
+        assertThat(upgradedDiscovery).containsEntry("worker_exchange_id", null);
+        upgradedDiscovery.remove("worker_exchange_id");
+        assertThat(upgradedDiscovery).isEqualTo(discoveryBefore);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM production_stage_result", Integer.class)).isZero();
     }
 
@@ -101,7 +104,7 @@ class DatabaseUpgradeIT {
         DatabaseGuardTestAccess.guardedMigrate(flyway(null), DB.name());
         List<String> versions = jdbc.queryForList(
                 "SELECT version FROM flyway_schema_history WHERE success = 1 ORDER BY installed_rank", String.class);
-        assertThat(versions).containsExactly("1", "2", "3", "4", "5", "6", "9", "10", "11", "12", "13", "14");
+        assertThat(versions).containsExactly("1", "2", "3", "4", "5", "6", "9", "10", "11", "12", "13", "14", "15");
         assertThat(databaseCollation(jdbc)).isEqualTo("utf8mb4_unicode_ci");
         assertThat(flyway(null).info().pending()).isEmpty();
         // V6(T03-B): 기존 channel_config에 소유권 대체 키 추가, 도메인 테이블 생성. T02 데이터 보존은 ContentUpgradeIT

@@ -26,6 +26,7 @@ import com.aistudio.production.contract.ProductionDiscovery.EvaluatedCandidate;
 import com.aistudio.production.contract.ProductionDiscovery.Input;
 import com.aistudio.production.contract.ProductionDiscovery.Response;
 import com.aistudio.production.contract.ProductionStage;
+import com.aistudio.production.contract.RealMediaProfile;
 import com.aistudio.production.cost.ProductionCostMapper;
 import com.aistudio.production.cost.ProductionCostService;
 import com.aistudio.shared.api.ApiException;
@@ -145,6 +146,22 @@ class ProductionDiscoveryService implements DiscoveryExecutionPort {
 
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
+    public void applyWorker(StepOwner owner, long exchangeId, String body, String hash,
+            List<EvaluatedCandidate> evaluations) {
+        var request = lockOwned(owner, ProductionStage.DISCOVER);
+        if (!RealMediaProfile.PIPELINE.equals(request.pipelineVersion()) || request.cancelled()
+                || !CanonicalJson.sha256Hex(body).equals(hash)) {
+            throw invalid();
+        }
+        checkEvaluations(json.readValue(body, Response.class), evaluations);
+        if (batches.adoptWorker(owner.requestId(), exchangeId, body, hash,
+                json.writeValueAsString(evaluations)) != 1) {
+            throw invalid();
+        }
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
     public SelectionBatch lockForSelection(StepOwner owner) {
         var request = lockOwned(owner, ProductionStage.SELECT);
         if (request.cancelled() || request.spendingBlocked()) {
@@ -159,11 +176,11 @@ class ProductionDiscoveryService implements DiscoveryExecutionPort {
             throw invalid();
         }
         var generated = batches.generated(request.id());
-        if (generated == null || !cost.appliedDiscoveryReceipt(request.id(), generated.operationId(), generated.responseHash())) {
+        if (!accepted(request.id(), generated)) {
             throw invalid();
         }
         var evaluations = List.of(json.readValue(batch.evaluationJson(), EvaluatedCandidate[].class));
-        checkEvaluations(storedResponse(request.id(), generated.operationId(), generated.responseHash()), evaluations);
+        checkEvaluations(selectedResponse(request.id(), generated), evaluations);
         return new SelectionBatch(batch.selectionMode(), batch.version(), batch.chosenCandidateId(), evaluations, generated.responseHash());
     }
 
@@ -186,7 +203,7 @@ class ProductionDiscoveryService implements DiscoveryExecutionPort {
         }
         if (rechecked != null) {
             var generated = batches.generated(owner.requestId());
-            checkEvaluations(storedResponse(owner.requestId(), generated.operationId(), generated.responseHash()), rechecked);
+            checkEvaluations(selectedResponse(owner.requestId(), generated), rechecked);
         }
         var current = rechecked == null ? selection.candidates() : rechecked;
         var candidate = current.stream().filter(item -> item.candidateId() == candidateId
@@ -205,7 +222,7 @@ class ProductionDiscoveryService implements DiscoveryExecutionPort {
     public void invalidateManualChoice(StepOwner owner, int version, List<EvaluatedCandidate> evaluations) {
         var selection = lockForSelection(owner);
         var generated = batches.generated(owner.requestId());
-        checkEvaluations(storedResponse(owner.requestId(), generated.operationId(), generated.responseHash()), evaluations);
+        checkEvaluations(selectedResponse(owner.requestId(), generated), evaluations);
         if (selection.chosenCandidateId() == null || selection.version() != version
                 || evaluations.stream().noneMatch(item -> item.candidateId() == selection.chosenCandidateId()
                         && !selection.permitsManualChoice(item))
@@ -219,7 +236,7 @@ class ProductionDiscoveryService implements DiscoveryExecutionPort {
     public void recordExhaustedSelection(StepOwner owner, int version, List<EvaluatedCandidate> evaluations) {
         var selection = lockForSelection(owner);
         var generated = batches.generated(owner.requestId());
-        checkEvaluations(storedResponse(owner.requestId(), generated.operationId(), generated.responseHash()), evaluations);
+        checkEvaluations(selectedResponse(owner.requestId(), generated), evaluations);
         if (selection.mode() != ProductionDiscovery.Mode.AUTO || selection.version() != version
                 || evaluations.stream().anyMatch(EvaluatedCandidate::eligible)
                 || batches.exhaustSelection(owner.requestId(), version, json.writeValueAsString(evaluations)) != 1) {
@@ -230,7 +247,7 @@ class ProductionDiscoveryService implements DiscoveryExecutionPort {
     private ProductionCostMapper.Request lockOwned(StepOwner owner, ProductionStage expectedStage) {
         var request = requests.lockRequest(owner.requestId());
         var step = requests.step(owner.requestId(), owner.stepId());
-        if (request == null || !ProductionDiscovery.supportsPipeline(request.pipelineVersion())
+        if (request == null || !(ProductionDiscovery.supportsPipeline(request.pipelineVersion()) || RealMediaProfile.PIPELINE.equals(request.pipelineVersion()))
                 || step == null || step.stage() != expectedStage
                 || !requests.owns(owner.requestId(), owner.leaseOwner(), owner.leaseEpoch())) {
             throw invalid();
@@ -240,8 +257,22 @@ class ProductionDiscoveryService implements DiscoveryExecutionPort {
 
     private Response storedResponse(long requestId, long operationId, String hash) {
         var generated = batches.generated(requestId);
-        if (generated == null || generated.operationId() != operationId
+        if (generated == null || !Objects.equals(generated.operationId(), operationId)
                 || !generated.responseHash().equals(hash) || !CanonicalJson.sha256Hex(generated.responseJson()).equals(hash)) {
+            throw invalid();
+        }
+        return json.readValue(generated.responseJson(), Response.class);
+    }
+
+    private boolean accepted(long requestId, ProductionDiscoveryMapper.Generated generated) {
+        return generated != null && (generated.operationId() != null
+                ? cost.appliedDiscoveryReceipt(requestId, generated.operationId(), generated.responseHash())
+                : generated.workerExchangeId() != null && generated.workerApplied());
+    }
+
+    private Response selectedResponse(long requestId, ProductionDiscoveryMapper.Generated generated) {
+        if (!accepted(requestId, generated)
+                || !CanonicalJson.sha256Hex(generated.responseJson()).equals(generated.responseHash())) {
             throw invalid();
         }
         return json.readValue(generated.responseJson(), Response.class);

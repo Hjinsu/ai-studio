@@ -31,7 +31,7 @@ public final class PlanningJson {
     }
 
     public static boolean matches(ResultRef ref, long operationId, ProductionStage stage, String body) {
-        return ref != null && ref.operationId() == operationId && ref.stage() == stage
+        return ref != null && ref.operationId() != null && ref.operationId() == operationId && ref.stage() == stage
                 && matches(body, ref.bodyHash());
     }
 }
