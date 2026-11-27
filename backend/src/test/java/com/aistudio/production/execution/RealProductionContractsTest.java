@@ -54,7 +54,7 @@ class RealProductionContractsTest {
 
     @Test
     void publicationReplaysIdenticalBytesAndRejectsConflictingResult() throws IOException {
-        var files = new WorkerExchangeFiles(directory);
+        var files = new WorkerExchangeFiles(directory.toRealPath());
         var identity = identity(1);
         files.publish(WorkerExchangeFiles.Kind.RESULT, identity, "{}");
         files.publish(WorkerExchangeFiles.Kind.RESULT, identity, "{}");
