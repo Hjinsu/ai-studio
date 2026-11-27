@@ -16,7 +16,7 @@
 ## 인수인계 기록
 작업 ID / 상태 / 변경 파일 / 테스트 명령 및 실제 결과 / 미해결 문제 / 다음 작업 / 필요 환경변수. 커밋 해시는 생성된 경우만 기록.
 
-### V2-04-BLOCKING-FIXES — 독립 리뷰 B01·B02 수정 (2026-11-27 KST, IMPLEMENTED)
+### V2-04-BLOCKING-FIXES — 독립 리뷰 B01·B02 수정 (2026-11-27 KST, DONE)
 
 - Claude Code(Codex 사용량 제한으로 위임). 기준 `v2/04-integration` `b9669aae508c71fec7fabeefaab7d1adade09fe0`, 브랜치 `v2/04-blocking-fixes`. 상세·재현 명령: [수정 보고서](docs/reports/V2-04_BLOCKING_FIXES_REPORT.md).
 - B01: 예약+바인딩 커밋 후 발송 허가 전 중단 시 RECOVERY_REQUIRED 고착. `EffectStages`가 ACTIVE 바인딩 item을 execute로 재제시해 같은 operation·효과 키로 기존 permit이 단일 발송/미발송 종료/불명 유지를 판단한다. `ProductionCostService.recover`는 발송 금지 모드 permit으로 취소·기간 만료를 미발송 영수증으로 닫는다. B02: QC 3차 결과 커밋 후 성공 커밋 전 중단 시 `INTERRUPTED` 실패. `StepPlanner`가 영속 APPLIED 결과가 있는 중단 로컬 step을 시도 증가 없이 Recover하고, 기존 `verifyQc` 해시 재검증 뒤 기존 성공 트랜잭션으로 확정한다.
@@ -24,22 +24,22 @@
 - Migration·OpenAPI·공통 계약·scratch 보호 변경 없음. 사용자 DB·유료 호출·게시 없음. 미검증: OS 수준 JVM kill(영속 상태 기반 주입으로 대체, 보고서 §4), Linux 실행.
 - 잔여 B01(Codex 재검증 UNRESOLVED): fixture 준비 전에 fixture 없는 recover(may-not-send)로 취소·만료 미발송 예약을 먼저 종료하도록 `EffectStages`만 수정. 수정 전 신규 14건 중 8건 실패, 수정 후 집중·관련 통합 총 82·통과 81·SKIP 1, 단위 총 331·통과 328·SKIP 3(환경·OS 게이트). 보고서 §9.
 - Codex 최종 독립 검증 **APPROVE** (32bcff9f3995ed4c18b0145086400e95b71a548d). B01·B02 RESOLVED, 신규 BLOCKING 없음. 사용자가 검증 결과를 수용했고 v2/04-integration에 fast-forward로 통합했다.
-- 다음 작업은 최종 통합 HEAD의 CI 확인과 사용자 최종 병합 승인이다. 승인 후 v2/integration 병합 및 DONE 전환을 진행한다.
+- B01·B02 수정과 최종 독립 리뷰 APPROVE를 사용자 최종 인수에서 확인했다.
 
-### V2-04-INTEGRATION — 제품·안전성 결합 (2026-11-27 KST, IMPLEMENTED)
+### V2-04-INTEGRATION — 제품·안전성 결합 (2026-11-27 KST, DONE)
 
-- `v2/04-integration` / `../ai-studio-v2-04-integration`에 Safety `5c303a2aebe87222df6d2b5b8aad182cf70a0716`와 최신 Product `925d736225828c720f11bc95569f84a6a17165f3`를 결합했다. 병합 커밋 `c187b76e68e655a66278b6f2212cce928336c1c6`. Safety IMPLEMENTED, Product IMPLEMENTED.
+- `v2/04-integration` / `../ai-studio-v2-04-integration`에 Safety `5c303a2aebe87222df6d2b5b8aad182cf70a0716`와 최신 Product `925d736225828c720f11bc95569f84a6a17165f3`를 결합했다. 병합 커밋 `c187b76e68e655a66278b6f2212cce928336c1c6`. Safety IMPLEMENTED, Product DONE.
 - 충돌 해결, 제품 설정, 검증 절차, Windows Job 경계 테스트, V2-05·V2-06 요구사항과 전체 기술 결과를 [통합 보고서](docs/reports/V2-04_INTEGRATION_REPORT.md)에 기록했다. 기존 V13·OpenAPI·생성 타입은 공통 SHA와 일치하며 V13 적용은 격리 DB로 제한했다.
-- 최종 CI HEAD에서 다음 작업은 별도 세션의 독립 리뷰 1회다. 독립 리뷰 APPROVE와 사용자 최종 병합 승인이 남았다. Linux의 실제 배포 제품 렌더는 별도 검증이다.
+- 사용자 최종 인수 및 병합 승인에 따라 `fb0e004ba76becc41e78ca8aa6c34267b1046afa`를 `v2/integration`에 반영했다. 최종 독립 리뷰 APPROVE, B01·B02 RESOLVED, 신규 BLOCKING 없음. Linux의 실제 배포 제품 렌더와 B01·B02의 OS 수준 JVM 강제 종료는 미검증이다.
 
-### V2-04-SAFETY — Scratch 예약 및 정리 결함 (2026-11-27 KST, IMPLEMENTED)
+### V2-04-SAFETY — Scratch 예약 및 정리 결함 (2026-11-27 KST, DONE)
 
 - 사용자 승인 범위는 `v2/04-safety`의 scratch 예약·정리 수명주기다. 기준 Safety `59f22c8ab026029fe2a6c2eb20e2666f6c0a51ec`, Common `d7bec5f9aadcc423d7b2a987ac31d810367b4604`, Product `1c526763d3b14b5f5721bb451e2bc09c6f669a2a`.
 - `MediaProcessRunner`, `ProductionExecutor`, `MediaFlow`, `MediaAvailability`, `ProtectedMediaProcessRunner`, `MediaCleanup`에 단계 경계·활성 예약·검증된 scratch 정리를 연결했다. `PlanningExecutionIT`에 해시·삭제 실패·lease 보호·취소 시 증거 보존 회귀를 추가했다. 변경된 수명주기와 집중 검증은 [안전 보고서](docs/reports/V2-04_SAFETY_REPORT.md#scratch-예약-수명주기-수정-2026-11-27-kst)에 기록했다.
 - `gradlew.bat :backend:test :backend:integrationTest :backend:bootJar` 단위 298건, 격리 DB 통합 260건 통과. Windows Linux 전용 테스트와 기존 선택 Live Edge 테스트 각 1건 건너뜀. 16 GiB의 `S:/s/v204-verify`에서 제품 소스를 임시 조합한 최종 bootJar로 3개 채널의 영상 5편을 연속 제작했다. 요청 사이 수동 scratch 삭제 없이 5건 모두 11단계 첫 시도에 성공했다.
 - Migration 변경 없음. V13은 격리 MariaDB 11.8.2에만 적용했다. 다음 작업은 원격 safety HEAD 기준의 별도 독립 리뷰와 사용자 승인 범위의 제품 결합 검증이다.
 
-### V2-04-PRODUCT — 제품 기술 검증·사용자 인수 완료 (2026-11-27 KST, IMPLEMENTED)
+### V2-04-PRODUCT — 제품 기술 검증·사용자 인수 완료 (2026-11-27 KST, DONE)
 
 - Claude Code, 공통 SHA `d7bec5f9aadcc423d7b2a987ac31d810367b4604`, 브랜치 `v2/04-product`. 상세·재현: [진행 보고 §0](docs/reports/V2-04_PRODUCT_REPORT.md). 사용자 지시로 이 브랜치 STATE.md에 직접 기록(통합 시 정리).
 - 완료(체크포인트 `0920437`): `backend/.../production/media/product/`, 프런트 미디어 미리보기, fixture 생성기. 회사 PC 재개 세션에서 `frontend/e2e/live-media.mjs`(실제 앱 인수 스크립트, npm test 제외)를 추가했다. 제품 코드·공통 계약·migration·OpenAPI 변경 없음.
@@ -48,9 +48,9 @@
 - Scratch 누적 결함은 Safety 기준 SHA에서 해결했다. 제품 보고서 §0.5의 재현은 이력이다.
 - 사용자가 실제 MP4 두 편의 낭독·자막·배경음악·효과음과 자산 권리 근거를 모두 PASS로 확인했다. 정지 이미지 중심 표현은 V2-04 범위로 수용했고, 실제 움직임과 콘텐츠 재미 개선은 V2-05로 이관했다. Product `925d736225828c720f11bc95569f84a6a17165f3`. [Claude 제품 보고서 §0.6](https://github.com/Hjinsu/ai-studio/blob/925d736225828c720f11bc95569f84a6a17165f3/docs/reports/V2-04_PRODUCT_REPORT.md#06-기술-qc와-사용자-확인-2026-11-27-kst)
 - 후속(범위 밖): V2-05 IMAGE_TO_VIDEO·TEXT_TO_VIDEO 검토, V2-06 AI 콘텐츠 고지·실제 게시 정책 검증. 실제 게시·유료 API 호출 미승인.
-- 다음 작업은 통합 SHA의 CI와 단일 독립 리뷰다. 독립 리뷰 APPROVE 및 사용자 최종 병합 승인 후 기존 통합 브랜치 병합을 판단한다.
+- 통합 SHA의 CI와 최종 독립 리뷰를 통과했고 사용자 최종 병합 승인에 따라 종료했다.
 
-### V2-04-COMMON — 공통 계약 구현 (2026-11-27 KST, IMPLEMENTED)
+### V2-04-COMMON — 공통 계약 구현 (2026-11-27 KST, DONE)
 
 - 사용자 착수 승인 기준 `715893fa47a955be399492ddc362b169b528dae3`, 설계 승인 `18c9b9484d6bc6637252732adb0063e7808ca960`, Codex `v2/04-common` / `../ai-studio-v2-04-common`. 공통 검증 커밋은 `origin/v2/04-common`에서 확인한다.
 - V13 및 격리 스키마 테스트, 캐릭터 없는 PROFILE snapshot, 미디어 port·저장·실행/정산·복구, Windows Job Object, HTTP Range 및 OpenAPI 생성 타입을 추가했다. 주요 경로는 `backend/src/main/java/com/aistudio/production/{api,contract,cost,execution,media,planning}`, 신규 migration 및 권한 템플릿, `docs/api/openapi.yaml`, `frontend/src/api/generated/schema.d.ts`, 대응 테스트다. 미디어 기능은 기본 비활성이다.
