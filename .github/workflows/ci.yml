@@ -79,7 +79,8 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run typecheck
-      - run: npm test
+      # Keep UI waits stable when jsdom suites share the hosted runner.
+      - run: npm test -- --maxWorkers=2
       - run: npm run build
 
   # 브라우저 E2E(Playwright, API는 브라우저 네트워크 계층 대역 — 백엔드·DB·유료 호출 없음).

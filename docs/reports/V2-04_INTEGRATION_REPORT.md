@@ -10,7 +10,7 @@
 ## 통합 검증
 
 - Windows Java 21과 격리 MariaDB 11.8.2에서 `gradlew.bat :backend:test :backend:integrationTest :backend:bootJar`를 실행했다. 통합 262건과 bootJar가 통과했다. Windows 집중 테스트 추가 후 실제 fixture를 유지한 최종 단위 전체 재실행은 328건 통과다. Windows에서 Linux 전용 단위 1건과 선택형 Live Edge 통합 1건이 건너뛰어졌다. fixture 경로 환경변수를 지정해 `ProductMediaIT` 2건과 실제 FFmpeg 검증이 실행됐다. 비용 원장, 단일 정산, 취소·lease 만료·복구 및 V13 격리 마이그레이션 회귀가 포함된다. `AdminCliJarIT`에서 실제 jar의 비대화형 관리자 CLI 종료 코드 2를 확인했다. 앱 E2E 계정은 격리 DB에 직접 생성했다.
-- 프런트는 lint·typecheck·build 통과. 백엔드 fixture 렌더와 동시에 돌린 첫 Vitest에서 계획 화면 대기 1건이 실패했다. 전체 `npm test -- --maxWorkers=2` 재실행은 102건 통과. OpenAPI lint와 생성 타입 검사 통과. 기존 경고는 CSRF GET 4XX와 미사용 PageMeta 두 건이다.
+- 프런트는 lint·typecheck·build 통과. 백엔드 fixture 렌더와 동시에 돌린 첫 Vitest에서 계획 화면 대기 1건이 실패했다. 전체 `npm test -- --maxWorkers=2` 재실행은 102건 통과. Ubuntu CI에서도 다른 기존 UI 테스트가 렌더 대기 중 실패해 CI의 jsdom 병렬도를 두 worker로 고정했다. 테스트 범위와 제한 시간은 유지했다. OpenAPI lint와 생성 타입 검사 통과. 기존 경고는 CSRF GET 4XX와 미사용 PageMeta 두 건이다.
 - 실제 bootJar·Vite·Edge로 16 GiB `S:/s` 볼륨의 전용 테스트 하위 경로에서 요청 3·7·8·9·13을 순서대로 제작했다. 3개 채널, 5편, 55단계 모두 첫 시도에 성공했다. MP4 재생·seek·다운로드 SHA, 자막 다운로드, 라이트·다크·모바일을 확인했다. 수동 scratch 삭제 없이 각 배치 종료 후 scratch 폴더는 0개이고 가용 공간은 동일했다.
 - Windows Job 집중 테스트 6건 통과. 외부 Job이 테스트 JVM 한 개만 허용할 때 자식 생성이 거절됐다. Job의 3 GiB 제한을 조회한 뒤 그보다 큰 단일 메모리 commit이 거절되는 것을 확인했다. 페이지에 데이터를 쓰지 않았다. 운영 보호 코드 변경 없이 테스트를 추가했다.
 - 실제 앱에만 worker 2개를 설정했다. 요청 14와 16이 서로 다른 유효 lease 및 scratch를 동시에 보유했다. 첫 완료 뒤 다음 요청의 활성 scratch가 유지됐고 libx264 인코더는 최대 1개였다. 동시 로그인 시 같은 계정의 요청 하나가 429로 거절돼 별도의 격리 계정을 사용했다. 두 요청의 브라우저 검증이 통과했다.
