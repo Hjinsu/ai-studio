@@ -9,7 +9,7 @@
 | D01 | `ProductionRequestService`가 mediaEnabled로 `MediaProfile.PIPELINE`(v2-media-1)을 선택. `ExecutionMapper`, V13, 비용·계획·자산 매퍼도 literal 사용 | 새 요청만 v2-media-2, 실제 활성화는 서버 설정과 채널 허용을 모두 확인. 공통 버전 판별과 SQL/트리거 허용 범위를 함께 수정. 기존 기본 opt-in과 기존 요청은 현행 동작 유지 |
 | D02 | 후보·데이터 보존 제한은 [공급자 조사](06_AI_PROVIDER_AND_PRICING.md)에서 재사용 | [공식 문서 확인 및 스파이크](V2-05_PROVIDER_SPIKE.md) 적용. 공개 요금과 계정별 청구 증거를 별도로 확인 |
 | D03 | `Channel.language` BCP 47 검증, 요청 생성 시 discovery와 media profile에 locale snapshot, 선택 서비스에서 revision 언어 전달. `DiscoveryProvider`, `PlanningProvider`, `ResearchEvidenceProvider`, `ScriptReview`, V12 단계 결과 재사용 | IFNOVA 채널 ko-KR 설정. 새 프로필에 모델, voice, 발음·프롬프트 버전 고정. 조사 원문 보존권과 claim 근거 검증, 의미 중복/사실 확인은 사람 인수에 전달. 공급자별 한국어 출력 품질 검증 |
-| D04 | IMAGE → TTS 고정. IMAGE 장면별 item과 순서 보장 | IMAGE root에 이미지 및 영상 하위 효과. I2V의 부모 이미지를 먼저 확정. T2V는 부모 없이 시작. 절차적 렌더는 허용 프리셋의 로컬 산출물. 실측 음성 이후 유료 호출 없이 trim/pad 범위에서 맞추고 불일치는 보류 |
+| D04 | IMAGE → TTS 고정. IMAGE 장면별 item과 순서 보장 | SCENES 후보와 기존 미디어 계획에서 장면별 적합성과 가격을 검증. IMAGE root에 이미지 및 영상 하위 효과. I2V의 부모 이미지를 먼저 확정. T2V는 부모 없이 시작. 절차적 렌더는 허용 프리셋의 로컬 산출물. 실측 음성 이후 유료 호출 없이 trim/pad 범위에서 맞추고 불일치는 보류 |
 | D05 | `ProductionCostService`, `ProductionCostMapper`, `BudgetControlLock`, request limit snapshot, 요청·일·월 한도 및 원장 재사용 | IFNOVA 새 실제 요청은 활성 한도와 3,000원 중 낮은 값. 가격·환율·세금·수수료 최대치와 원통화 증거를 함께 동결. 초과 또는 청구 귀속 불명은 추가 지출 차단 |
 | D06 | `ProductionCostPort.PricedRequest`는 fakeScenario, `MediaEffectPort.FakeProvider`는 즉시 proof+payload 반환. 기존 park는 불명 회복용 | 실제 어댑터의 typed submit/poll/download/cancel 및 청구 확인. job ID 기반 대기는 불명 응답과 구별. 같은 효과 재발송 금지 |
 | D07 | V9 operation, V12 결과, V13 media item/asset. V13 role/kind/trigger와 mapper가 고정 | 아래 V14 제안. 기존 proof·receipt와 제출 증거의 소유권 유지 |
@@ -21,6 +21,13 @@
 | D13 | V2-04 공통 SHA 이후 분리 worktree와 독립 리뷰 방식 재사용 | 아래 담당·의존성 적용. 공통 계약에서 제품 구현 시작점 고정 |
 
 기존 결정은 ADR-017/026의 원자 예약, ADR-027/030의 환율·정밀도, ADR-028의 정산과 과금 불명 유지, ADR-061/076의 실제 지출 게이트, ADR-070/071의 잠금·단일 발송, ADR-002의 승인 해시 계약을 적용한다. [DECISIONS](../../DECISIONS.md) v2-media-2, V14, 제출·조회 분리는 승인 대기 제안이다. 이동 순서, 별도 작업 큐, 12번째 단계는 초기 범위에서 제외한다.
+
+## SCENES와 발송 전 계획 검증
+
+- V12 SCENES JSON에 장면 목적·서사 중요도·길이·피사체 운동·시각 개그/반전 의도와 미디어/모델 후보·저비용 대안을 추가한다. `ScenesReview`의 순서·coverage 검증을 재사용하고 서버 가격표로 후보별 예상액과 최대 청구액을 결정한다. AI 제공 금액과 예산 변경 요청은 발송 입력으로 받아들이지 않는다.
+- 후보의 청구 최소 단위, 공급자 생성 길이/해상도, 시작 이미지 등 선행 비용, 환율, 실패·취소·재생성 노출액을 반영한다. 현재 원장의 인식액에 미인식 활성 예약 및 미확정 노출액을 중복 없이 더하고 남은 계획을 평가한다. 청구액을 입증할 수 없는 후보는 제외하고 기존 불명 operation은 차단 상태를 유지한다.
+- 적합한 우선안을 먼저 평가하고 예산 부족 시 서사상 덜 중요한 미발송 장면의 대안을 먼저 검토한다. 핵심 사건·과학 사실·운동 요구·개그와 타임라인 coverage를 유지하는 완성안만 채택한다. 적합안이 없으면 기존 요청 상세에 보류 사유를 전달한다. 장면 수·길이·미디어 비율·공급자 배정에 고정 목표를 두지 않는다.
+- 발송 전 최신 예산·lease를 기존 예약/permit에서 재검증한다. 이미 바인딩된 효과는 기존 복구·정산을 먼저 처리한다. 불변 입력을 새 계획으로 덮어쓰는 대신 미발송 후보를 비교하고 기존 계약에서 새 입력·세대를 허용할 때만 채택한다. 기존 SCENES 및 미디어 실행 흐름 안에서 처리한다.
 
 ## 저장 및 상태 전이
 

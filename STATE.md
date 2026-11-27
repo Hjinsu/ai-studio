@@ -23,6 +23,8 @@
 - 검증: Git 원격 SHA·조상 확인, staged diff check 및 Gitleaks. 제품 테스트 미실행, Migration 생성·적용 없음. 실제 청구·공급자 장애 복구·Linux 제품 경로는 미검증이다.
 - 다음: 사용자 설계 승인과 구현 배정 후 공통 브랜치에서 모의 공급자와 격리 MariaDB 검증을 착수한다. 실제 호출은 공급자·SKU·권리·최대 지출을 별도 승인받은 스파이크로 한정한다.
 
+- 동적 연출 후속 설계는 `v2/05-design`의 `9e94a28ed0b4441f67954bc6e222700f8bb16b38`에서 시작했다. 상세 계획·저장소 대조·공급자 스파이크·IFNOVA·기존 공급자 조사·DECISIONS·STATE를 갱신했다. 문서 검증은 변경 범위·로컬 링크·staged diff check·Gitleaks로 수행하며 제품 테스트 및 Migration 실행은 범위 밖이다. 다음은 설계 검토와 구현 및 유료 실험의 별도 승인이다.
+
 ### V2-04-BLOCKING-FIXES — 독립 리뷰 B01·B02 수정 (2026-11-27 KST, DONE)
 
 - Claude Code(Codex 사용량 제한으로 위임). 기준 `v2/04-integration` `b9669aae508c71fec7fabeefaab7d1adade09fe0`, 브랜치 `v2/04-blocking-fixes`. 상세·재현 명령: [수정 보고서](docs/reports/V2-04_BLOCKING_FIXES_REPORT.md).
