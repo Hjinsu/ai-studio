@@ -29,6 +29,10 @@
 
 - 사용자 수용 설계 `5d6fa55ffafa09dc29b33950bdffe7c6ac64700d`의 [Claude S0~S4 인수인계](docs/v2/V2-05_SPIKE_CLAUDE_HANDOFF.md)를 문서로 작성했다. 다음 작업은 Claude의 무과금 S0다. 유료 S1~S4는 별도 승인 대기이며 공통 계약·제품은 결과와 최종 설계 승인 이후 착수한다. 제품 테스트 및 Migration 실행 없음.
 
+- 구독 기반 외부 AI Worker를 별도 검증 작업으로 검토했다. 기준 `45398488236427d84c49397a4ba235c1babe045b`. [검토 보고](docs/v2/V2-05_EXTERNAL_AI_WORKER_REVIEW.md)에 공식 조건, 기존 단계 통합, 운영 복구와 S1 대체 범위를 기록했다. 설계는 PROPOSED. 다음은 허용 범위 확인과 별도 작업 승인이다. 제품 테스트·CLI 모델 호출·DB 변경 없음. 기존 상세 설계 파일의 로컬 삭제 상태는 보존했다.
+
+- 외부 Worker의 별도 검증 방향 수용을 [검증 계획서](docs/v2/V2-05_EXTERNAL_AI_WORKER_VALIDATION_PLAN.md)에 기록했다. 로컬·원격 설계 SHA와 Claude 스파이크 SHA가 각각 일치하며, 기존 설계 파일은 양쪽 커밋에 있고 로컬 미스테이지 삭제만 확인했다. 다음은 별도 작업 배정과 W01 공식 조건 확인이다. 제품·DB·스케줄러 변경, CLI 호출, 무인 실행 및 파일 복구 없음.
+
 ### V2-04-BLOCKING-FIXES — 독립 리뷰 B01·B02 수정 (2026-11-27 KST, DONE)
 
 - Claude Code(Codex 사용량 제한으로 위임). 기준 `v2/04-integration` `b9669aae508c71fec7fabeefaab7d1adade09fe0`, 브랜치 `v2/04-blocking-fixes`. 상세·재현 명령: [수정 보고서](docs/reports/V2-04_BLOCKING_FIXES_REPORT.md).
