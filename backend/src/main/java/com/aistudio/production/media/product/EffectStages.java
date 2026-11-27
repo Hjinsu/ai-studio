@@ -60,16 +60,21 @@ class EffectStages {
                 return new Result(Outcome.RETRY, "MEDIA_CANCELLED");
             }
             var key = new MediaEffectPort.Item(context.owner(), item.id());
-            ProductionCostPort.EffectResult result;
+            ProductionCostPort.EffectResult result = null;
             AtomicReference<String> failure = new AtomicReference<>();
-            // B01: an ACTIVE item already bound to an operation may hold a reservation that was never dispatched
-            // (stop between the reservation and the dispatch permit). It is presented again through execute, which
-            // reuses the same effect key and operation; the shared permit then dispatches it at most once, closes
-            // it as not executed on cancel or budget period end, and only replays an operation already dispatched.
-            // Items past the execution proof are only recovered, never re-sent.
-            if (item.operationId() != null && !"ACTIVE".equals(item.state())) {
+            // B01: an item bound to an operation is first presented through recover, which never sends and needs no
+            // fixture: stored evidence or a stored receipt is replayed, and an undispatched reservation of a
+            // cancelled request or an ended budget period closes as NOT_EXECUTED with its reservation returned.
+            // Only an ACTIVE item whose operation recover left sendable (a reservation that was never dispatched,
+            // stopped before its dispatch permit) is then prepared and presented again through execute. That reuses
+            // the same effect key and operation, and the shared permit re-checks cancel, period, lease and fencing:
+            // it dispatches at most once and never re-sends an operation already dispatched or unknown. Items past
+            // the execution proof are only recovered.
+            if (item.operationId() != null) {
                 result = effects.recover(key);
-            } else {
+            }
+            if (result == null || ("ACTIVE".equals(item.state())
+                    && result.disposition() == ProductionCostPort.Disposition.RECOVERY_REQUIRED)) {
                 var input = support.input(context, item);
                 if (input.scene() == null) {
                     throw MediaFailure.blocked("MEDIA_INPUT_INTEGRITY", "Scene input is missing");

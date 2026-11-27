@@ -106,9 +106,28 @@ class ProductMediaIT {
             String font = System.getenv("AI_STUDIO_TEST_FONT");
             registry.add("ai-studio.production.media.font-path", () -> font);
             registry.add("ai-studio.production.media.font-sha256", () -> sha256(Path.of(font)));
-            registry.add("ai-studio.production.media.product.fixture-root", () -> System.getenv("AI_STUDIO_TEST_FIXTURE_ROOT"));
+            // A private copy, so a test can remove or damage fixture files without touching the rights-checked set.
+            Path fixtures = Files.createTempDirectory("ai-studio-it-fixtures-").toRealPath();
+            copyTree(Path.of(System.getenv("AI_STUDIO_TEST_FIXTURE_ROOT")), fixtures);
+            FIXTURES = fixtures;
+            registry.add("ai-studio.production.media.product.fixture-root", fixtures::toString);
         } catch (IOException ex) {
             throw new UncheckedIOException(ex);
+        }
+    }
+
+    static Path FIXTURES;
+
+    static void copyTree(Path source, Path target) throws IOException {
+        try (var paths = Files.walk(source)) {
+            for (Path path : (Iterable<Path>) paths::iterator) {
+                Path to = target.resolve(source.relativize(path).toString());
+                if (Files.isDirectory(path)) {
+                    Files.createDirectories(to);
+                } else {
+                    Files.copy(path, to, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                }
+            }
         }
     }
 
@@ -583,6 +602,199 @@ class ProductMediaIT {
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).path("status").asString())
                 .startsWith("PASS");
         assertThat(executor.runOnce("late-worker")).isFalse();
+    }
+
+    // ------------------------------------------------------------------ B01 residual: closing before fixtures
+
+    enum Damage { MISSING, DAMAGED }
+
+    @org.junit.jupiter.api.AfterEach
+    void restoreFixtures() throws IOException {
+        copyTree(Path.of(System.getenv("AI_STUDIO_TEST_FIXTURE_ROOT")), FIXTURES);
+    }
+
+    /** Removes or overwrites every fixture file of the Venus topic used by {@code stage}. */
+    void breakFixtures(String stage, Damage damage) throws IOException {
+        Path dir = FIXTURES.resolve("ifnova-v204-1").resolve(stage.equals("IMAGE") ? "images" : "audio");
+        String prefix = stage.equals("IMAGE") ? "venus-" : "venus-day-";
+        int changed = 0;
+        try (var files = Files.list(dir)) {
+            for (Path file : files.filter(f -> f.getFileName().toString().startsWith(prefix)).toList()) {
+                if (damage == Damage.MISSING) {
+                    Files.delete(file);
+                } else {
+                    Files.write(file, "damaged fixture".getBytes(StandardCharsets.UTF_8));
+                }
+                changed++;
+            }
+        }
+        assertThat(changed).isEqualTo(3);
+    }
+
+    void endBudgetPeriod(long operation) {
+        assertThat(root().update("""
+                UPDATE budget_bucket b JOIN budget_reservation_bucket rb ON rb.bucket_id = b.id
+                JOIN budget_policy p ON p.id = b.policy_id
+                SET b.period_end = b.period_start + INTERVAL 1 MICROSECOND
+                WHERE rb.reservation_id = (SELECT reservation_id FROM provider_operation WHERE id = ?)
+                  AND p.scope = 'CHANNEL' AND p.channel_id = ?
+                """, operation, channel)).isEqualTo(1);
+    }
+
+    void channelDayPolicy() {
+        policies.create("CHANNEL", channel, null, "DAY", new BigDecimal("1000"), "UTC", null, Actor.admin(admin.id()));
+    }
+
+    String requestStatus(long id) {
+        return jdbc.queryForObject("SELECT status FROM production_request WHERE id = ?", String.class, id);
+    }
+
+    java.util.Map<String, Object> operationState(long operation) {
+        return jdbc.queryForMap("""
+                SELECT o.status, o.receipt_outcome, o.receipt_event_id, IF(o.dispatched_at IS NULL, 'yes', 'no') AS never_sent,
+                       IF(o.applied_at IS NOT NULL, 'yes', 'no') AS applied, r.status AS reservation_status,
+                       IF(r.reserved_remaining_krw = 0 AND r.recognized_cost_krw = 0, 'yes', 'no') AS returned
+                FROM provider_operation o JOIN budget_reservation r ON r.id = o.reservation_id WHERE o.id = ?
+                """, operation);
+    }
+
+    void assertClosedWithoutDispatch(long operation) {
+        assertThat(operationState(operation)).containsEntry("status", "SETTLED")
+                .containsEntry("receipt_outcome", "NOT_EXECUTED").containsEntry("never_sent", "yes")
+                .containsEntry("applied", "yes").containsEntry("reservation_status", "RELEASED")
+                .containsEntry("returned", "yes");
+        assertThat(settlements(operation)).isEqualTo(1);
+    }
+
+    void assertNoProviderExecution(long id, long step) {
+        assertThat(jdbc.queryForObject("""
+                SELECT COUNT(*) FROM provider_operation WHERE production_request_id = ? AND production_step_id = ?
+                  AND dispatched_at IS NOT NULL
+                """, Integer.class, id, step)).isZero();
+        assertThat(jdbc.queryForObject("""
+                SELECT COUNT(*) FROM production_media_item WHERE production_request_id = ? AND production_step_id = ?
+                  AND execution_proof_sha256 IS NOT NULL
+                """, Integer.class, id, step)).isZero();
+    }
+
+    void assertStaleWorkerRejected(long id, long[] stopped) {
+        var stale = new com.aistudio.production.contract.ProductionCostPort.StepOwner(id, stopped[2], "stopped-worker",
+                stopped[3]);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> mediaEffects.execute(
+                new com.aistudio.production.contract.MediaEffectPort.Item(stale, stopped[0]), BigDecimal.ONE, op -> {
+                    throw new AssertionError("a stale worker must not reach the provider");
+                })).isInstanceOf(com.aistudio.shared.api.ApiException.class);
+    }
+
+    void restartAgain(long id) {
+        root().update("UPDATE production_request SET lease_owner = NULL, lease_until = NULL WHERE id = ?", id);
+        jdbc.update("UPDATE production_step SET retry_at = UTC_TIMESTAMP(6) - INTERVAL 1 SECOND "
+                + "WHERE production_request_id = ? AND retry_at IS NOT NULL", id);
+        DiscoveryExecutionIT.drain(executor, "media-it-again");
+    }
+
+    @ParameterizedTest
+    @CsvSource({ "IMAGE, EXPIRED, MISSING", "IMAGE, EXPIRED, DAMAGED", "IMAGE, CANCELLED, MISSING",
+        "IMAGE, CANCELLED, DAMAGED", "TTS, EXPIRED, MISSING", "TTS, EXPIRED, DAMAGED", "TTS, CANCELLED, MISSING",
+        "TTS, CANCELLED, DAMAGED" })
+    void endedUndispatchedReservationClosesWithoutDispatchWhateverTheFixtureState(String stage, String ending,
+            Damage damage) throws Exception {
+        if (ending.equals("EXPIRED")) {
+            channelDayPolicy();
+        }
+        discover(VENUS);
+        long id = create();
+        long[] stopped = stopAfterReservation(id, stage);
+        if (ending.equals("EXPIRED")) {
+            endBudgetPeriod(stopped[1]);
+        } else {
+            jdbc.update("UPDATE production_request SET cancel_requested_at = UTC_TIMESTAMP(6) WHERE id = ?", id);
+        }
+        breakFixtures(stage, damage);
+
+        run(id); // new worker and lease epoch, product EffectStages
+        assertThat(requestStatus(id)).as(describe(id)).isEqualTo(ending.equals("EXPIRED") ? "FAILED" : "CANCELLED");
+        assertClosedWithoutDispatch(stopped[1]);
+        assertNoProviderExecution(id, stopped[2]);
+        Object receipt = operationState(stopped[1]).get("receipt_event_id");
+
+        restartAgain(id); // repeated recovery: no second receipt or settlement
+        assertThat(operationState(stopped[1])).containsEntry("receipt_event_id", receipt);
+        assertClosedWithoutDispatch(stopped[1]);
+        assertStaleWorkerRejected(id, stopped);
+        assertThat(settlements(stopped[1])).isEqualTo(1);
+    }
+
+    @ParameterizedTest
+    @CsvSource({ "IMAGE, MISSING", "IMAGE, DAMAGED", "TTS, MISSING", "TTS, DAMAGED" })
+    void validReservationWithBrokenFixtureIsNotSentAndClosesWhenItsPeriodLaterEnds(String stage, Damage damage)
+            throws Exception {
+        channelDayPolicy();
+        discover(VENUS);
+        long id = create();
+        long[] stopped = stopAfterReservation(id, stage);
+        breakFixtures(stage, damage);
+
+        run(id);
+        assertThat(requestStatus(id)).as(describe(id)).isEqualTo("RECOVERY_REQUIRED");
+        assertThat(operationState(stopped[1])).containsEntry("status", "RESERVED").containsEntry("never_sent", "yes")
+                .containsEntry("reservation_status", "ACTIVE");
+        assertNoProviderExecution(id, stopped[2]);
+        assertThat(settlements(stopped[1])).isZero();
+
+        endBudgetPeriod(stopped[1]);
+        restartAgain(id);
+        assertThat(requestStatus(id)).as(describe(id)).isEqualTo("FAILED");
+        assertClosedWithoutDispatch(stopped[1]);
+        assertNoProviderExecution(id, stopped[2]);
+        restartAgain(id);
+        assertClosedWithoutDispatch(stopped[1]);
+        assertStaleWorkerRejected(id, stopped);
+    }
+
+    @ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = { "IMAGE", "TTS" })
+    void dispatchedOperationWithoutEvidenceIsNeverResentWhateverTheFixtureState(String stage) throws Exception {
+        discover(VENUS);
+        long id = create();
+        var root = root();
+        root.execute("""
+                CREATE TRIGGER it_product_b01_lost_proof BEFORE UPDATE ON production_media_item FOR EACH ROW
+                BEGIN
+                    IF NEW.production_request_id = %d AND NEW.kind = '%s' AND NEW.state = 'PROVEN' THEN
+                        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'IT stop after dispatch before the proof';
+                    END IF;
+                END
+                """.formatted(id, stage));
+        try {
+            DiscoveryExecutionIT.drain(executor, "media-it");
+        } finally {
+            root.execute("DROP TRIGGER it_product_b01_lost_proof");
+        }
+        assertThat(requestStatus(id)).as(describe(id)).isEqualTo("RECOVERY_REQUIRED");
+        var sent = jdbc.queryForMap("""
+                SELECT i.id AS item_id, o.id AS operation_id, s.id AS step_id, r.lease_epoch
+                FROM production_media_item i JOIN provider_operation o ON o.id = i.operation_id
+                JOIN production_step s ON s.id = i.production_step_id
+                JOIN production_request r ON r.id = i.production_request_id
+                WHERE i.production_request_id = ? AND i.kind = ? AND o.dispatched_at IS NOT NULL
+                """, id, stage);
+        long operation = ((Number) sent.get("operation_id")).longValue();
+        long step = ((Number) sent.get("step_id")).longValue();
+        assertThat(operationState(operation)).containsEntry("status", "UNKNOWN").containsEntry("never_sent", "no");
+
+        breakFixtures(stage, Damage.DAMAGED);
+        restartAgain(id);
+        restoreFixtures();
+        restartAgain(id);
+        assertThat(requestStatus(id)).as(describe(id)).isEqualTo("RECOVERY_REQUIRED");
+        assertThat(operationState(operation)).containsEntry("status", "UNKNOWN").containsEntry("reservation_status", "ACTIVE");
+        assertThat(jdbc.queryForObject("""
+                SELECT COUNT(*) FROM provider_operation WHERE production_request_id = ? AND production_step_id = ?
+                """, Integer.class, id, step)).as("no further operation for the step").isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT execution_proof_sha256 FROM production_media_item WHERE id = ?",
+                String.class, ((Number) sent.get("item_id")).longValue())).isNull();
+        assertThat(settlements(operation)).isZero();
     }
 
     static String sha256(byte[] bytes) {

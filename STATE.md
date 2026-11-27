@@ -20,9 +20,10 @@
 
 - Claude Code(Codex 사용량 제한으로 위임). 기준 `v2/04-integration` `b9669aae508c71fec7fabeefaab7d1adade09fe0`, 브랜치 `v2/04-blocking-fixes`. 상세·재현 명령: [수정 보고서](docs/reports/V2-04_BLOCKING_FIXES_REPORT.md).
 - B01: 예약+바인딩 커밋 후 발송 허가 전 중단 시 RECOVERY_REQUIRED 고착. `EffectStages`가 ACTIVE 바인딩 item을 execute로 재제시해 같은 operation·효과 키로 기존 permit이 단일 발송/미발송 종료/불명 유지를 판단한다. `ProductionCostService.recover`는 발송 금지 모드 permit으로 취소·기간 만료를 미발송 영수증으로 닫는다. B02: QC 3차 결과 커밋 후 성공 커밋 전 중단 시 `INTERRUPTED` 실패. `StepPlanner`가 영속 APPLIED 결과가 있는 중단 로컬 step을 시도 증가 없이 Recover하고, 기존 `verifyQc` 해시 재검증 뒤 기존 성공 트랜잭션으로 확정한다.
-- 테스트: 수정 전 기준 SHA에서 새 테스트 8건 실패 재현. 수정 후 `--rerun-tasks` 단위 331(건너뜀 1 Linux 전용), 격리 MariaDB 11.8.2·FFmpeg 9.1 통합 277(건너뜀 1 기존 liveEdge 게이트), 실패 0, bootJar 성공. diff --check·변경 파일 Gitleaks 통과.
+- 테스트: 수정 전 기준 SHA에서 새 테스트 8건 실패 재현. 수정 후 `--rerun-tasks` 단위 총 331·통과 330·실패 0·SKIP 1(Linux 전용), 격리 MariaDB 11.8.2·FFmpeg 9.1 통합 총 277·통과 276·실패 0·SKIP 1(기존 liveEdge 게이트), bootJar 성공. diff --check·변경 파일 Gitleaks 통과.
 - Migration·OpenAPI·공통 계약·scratch 보호 변경 없음. 사용자 DB·유료 호출·게시 없음. 미검증: OS 수준 JVM kill(영속 상태 기반 주입으로 대체, 보고서 §4), Linux 실행.
-- 다음 작업: Codex의 B01·B02 집중 검증(보고서 §6·§7). 통합 브랜치 병합은 사용자 승인 후.
+- 잔여 B01(Codex 재검증 UNRESOLVED): fixture 준비 전에 fixture 없는 recover(may-not-send)로 취소·만료 미발송 예약을 먼저 종료하도록 `EffectStages`만 수정. 수정 전 신규 14건 중 8건 실패, 수정 후 집중·관련 통합 총 82·통과 81·SKIP 1, 단위 총 331·통과 328·SKIP 3(환경·OS 게이트). 보고서 §9.
+- 다음 작업: Codex의 잔여 B01 집중 검증(보고서 §9). 통합 브랜치 병합은 사용자 승인 후.
 
 ### V2-04-INTEGRATION — 제품·안전성 결합 (2026-11-27 KST, IMPLEMENTED)
 

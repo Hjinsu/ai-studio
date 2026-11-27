@@ -91,8 +91,38 @@ AI_STUDIO_TEST_FONT=<root>/downloads/font/NotoSansKR-Bold.otf \
 
 ## 8. 회귀 결과와 미검증
 
-- `gradlew.bat --no-build-cache --continue :backend:test :backend:integrationTest :backend:bootJar --rerun-tasks`(격리 MariaDB 11.8.2, FFmpeg 9.1 gyan full_build, 권리 확인된 `ifnova-v204-1` fixture, Noto Sans KR): **BUILD SUCCESSFUL**. 단위 331건(실패 0, 건너뜀 1: Windows의 `LinuxMediaProcessTest`), 통합 277건(실패 0, 건너뜀 1: 기존 환경 게이트 `liveEdgeConnectsTheFrontendToTheActualServer`), bootJar 생성. 기존 두 소재 실제 MP4 제작 IT(`producesAQcPassedShort...`)도 함께 통과.
+- `gradlew.bat --no-build-cache --continue :backend:test :backend:integrationTest :backend:bootJar --rerun-tasks`(격리 MariaDB 11.8.2, FFmpeg 9.1 gyan full_build, 권리 확인된 `ifnova-v204-1` fixture, Noto Sans KR): **BUILD SUCCESSFUL**. 단위 총 331·통과 330·실패 0·SKIP 1(Windows의 `LinuxMediaProcessTest`), 통합 총 277·통과 276·실패 0·SKIP 1(기존 환경 게이트 `liveEdgeConnectsTheFrontendToTheActualServer`), bootJar 생성. 기존 두 소재 실제 MP4 제작 IT(`producesAQcPassedShort...`)도 함께 통과.
 - 기존 단위 테스트 `MediaStagesTest#itemsWithAnOperationAreOnlyRecovered`는 B01의 결함 동작(ACTIVE+operation → recover만)을 고정하고 있어, `PROVEN` item은 recover만(`itemsPastTheExecutionProofAreOnlyRecovered`), `ACTIVE` 바인딩 item은 공유 port에 재제시(`boundItemsBeforeTheExecutionProofArePresentedAgainToTheSharedPort`)로 나눠 갱신했다.
-- `git diff --check` 통과. 변경 파일 Gitleaks(dir) no leaks. 저장소 전체 dir 스캔의 1건은 미변경 `BudgetMapper.java`의 SQL `subject_key` 기존 오탐이다.
+- `git diff --check` 통과. 변경 파일 Gitleaks(dir) no leaks. 저장소 전체 dir 스캔의 1건은 미변경 `BudgetMapper.java`의 SQL 컬럼명 기존 오탐으로 Codex가 확인했다.
 - 프런트엔드·OpenAPI는 변경이 없어 재실행하지 않았다.
 - 미검증: 실제 OS 수준 JVM kill 경계(§4 한계), Linux 실행(기존 안전 차단 상태), 실제 유료 공급자. 기존 NON_BLOCKING 리뷰 항목은 범위 밖이다.
+
+## 9. B01 잔여 결함 수정 (Codex 재검증 UNRESOLVED, 기준 `7e99d90f9b9daa18b89d01d9608823c58f25a0eb`)
+
+**원인.** `7e99d90`의 `EffectStages`는 ACTIVE 바인딩 item을 바로 execute 경로로 보냈다. 이 경로는 permit보다 먼저 fixture(`support.catalog`, 이미지/낭독 파일 읽기·SHA 검사, TTS ffprobe)를 준비하므로, 재시작 뒤 fixture가 누락·손상되면 `MediaFailure`로 중단돼 기간 만료 판정에 도달하지 못했다(`MEDIA_APPLY_PENDING` 고착, NOT_EXECUTED 영수증·예약 반환 불가).
+
+**수정(`EffectStages.java`만).** operation이 바인딩된 item은 먼저 fixture 없이 `effects.recover`(발송 금지 permit, `7e99d90`에서 추가한 may-not-send 계약 재사용)를 호출한다. 저장된 영수증·증거 재생, 취소·기간 만료의 미발송 operation 종료(NOT_EXECUTED, 예약 반환)는 fixture 상태와 무관하게 여기서 끝난다. recover가 `RECOVERY_REQUIRED`를 반환한 ACTIVE item만 기존처럼 입력·fixture를 검증한 뒤 execute로 제시하고, 최종 permit 트랜잭션이 취소·기간·lease·fencing을 다시 확인한다(사전 확인과 발송 사이의 경합 포함). 이미 발송·불명인 operation은 permit에서 `RECOVERY_REQUIRED`로 남아 재발송되지 않는다. fixture가 손상된 유효 예약은 입력 검증에서 막혀 발송되지 않고 예약을 유지하며, 이후 만료되면 다음 복구의 recover 단계에서 종료된다. B02·cost service·migration 변경 없음.
+
+**수정 전 재현(`7e99d90`에 새 테스트만 복사).** 신규 14건 중 8건 실패: 만료+누락/손상(IMAGE·TTS 4건), 유효+손상 후 만료(IMAGE·TTS × 누락/손상 4건) 모두 요청 `RECOVERY_REQUIRED`, step `MEDIA_APPLY_PENDING`. 취소(4건)와 이미 발송(2건)은 기존 경로가 fixture를 읽지 않아 통과하는 회귀 테스트다.
+
+**신규 테스트(`ProductMediaIT`, 실제 EffectStages·격리 MariaDB, fixture는 테스트별 임시 복사본을 훼손 후 `@AfterEach` 복원):**
+
+| 요구 | 테스트 |
+|---|---|
+| 1~3 만료/취소 × 누락/손상, IMAGE·TTS | `endedUndispatchedReservationClosesWithoutDispatchWhateverTheFixtureState` (8 조합): 발송 0, execution proof 0, NOT_EXECUTED 1, 예약 RELEASED·잔여 0·인식 비용 0, 반복 복구 후 receipt_event_id·정산 1건 불변, stale lease `execute` 거부 |
+| 4 유효+누락/손상 → 미발송, 이후 만료 시 종료 | `validReservationWithBrokenFixtureIsNotSentAndClosesWhenItsPeriodLaterEnds` (4 조합) |
+| 5 정상 fixture 유효 예약 복구 | 기존 `productEffectReservedBeforeDispatchResumesOnTheSameOperationAfterRestart` (IMAGE·TTS) |
+| 6 이미 발송·불명 재발송 방지 | `dispatchedOperationWithoutEvidenceIsNeverResentWhateverTheFixtureState` (IMAGE·TTS, fixture 손상/정상 두 번 재시작 후 UNKNOWN 유지, operation 1건, proof 없음, 정산 0) |
+| 7 stale lease·중복 정산 | 위 1~4 테스트 내 검증 |
+
+**수정 후 결과.**
+- 집중+관련: `:backend:test --tests "*StepPlannerTest" --tests "*.media.product.*"` 총 40·통과 40·실패 0·SKIP 0. `:backend:integrationTest`의 ProductMediaIT B01·B02 집중 테스트(신규 14 + 기존 B01 IMAGE/TTS·기간 만료·B02 QC) + `PlanningExecutionIT`·`ProductionCostIT`·`ProductionPortsIT` 총 82·통과 81·실패 0·SKIP 1(기존 liveEdge 게이트). 전체 영상 제작 IT(`producesAQcPassedShort...`)는 지시에 따라 반복하지 않았다.
+- 전체 단위 `--rerun-tasks`(미디어 환경 변수 없음): 총 331·통과 328·실패 0·SKIP 3(`LinuxMediaProcessTest` 1, 환경 게이트 `ProductPipelineFfmpegTest` 2; 후자는 위 FFmpeg 환경 집중 실행에서 통과).
+
+**재현 명령.**
+```bash
+# 격리 DB·FFmpeg·fixture 환경 변수는 §7과 같다
+./gradlew.bat :backend:integrationTest --tests "*ProductMediaIT.endedUndispatched*" \
+  --tests "*ProductMediaIT.validReservationWithBrokenFixture*" --tests "*ProductMediaIT.dispatchedOperationWithoutEvidence*"
+```
+수정 전 확인: `7e99d90` worktree에 이 브랜치의 `ProductMediaIT.java`만 복사해 같은 명령을 실행한다.
