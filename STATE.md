@@ -42,6 +42,8 @@
 
 - 사용자 승인으로 구독 CLI 내부 재시도를 허용한 뒤 기존 Claude 초안 2건의 Codex 일회성 검수를 완료했다. 스크립트 재호출 0, resultScript 스키마·해시 및 원본 보존 확인. [결과](docs/reports/V2-05_EXTERNAL_AI_WORKER_ROUND2.md). 제품 테스트·DB·Migration 없음. 무인 반복 및 제품 통합은 별도 승인 대기다.
 
+- 사용자가 [외부 Worker 소재 발굴 확장 방향](docs/v2/V2-05_EXTERNAL_AI_WORKER_DISCOVERY_REVIEW.md)을 승인했다. 상태는 PROPOSED. 기존 DISCOVER·SELECT, 파일 Worker, MariaDB 상태·fencing을 재사용한다. 독립 검수 2건은 결과 파일 해시를 재확인했다. 다음은 Claude S2~S4 완료 후 전체 결과의 V2-05 최종 설계 반영이다. 무인 반복 실행 보류, 제품 테스트·모델/API 호출·DB·Migration 없음. 기존 상세 설계 파일의 미스테이지 삭제를 보존했다.
+
 ### V2-04-BLOCKING-FIXES — 독립 리뷰 B01·B02 수정 (2026-11-27 KST, DONE)
 
 - Claude Code(Codex 사용량 제한으로 위임). 기준 `v2/04-integration` `b9669aae508c71fec7fabeefaab7d1adade09fe0`, 브랜치 `v2/04-blocking-fixes`. 상세·재현 명령: [수정 보고서](docs/reports/V2-04_BLOCKING_FIXES_REPORT.md).
