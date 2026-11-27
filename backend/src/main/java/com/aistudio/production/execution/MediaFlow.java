@@ -152,6 +152,12 @@ class MediaFlow {
         assets.verifyQc(context);
     }
 
+    /** Every frozen item of the local stage already holds its committed result (B02 recovery, read-only). */
+    boolean persisted(long requestId, ProductionStage stage) {
+        var fixed = items.items(requestId, stage);
+        return !fixed.isEmpty() && fixed.stream().allMatch(item -> "APPLIED".equals(item.state()));
+    }
+
     boolean applied(long requestId, ProductionStage stage) {
         var fixed = items.items(requestId, stage);
         if (fixed.isEmpty() || fixed.stream().anyMatch(item -> !"APPLIED".equals(item.state()))) {

@@ -23,6 +23,7 @@ import java.util.function.BooleanSupplier;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -120,6 +121,14 @@ class ProductMediaIT {
         }
     }
 
+    /** Checked before every FFmpeg/ffprobe process; a test can fail a local attempt there with an IOException. */
+    interface ProcessHook {
+        void accept(MediaProcessRunner.Command command) throws IOException;
+    }
+
+    static final java.util.concurrent.atomic.AtomicReference<ProcessHook> beforeRun =
+            new java.util.concurrent.atomic.AtomicReference<>(command -> {});
+
     @TestConfiguration
     static class Ports {
         @Bean
@@ -148,6 +157,7 @@ class ProductMediaIT {
 
                 @Override
                 public Result run(Command command, BooleanSupplier cancelled) throws IOException, InterruptedException {
+                    beforeRun.get().accept(command);
                     List<String> args = new ArrayList<>();
                     args.add(binaries.resolve(command.tool() == Tool.FFMPEG ? "ffmpeg.exe" : "ffprobe.exe").toString());
                     if (command.tool() == Tool.FFMPEG) {
@@ -169,12 +179,24 @@ class ProductMediaIT {
                     }
                     String stdout = Files.readString(out, StandardCharsets.UTF_8);
                     String stderr = Files.readString(err, StandardCharsets.UTF_8);
-                    Files.deleteIfExists(out);
-                    Files.deleteIfExists(err);
+                    deleteCaptured(out);
+                    deleteCaptured(err);
                     return new Result(process.exitValue(), stdout,
                             stderr.length() > 65536 ? stderr.substring(stderr.length() - 65536) : stderr);
                 }
             };
+        }
+
+        /** Windows may briefly hold a just-closed capture file (scanner/indexer); the scratch dir is temporary. */
+        private static void deleteCaptured(Path file) throws InterruptedException {
+            for (int i = 0; i < 20; i++) {
+                try {
+                    Files.deleteIfExists(file);
+                    return;
+                } catch (IOException busy) {
+                    Thread.sleep(50);
+                }
+            }
         }
     }
 
@@ -338,6 +360,236 @@ class ProductMediaIT {
             Files.write(dir.resolve(topic + ".srt"), mvc.perform(get(PATH + "/" + id + "/media/" + srt)
                     .with(ApiTestSupport.as(admin))).andReturn().getResponse().getContentAsByteArray());
             Files.writeString(dir.resolve("request.txt"), "requestId=" + id + "\n" + describe(id) + "\n");
+        }
+    }
+
+    // ------------------------------------------------------------------ V2-04 B01/B02 with the product stages
+
+    static final String VENUS = "Why is a day on Venus longer than its year?";
+    @Autowired com.aistudio.production.contract.MediaEffectPort mediaEffects;
+
+    JdbcTemplate root() {
+        return new JdbcTemplate(DB.dataSource());
+    }
+
+    int settlements(long operation) {
+        return jdbc.queryForObject("SELECT COUNT(*) FROM cost_log WHERE event_key = CONCAT('production:settle:', ?)",
+                Integer.class, operation);
+    }
+
+    /**
+     * B01 through the real EffectStages: the dispatch permit of the first {@code stage} operation is aborted, so the
+     * reservation and the item binding are the only committed effect state. The park is rewritten to what a JVM exit
+     * leaves: step RUNNING and the stopped worker's lease expired. Returns item, operation, step and lease epoch.
+     */
+    long[] stopAfterReservation(long id, String stage) {
+        var root = root();
+        root.execute("""
+                CREATE TRIGGER it_product_b01_stop BEFORE UPDATE ON provider_operation FOR EACH ROW
+                BEGIN
+                    IF NEW.production_request_id = %d AND NEW.status = 'DISPATCHED' AND OLD.status = 'RESERVED'
+                       AND (SELECT stage FROM production_step WHERE id = NEW.production_step_id) = '%s' THEN
+                        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'IT stop between reservation and dispatch';
+                    END IF;
+                END
+                """.formatted(id, stage));
+        try {
+            DiscoveryExecutionIT.drain(executor, "media-it");
+        } finally {
+            root.execute("DROP TRIGGER it_product_b01_stop");
+        }
+        var bound = jdbc.queryForMap("""
+                SELECT i.id AS item_id, i.state, o.id AS operation_id, o.status, s.id AS step_id,
+                       IF(o.dispatched_at IS NULL, 'yes', 'no') AS never_sent, r.status AS reservation_status
+                FROM production_media_item i JOIN provider_operation o ON o.id = i.operation_id
+                JOIN production_step s ON s.id = i.production_step_id
+                JOIN budget_reservation r ON r.id = o.reservation_id
+                WHERE i.production_request_id = ? AND i.kind = ?
+                """, id, stage);
+        assertThat(bound).as(describe(id)).containsEntry("state", "ACTIVE").containsEntry("status", "RESERVED")
+                .containsEntry("never_sent", "yes").containsEntry("reservation_status", "ACTIVE");
+        root.update("""
+                UPDATE production_step SET status = 'RUNNING', retry_at = NULL, last_error_code = NULL
+                WHERE production_request_id = ? AND stage = ?
+                """, id, stage);
+        root.update("""
+                UPDATE production_request SET status = 'RUNNING', lease_owner = 'stopped-worker',
+                    lease_until = UTC_TIMESTAMP(6) - INTERVAL 1 SECOND WHERE id = ?
+                """, id);
+        long epoch = jdbc.queryForObject("SELECT lease_epoch FROM production_request WHERE id = ?", Long.class, id);
+        return new long[] { ((Number) bound.get("item_id")).longValue(), ((Number) bound.get("operation_id")).longValue(),
+                ((Number) bound.get("step_id")).longValue(), epoch };
+    }
+
+    @ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = { "IMAGE", "TTS" })
+    void productEffectReservedBeforeDispatchResumesOnTheSameOperationAfterRestart(String stage) throws Exception {
+        discover(VENUS);
+        long id = create();
+        long[] stopped = stopAfterReservation(id, stage);
+        String key = jdbc.queryForObject("SELECT effect_key FROM provider_operation WHERE id = ?", String.class, stopped[1]);
+        var stale = new com.aistudio.production.contract.ProductionCostPort.StepOwner(id, stopped[2], "stopped-worker",
+                stopped[3]);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> mediaEffects.execute(
+                new com.aistudio.production.contract.MediaEffectPort.Item(stale, stopped[0]), BigDecimal.ONE, op -> {
+                    throw new AssertionError("a stale worker must not reach the provider");
+                })).isInstanceOf(com.aistudio.shared.api.ApiException.class);
+
+        run(id); // new worker and lease epoch, real EffectStages
+        assertThat(jdbc.queryForObject("SELECT status FROM production_request WHERE id = ?", String.class, id))
+                .as(describe(id)).isEqualTo("SUCCEEDED");
+        assertThat(jdbc.queryForObject("SELECT lease_epoch FROM production_request WHERE id = ?", Long.class, id))
+                .isGreaterThan(stopped[3]);
+        var resumed = jdbc.queryForMap("""
+                SELECT i.operation_id, o.effect_key, o.receipt_outcome, i.state FROM production_media_item i
+                JOIN provider_operation o ON o.id = i.operation_id WHERE i.id = ?
+                """, stopped[0]);
+        assertThat(((Number) resumed.get("operation_id")).longValue()).isEqualTo(stopped[1]);
+        assertThat(resumed).containsEntry("effect_key", key).containsEntry("receipt_outcome", "RESULT_ADOPTED")
+                .containsEntry("state", "APPLIED");
+        int items = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM production_media_item WHERE production_request_id = ? AND kind IN ('IMAGE', 'TTS')
+                """, Integer.class, id);
+        assertThat(jdbc.queryForObject("""
+                SELECT COUNT(*) FROM provider_operation o JOIN production_step s ON s.id = o.production_step_id
+                WHERE o.production_request_id = ? AND s.stage IN ('IMAGE', 'TTS') AND o.dispatched_at IS NOT NULL
+                  AND o.receipt_outcome = 'RESULT_ADOPTED' AND o.applied_at IS NOT NULL
+                """, Integer.class, id)).as("one dispatch per scene effect, none added").isEqualTo(items);
+        assertThat(jdbc.queryForObject("""
+                SELECT COUNT(*) FROM provider_operation o JOIN production_step s ON s.id = o.production_step_id
+                WHERE o.production_request_id = ? AND s.stage IN ('IMAGE', 'TTS')
+                """, Integer.class, id)).isEqualTo(items);
+        assertThat(settlements(stopped[1])).isEqualTo(1);
+        assertThat(jdbc.queryForObject("""
+                SELECT COUNT(*) FROM production_media_item WHERE production_request_id = ?
+                  AND kind IN ('IMAGE', 'TTS') AND execution_proof_sha256 IS NOT NULL
+                """, Integer.class, id)).as("one provider execution proof per item").isEqualTo(items);
+        long video = jdbc.queryForObject("""
+                SELECT a.id FROM production_media_asset a JOIN production_media_item i ON i.id = a.item_id
+                WHERE i.production_request_id = ? AND a.role = 'MP4' AND a.state = 'FINAL'
+                """, Long.class, id);
+        mvc.perform(get(PATH + "/" + id + "/media/" + video).with(ApiTestSupport.as(admin)).header("Range", "bytes=0-99"))
+                .andExpect(status().isPartialContent());
+        mvc.perform(get(PATH + "/" + id + "/media/" + video + "?download=true").with(ApiTestSupport.as(admin)))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void productImageReservationIsClosedWithoutDispatchWhenItsBudgetPeriodEndsBeforeRestart() throws Exception {
+        policies.create("CHANNEL", channel, null, "DAY", new BigDecimal("1000"), "UTC", null, Actor.admin(admin.id()));
+        discover(VENUS);
+        long id = create();
+        long[] stopped = stopAfterReservation(id, "IMAGE");
+        assertThat(root().update("""
+                UPDATE budget_bucket b JOIN budget_reservation_bucket rb ON rb.bucket_id = b.id
+                JOIN budget_policy p ON p.id = b.policy_id
+                SET b.period_end = b.period_start + INTERVAL 1 MICROSECOND
+                WHERE rb.reservation_id = (SELECT reservation_id FROM provider_operation WHERE id = ?)
+                  AND p.scope = 'CHANNEL' AND p.channel_id = ?
+                """, stopped[1], channel)).isEqualTo(1);
+        run(id);
+        assertThat(jdbc.queryForObject("SELECT status FROM production_request WHERE id = ?", String.class, id))
+                .as(describe(id)).isEqualTo("FAILED");
+        assertThat(jdbc.queryForMap("""
+                SELECT o.status, o.receipt_outcome, IF(o.dispatched_at IS NULL, 'yes', 'no') AS never_sent,
+                       IF(o.applied_at IS NOT NULL, 'yes', 'no') AS applied, r.status AS reservation_status,
+                       IF(r.reserved_remaining_krw = 0 AND r.recognized_cost_krw = 0, 'yes', 'no') AS returned
+                FROM provider_operation o JOIN budget_reservation r ON r.id = o.reservation_id WHERE o.id = ?
+                """, stopped[1])).containsEntry("status", "SETTLED").containsEntry("receipt_outcome", "NOT_EXECUTED")
+                .containsEntry("never_sent", "yes").containsEntry("applied", "yes")
+                .containsEntry("reservation_status", "RELEASED").containsEntry("returned", "yes");
+        assertThat(settlements(stopped[1])).isEqualTo(1);
+        assertThat(jdbc.queryForObject("""
+                SELECT COUNT(*) FROM provider_operation WHERE production_request_id = ? AND dispatched_at IS NOT NULL
+                  AND production_step_id = ?
+                """, Integer.class, id, stopped[2])).isZero();
+    }
+
+    @Test
+    void productQcPassCommittedOnTheLastAttemptIsFinalizedAfterRestartWithoutRerender() throws Exception {
+        discover(VENUS);
+        long id = create();
+        var qcItem = new java.util.concurrent.atomic.AtomicLong();
+        var processes = new java.util.concurrent.atomic.AtomicInteger();
+        beforeRun.set(command -> {
+            processes.incrementAndGet();
+            if (qcItem.get() == 0) {
+                jdbc.queryForList("SELECT id FROM production_media_item WHERE production_request_id = ? AND kind = 'QC'",
+                        Long.class, id).forEach(qcItem::set);
+            }
+            if (command.scratch().itemId() == qcItem.get() && command.scratch().attempt() < 3) {
+                throw new IOException("IT local QC failure on attempt " + command.scratch().attempt());
+            }
+        });
+        var root = root();
+        root.execute("""
+                CREATE TRIGGER it_product_b02_stop BEFORE UPDATE ON production_step FOR EACH ROW
+                BEGIN
+                    IF NEW.production_request_id = %d AND NEW.stage = 'QC' AND NEW.status = 'SUCCEEDED' THEN
+                        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'IT stop before the QC success commit';
+                    END IF;
+                END
+                """.formatted(id));
+        try {
+            run(id);
+        } finally {
+            root.execute("DROP TRIGGER it_product_b02_stop");
+        }
+        assertThat(jdbc.queryForMap("SELECT status, attempts FROM production_step WHERE production_request_id = ?"
+                + " AND stage = 'QC'", id)).as(describe(id)).containsEntry("status", "RUNNING")
+                .containsEntry("attempts", 3);
+        assertThat(jdbc.queryForMap("SELECT state, attempt_no FROM production_media_item WHERE id = ?", qcItem.get()))
+                .containsEntry("state", "APPLIED").containsEntry("attempt_no", 3);
+        assertThat(jdbc.queryForList("""
+                SELECT a.state FROM production_media_asset a JOIN production_media_item i ON i.id = a.item_id
+                WHERE i.production_request_id = ? AND a.role IN ('MP4', 'QC_REPORT', 'MANIFEST')
+                """, String.class, id)).hasSize(3).containsOnly("STAGED");
+        int renders = jdbc.queryForObject("SELECT attempts FROM production_step WHERE production_request_id = ?"
+                + " AND stage = 'RENDER'", Integer.class, id);
+        root.update("UPDATE production_request SET lease_until = UTC_TIMESTAMP(6) - INTERVAL 1 SECOND WHERE id = ?", id);
+        processes.set(0);
+        try {
+            assertThat(executor.runOnce("restarted-worker")).isTrue();
+        } finally {
+            beforeRun.set(command -> {});
+        }
+        assertThat(jdbc.queryForObject("SELECT status FROM production_request WHERE id = ?", String.class, id))
+                .as(describe(id)).isEqualTo("SUCCEEDED");
+        assertThat(processes).as("no FFmpeg process: no re-render and no new QC run").hasValue(0);
+        assertThat(jdbc.queryForMap("SELECT status, attempts FROM production_step WHERE production_request_id = ?"
+                + " AND stage = 'QC'", id)).containsEntry("status", "SUCCEEDED").containsEntry("attempts", 3);
+        assertThat(jdbc.queryForObject("SELECT attempts FROM production_step WHERE production_request_id = ?"
+                + " AND stage = 'RENDER'", Integer.class, id)).isEqualTo(renders);
+        JsonNode media = json.readTree(mvc.perform(get(PATH + "/" + id + "/media").with(ApiTestSupport.as(admin)))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+        assertThat(media.path("qc").path("status").asString()).isEqualTo("SUCCEEDED");
+        String video = null;
+        String report = null;
+        for (JsonNode asset : media.path("assets")) {
+            switch (asset.path("role").asString()) {
+                case "MP4" -> video = asset.path("id").asString();
+                case "QC_REPORT" -> report = asset.path("id").asString();
+                default -> { }
+            }
+        }
+        assertThat(video).isNotNull();
+        mvc.perform(get(PATH + "/" + id + "/media/" + video).with(ApiTestSupport.as(admin)).header("Range", "bytes=1000-1999"))
+                .andExpect(status().isPartialContent());
+        byte[] mp4 = mvc.perform(get(PATH + "/" + id + "/media/" + video + "?download=true").with(ApiTestSupport.as(admin)))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsByteArray();
+        assertThat(sha256(mp4)).isEqualTo(jdbc.queryForObject("SELECT sha256 FROM production_media_asset WHERE id = ?",
+                String.class, Long.parseLong(video)));
+        assertThat(json.readTree(mvc.perform(get(PATH + "/" + id + "/media/" + report).with(ApiTestSupport.as(admin)))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).path("status").asString())
+                .startsWith("PASS");
+        assertThat(executor.runOnce("late-worker")).isFalse();
+    }
+
+    static String sha256(byte[] bytes) {
+        try {
+            return java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(bytes));
+        } catch (Exception ex) {
+            throw new IllegalStateException(ex);
         }
     }
 }

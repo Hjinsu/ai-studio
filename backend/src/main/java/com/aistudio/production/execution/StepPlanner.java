@@ -2,6 +2,7 @@ package com.aistudio.production.execution;
 
 import java.util.List;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 import com.aistudio.production.contract.ProductionStage;
 import com.aistudio.production.contract.ProductionStatus;
@@ -42,6 +43,17 @@ final class StepPlanner {
      */
     static Action next(List<StepRow> steps, boolean cancelRequested, boolean awaitingChoice,
             Function<ProductionStage, StageWork.Kind> kinds) {
+        return next(steps, cancelRequested, awaitingChoice, kinds, step -> false);
+    }
+
+    /**
+     * @param persisted true for an interrupted local step whose result was already committed before the stop (V2-04
+     *        B02). Such a step is recovered from that stored result without a new attempt, so a stop after the
+     *        result commit of the last allowed attempt does not fail an otherwise finished step. Whether the stored
+     *        result is intact is verified by the recovery itself; without a stored result the attempt limit applies.
+     */
+    static Action next(List<StepRow> steps, boolean cancelRequested, boolean awaitingChoice,
+            Function<ProductionStage, StageWork.Kind> kinds, Predicate<StepRow> persisted) {
         requireFixedOrder(steps);
         for (StepRow step : steps) {
             if (step.status() == StepStatus.RECOVERY_REQUIRED) {
@@ -56,6 +68,9 @@ final class StepPlanner {
                 }
                 if (cancelRequested) {
                     return new Finish(ProductionStatus.CANCELLED);
+                }
+                if (persisted.test(step)) {
+                    return new Recover(step);
                 }
                 return step.attempts() >= ExecutionProperties.MAX_ATTEMPTS
                         ? new Fail(step, "INTERRUPTED") : new Execute(step);

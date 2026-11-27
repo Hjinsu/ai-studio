@@ -343,6 +343,15 @@ public class ProductionCostService implements ProductionCostPort, MediaEffectPor
     }
 
     private Dispatch permit(StepOwner owner, long id, PricedRequest priced) {
+        return permit(owner, id, priced, true);
+    }
+
+    /**
+     * @param mayDispatch false for a recovery presentation without a provider payload: every closing decision
+     *        (stored receipt, stored evidence, not executed on cancel or period end) is the same, but an operation
+     *        that could still be sent is left reserved for the next execute presentation.
+     */
+    private Dispatch permit(StepOwner owner, long id, PricedRequest priced, boolean mayDispatch) {
         control.shared();
         Request request = requireRequest(owner.requestId());
         Step step = requireStep(owner);
@@ -371,6 +380,9 @@ public class ProductionCostService implements ProductionCostPort, MediaEffectPor
                 || mapper.committedKrw(request.id()).compareTo(limit) > 0
                 || !"RUNNING".equals(step.status())
                 || mapper.outstanding(request.id()).stream().anyMatch(other -> other.id() != id)) {
+            return new Dispatch(result(Disposition.RECOVERY_REQUIRED), null);
+        }
+        if (!mayDispatch) {
             return new Dispatch(result(Disposition.RECOVERY_REQUIRED), null);
         }
         if (mapper.dispatch(id, owner.leaseOwner(), owner.leaseEpoch()) != 1) {
@@ -617,9 +629,11 @@ public class ProductionCostService implements ProductionCostPort, MediaEffectPor
         if (op == null) {
             return result(Disposition.REJECTED);
         }
-        if (op.evidenceHash() != null || (!op.dispatched() && snapshot.cancelled())) {
+        if (op.evidenceHash() != null || !op.dispatched()) {
+            // B01: a reservation that was never dispatched closes as not executed on cancel or budget period end;
+            // otherwise it stays reserved for the same operation's next execute presentation.
             Dispatch dispatch = transactions.execute(() -> permit(owner, op.id(),
-                    new PricedRequest(op.originalCurrency(), op.estimateOriginal(), null)));
+                    new PricedRequest(op.originalCurrency(), op.estimateOriginal(), null), false));
             // Recover has no provider payload and must not acquire permission to dispatch.
             return dispatch.replay() == null ? result(Disposition.RECOVERY_REQUIRED) : dispatch.replay();
         }

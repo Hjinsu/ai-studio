@@ -136,6 +136,9 @@ class PlanningExecutionIT {
     private static final AtomicInteger mediaDispatches = new AtomicInteger();
     private static final java.util.concurrent.atomic.AtomicReference<Runnable> onMediaSend =
             new java.util.concurrent.atomic.AtomicReference<>(() -> {});
+    /** Runs before a local media stage publishes; a test can fail the attempt or stop the JVM-equivalent there. */
+    private static final java.util.concurrent.atomic.AtomicReference<java.util.function.Consumer<MediaStageWork.Context>>
+            onLocalWork = new java.util.concurrent.atomic.AtomicReference<>(context -> {});
     private static final String PATH = "/api/v1/production-requests";
     private static final TestDatabases.TestDatabase DB = TestDatabases.create();
     private static final String APP_USER = "it_planning_" + ProcessHandle.current().pid();
@@ -226,6 +229,7 @@ class PlanningExecutionIT {
                                 }
                             }
                         } else {
+                            onLocalWork.get().accept(context);
                             assets.publish(context, payloads(context.stage()));
                         }
                         return new Result(Outcome.APPLIED, null);
@@ -298,6 +302,7 @@ class PlanningExecutionIT {
     @Autowired LockRetryingTransactions transactions;
     @Autowired ExecutionProperties properties;
     @Autowired ProductionCostPort cost;
+    @Autowired MediaEffectPort mediaEffects;
     @Autowired ProductionSelectionPort selection;
     @Autowired com.aistudio.production.contract.DiscoveryExecutionPort discoveryPort;
     @LocalServerPort int serverPort;
@@ -328,6 +333,8 @@ class PlanningExecutionIT {
         newChannel();
         discovery.reset();
         mediaDispatches.set(0);
+        onLocalWork.set(context -> {});
+        onMediaSend.set(() -> {});
         jdbc.update("""
                 UPDATE production_request SET status = 'FAILED', lease_owner = NULL, lease_until = NULL
                 WHERE status IN ('QUEUED', 'RUNNING', 'RECOVERY_REQUIRED')
@@ -1218,6 +1225,354 @@ class PlanningExecutionIT {
         java.nio.file.Files.writeString(Path.of(mediaStorageRoot).resolve(stored), "altered bytes");
         mvc.perform(get(path).with(ApiTestSupport.as(admin)).header("Range", "bytes=0-1"))
                 .andExpect(status().isNotFound());
+    }
+
+    // ------------------------------------------------------------------ V2-04 B01/B02 stop-and-restart recovery
+
+    /** Test stand-in for a JVM exit: an Error escapes every executor catch, so only committed state remains. */
+    static final class SimulatedStop extends Error {
+        SimulatedStop() {
+            super("simulated JVM stop", null, false, false);
+        }
+    }
+
+    JdbcTemplate root() {
+        return new JdbcTemplate(DB.dataSource());
+    }
+
+    /**
+     * B01: the shared permit transaction is aborted for the first operation of {@code stage}, so only the reservation
+     * and the item's operation binding are committed. The resulting park is then rewritten to the state a JVM exit
+     * leaves (step RUNNING, lease of the stopped worker expired), which the planner reaches the same way.
+     */
+    long[] stopAfterMediaReservation(long id, ProductionStage stage) {
+        var root = root();
+        root.execute("""
+                CREATE TRIGGER it_b01_stop_before_dispatch BEFORE UPDATE ON provider_operation FOR EACH ROW
+                BEGIN
+                    IF NEW.production_request_id = %d AND NEW.status = 'DISPATCHED' AND OLD.status = 'RESERVED'
+                       AND (SELECT stage FROM production_step WHERE id = NEW.production_step_id) = '%s' THEN
+                        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'IT stop between reservation and dispatch';
+                    END IF;
+                END
+                """.formatted(id, stage.name()));
+        try {
+            drain();
+        } finally {
+            root.execute("DROP TRIGGER it_b01_stop_before_dispatch");
+        }
+        var bound = jdbc.queryForMap("""
+                SELECT i.id AS item_id, i.state, o.id AS operation_id, o.effect_key, o.status, o.dispatched_at,
+                       s.id AS step_id, r.status AS reservation_status
+                FROM production_media_item i JOIN provider_operation o ON o.id = i.operation_id
+                JOIN production_step s ON s.id = i.production_step_id
+                JOIN budget_reservation r ON r.id = o.reservation_id
+                WHERE i.production_request_id = ? AND i.kind = ?
+                """, id, stage.name());
+        assertThat(bound).containsEntry("state", "ACTIVE").containsEntry("status", "RESERVED")
+                .containsEntry("reservation_status", "ACTIVE");
+        assertThat(bound.get("dispatched_at")).isNull();
+        assertThat(mediaDispatches).hasValue(stage == ProductionStage.IMAGE ? 0 : jdbc.queryForObject(
+                "SELECT COUNT(*) FROM production_media_item WHERE production_request_id = ? AND kind = 'IMAGE'",
+                Integer.class, id));
+        root.update("""
+                UPDATE production_step SET status = 'RUNNING', retry_at = NULL, last_error_code = NULL
+                WHERE production_request_id = ? AND stage = ?
+                """, id, stage.name());
+        root.update("""
+                UPDATE production_request SET status = 'RUNNING', lease_owner = 'stopped-worker',
+                    lease_until = UTC_TIMESTAMP(6) - INTERVAL 1 SECOND WHERE id = ?
+                """, id);
+        long epoch = jdbc.queryForObject("SELECT lease_epoch FROM production_request WHERE id = ?", Long.class, id);
+        return new long[] { ((Number) bound.get("item_id")).longValue(), ((Number) bound.get("operation_id")).longValue(),
+                ((Number) bound.get("step_id")).longValue(), epoch };
+    }
+
+    int settlements(long operation) {
+        return jdbc.queryForObject("SELECT COUNT(*) FROM cost_log WHERE event_key = CONCAT('production:settle:', ?)",
+                Integer.class, operation);
+    }
+
+    void assertClosedWithoutDispatch(long operation) {
+        assertThat(jdbc.queryForMap("""
+                SELECT o.status, o.receipt_outcome, IF(o.dispatched_at IS NULL, 'yes', 'no') AS never_sent,
+                       IF(o.applied_at IS NOT NULL, 'yes', 'no') AS applied, r.status AS reservation_status,
+                       IF(r.reserved_remaining_krw = 0 AND r.recognized_cost_krw = 0, 'yes', 'no') AS returned
+                FROM provider_operation o JOIN budget_reservation r ON r.id = o.reservation_id WHERE o.id = ?
+                """, operation)).containsEntry("status", "SETTLED").containsEntry("receipt_outcome", "NOT_EXECUTED")
+                .containsEntry("never_sent", "yes").containsEntry("applied", "yes")
+                .containsEntry("reservation_status", "RELEASED").containsEntry("returned", "yes");
+        assertThat(settlements(operation)).isEqualTo(1);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = { "IMAGE", "TTS" })
+    void mediaReservationCommittedBeforeDispatchResumesOnTheSameOperationAfterRestart(String kind) throws Exception {
+        ProductionStage stage = ProductionStage.valueOf(kind);
+        discover(VENUS);
+        long id = create("SHORTS", ",\"candidateCount\":5,\"mediaEnabled\":true");
+        long[] stopped = stopAfterMediaReservation(id, stage);
+        String key = jdbc.queryForObject("SELECT effect_key FROM provider_operation WHERE id = ?", String.class, stopped[1]);
+        int before = mediaDispatches.get();
+
+        // The stopped worker's expired lease cannot dispatch the reserved operation.
+        var stale = new ProductionCostPort.StepOwner(id, stopped[2], "stopped-worker", stopped[3]);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> mediaEffects.execute(
+                new MediaEffectPort.Item(stale, stopped[0]), BigDecimal.ONE, operation -> {
+                    throw new AssertionError("a stale worker must not reach the provider");
+                })).isInstanceOf(com.aistudio.shared.api.ApiException.class);
+        assertThat(jdbc.queryForObject("SELECT dispatched_at FROM provider_operation WHERE id = ?", Object.class,
+                stopped[1])).isNull();
+
+        drain(); // a new worker with a new lease epoch
+        assertStatus(id, "SUCCEEDED");
+        assertThat(jdbc.queryForObject("SELECT lease_epoch FROM production_request WHERE id = ?", Long.class, id))
+                .isGreaterThan(stopped[3]);
+        var resumed = jdbc.queryForMap("""
+                SELECT i.operation_id, o.effect_key, o.receipt_outcome, i.state FROM production_media_item i
+                JOIN provider_operation o ON o.id = i.operation_id WHERE i.id = ?
+                """, stopped[0]);
+        assertThat(((Number) resumed.get("operation_id")).longValue()).isEqualTo(stopped[1]);
+        assertThat(resumed).containsEntry("effect_key", key).containsEntry("receipt_outcome", "RESULT_ADOPTED")
+                .containsEntry("state", "APPLIED");
+        int items = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM production_media_item WHERE production_request_id = ? AND kind IN ('IMAGE', 'TTS')
+                """, Integer.class, id);
+        assertThat(operations(id, ProductionStage.IMAGE) + operations(id, ProductionStage.TTS)).isEqualTo(items);
+        assertThat(mediaDispatches).as("each effect sent exactly once, the resumed one after the restart")
+                .hasValue(items).hasValueGreaterThan(before);
+        assertThat(settlements(stopped[1])).isEqualTo(1);
+        // the stale worker still cannot act after the recovery
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> mediaEffects.execute(
+                new MediaEffectPort.Item(stale, stopped[0]), BigDecimal.ONE, operation -> {
+                    throw new AssertionError("a stale worker must not reach the provider");
+                })).isInstanceOf(com.aistudio.shared.api.ApiException.class);
+        assertThat(settlements(stopped[1])).isEqualTo(1);
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = { true, false })
+    void undispatchedMediaReservationIsClosedWithoutDispatchWhenItsBudgetPeriodEnds(boolean mediaReady)
+            throws Exception {
+        // A channel DAY policy of this test's channel only, so ending its period leaves shared buckets unchanged.
+        policies.create("CHANNEL", channel, null, "DAY", new BigDecimal("1000"), "UTC", null, Actor.admin(admin.id()));
+        discover(VENUS);
+        long id = create("SHORTS", ",\"candidateCount\":5,\"mediaEnabled\":true");
+        long[] stopped = stopAfterMediaReservation(id, ProductionStage.IMAGE);
+        assertThat(root().update("""
+                UPDATE budget_bucket b JOIN budget_reservation_bucket rb ON rb.bucket_id = b.id
+                JOIN budget_policy p ON p.id = b.policy_id
+                SET b.period_end = b.period_start + INTERVAL 1 MICROSECOND
+                WHERE rb.reservation_id = (SELECT reservation_id FROM provider_operation WHERE id = ?)
+                  AND p.scope = 'CHANNEL' AND p.channel_id = ?
+                """, stopped[1], channel)).isEqualTo(1);
+        mediaProcessReady.set(mediaReady); // false: the recovery-only path presents the item without a payload
+        try {
+            drain();
+        } finally {
+            mediaProcessReady.set(true);
+        }
+        assertStatus(id, "FAILED");
+        assertThat(mediaDispatches).hasValue(0);
+        assertClosedWithoutDispatch(stopped[1]);
+        assertThat(jdbc.queryForObject("SELECT state FROM production_media_item WHERE id = ?", String.class, stopped[0]))
+                .isEqualTo("FAILED");
+        assertThat(operations(id, ProductionStage.IMAGE)).isEqualTo(1);
+    }
+
+    @Test
+    void undispatchedMediaReservationIsClosedWithoutDispatchWhenTheRequestIsCancelled() throws Exception {
+        discover(VENUS);
+        long id = create("SHORTS", ",\"candidateCount\":5,\"mediaEnabled\":true");
+        long[] stopped = stopAfterMediaReservation(id, ProductionStage.TTS);
+        int sent = mediaDispatches.get();
+        jdbc.update("UPDATE production_request SET cancel_requested_at = UTC_TIMESTAMP(6) WHERE id = ?", id);
+        drain();
+        assertStatus(id, "CANCELLED");
+        assertThat(mediaDispatches).hasValue(sent);
+        assertClosedWithoutDispatch(stopped[1]);
+        assertThat(jdbc.queryForObject("SELECT state FROM production_media_item WHERE id = ?", String.class, stopped[0]))
+                .isEqualTo("CANCELLED");
+    }
+
+    @Test
+    void dispatchedMediaOperationWithoutEvidenceIsNeverResentAfterRestart() throws Exception {
+        discover(VENUS);
+        long id = create("SHORTS", ",\"candidateCount\":5,\"mediaEnabled\":true");
+        onMediaSend.set(() -> { throw new IllegalStateException("simulated response loss after dispatch"); });
+        drain();
+        onMediaSend.set(() -> {});
+        assertStatus(id, "RECOVERY_REQUIRED");
+        long operation = jdbc.queryForObject("""
+                SELECT operation_id FROM production_media_item WHERE production_request_id = ? AND kind = 'IMAGE'
+                  AND operation_id IS NOT NULL
+                """, Long.class, id);
+        assertThat(jdbc.queryForObject("SELECT state FROM production_media_item WHERE operation_id = ?", String.class,
+                operation)).isEqualTo("ACTIVE");
+        for (int restart = 0; restart < 2; restart++) {
+            root().update("UPDATE production_request SET lease_until = NULL, lease_owner = NULL WHERE id = ?", id);
+            makeDue(id);
+            drain();
+        }
+        assertStatus(id, "RECOVERY_REQUIRED");
+        assertThat(mediaDispatches).hasValue(1);
+        assertThat(operations(id, ProductionStage.IMAGE)).isEqualTo(1);
+        assertThat(jdbc.queryForMap("""
+                SELECT o.status, o.evidence_hash, r.status AS reservation_status FROM provider_operation o
+                JOIN budget_reservation r ON r.id = o.reservation_id WHERE o.id = ?
+                """, operation)).containsEntry("status", "UNKNOWN").containsEntry("evidence_hash", null)
+                .containsEntry("reservation_status", "ACTIVE");
+        assertThat(settlements(operation)).isZero();
+    }
+
+    /**
+     * B02: QC attempts 1 and 2 fail locally, attempt 3 passes and commits QC_REPORT, MANIFEST and the APPLIED QC
+     * item, then the process stops before the QC success transaction (the trigger aborts it; the executor leaves the
+     * lease to expire as after a JVM exit). Returns the stopped lease epoch.
+     */
+    long stopAfterLastQcResult(long id) {
+        onLocalWork.set(context -> {
+            if (context.stage() == ProductionStage.QC && context.attemptNo() < 3) {
+                throw new IllegalStateException("IT local QC failure on attempt " + context.attemptNo());
+            }
+        });
+        var root = root();
+        root.execute("""
+                CREATE TRIGGER it_b02_stop_before_qc_success BEFORE UPDATE ON production_step FOR EACH ROW
+                BEGIN
+                    IF NEW.production_request_id = %d AND NEW.stage = 'QC' AND NEW.status = 'SUCCEEDED' THEN
+                        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'IT stop before the QC success commit';
+                    END IF;
+                END
+                """.formatted(id));
+        try {
+            for (int round = 0; round < 4; round++) {
+                drain();
+                makeDue(id);
+            }
+        } finally {
+            root.execute("DROP TRIGGER it_b02_stop_before_qc_success");
+            onLocalWork.set(context -> {});
+        }
+        assertThat(step(id, ProductionStage.QC)).as(describe(id)).containsEntry("status", "RUNNING")
+                .containsEntry("attempts", 3);
+        assertThat(jdbc.queryForMap("SELECT state, attempt_no FROM production_media_item WHERE production_request_id = ?"
+                + " AND kind = 'QC'", id)).containsEntry("state", "APPLIED").containsEntry("attempt_no", 3);
+        assertThat(mediaAssetStates(id)).containsEntry("MP4", "STAGED").containsEntry("QC_REPORT", "STAGED")
+                .containsEntry("MANIFEST", "STAGED");
+        long epoch = jdbc.queryForObject("SELECT lease_epoch FROM production_request WHERE id = ?", Long.class, id);
+        root.update("UPDATE production_request SET lease_until = UTC_TIMESTAMP(6) - INTERVAL 1 SECOND WHERE id = ?", id);
+        return epoch;
+    }
+
+    Map<String, Object> mediaAssetStates(long id) {
+        Map<String, Object> states = new java.util.TreeMap<>();
+        for (var row : jdbc.queryForList("""
+                SELECT a.role, a.state FROM production_media_asset a JOIN production_media_item i ON i.id = a.item_id
+                WHERE i.production_request_id = ? AND i.kind IN ('RENDER', 'QC') AND a.state <> 'ABANDONED'
+                """, id)) {
+            states.merge(row.get("role").toString(), row.get("state"), (a, b) -> a + "," + b);
+        }
+        return states;
+    }
+
+    @Test
+    void qcResultCommittedOnTheLastAttemptIsFinalizedAfterRestartWithoutAFourthAttempt() throws Exception {
+        discover(NEUTRON);
+        long id = create("SHORTS", ",\"candidateCount\":5,\"mediaEnabled\":true");
+        long stoppedEpoch = stopAfterLastQcResult(id);
+        int renders = ((Number) step(id, ProductionStage.RENDER).get("attempts")).intValue();
+        int sent = mediaDispatches.get();
+        var stopped = new ProductionExecutor.Lease(id, "planning-it", stoppedEpoch);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> executor.drive(stopped))
+                .isInstanceOf(LeaseLostException.class);
+
+        assertThat(executor.runOnce("restarted-worker")).isTrue();
+        assertStatus(id, "SUCCEEDED");
+        assertThat(step(id, ProductionStage.QC)).containsEntry("status", "SUCCEEDED").containsEntry("attempts", 3);
+        assertThat(step(id, ProductionStage.RENDER).get("attempts")).isEqualTo(renders);
+        assertThat(mediaDispatches).hasValue(sent);
+        assertThat(jdbc.queryForObject("""
+                SELECT COUNT(*) FROM production_media_asset a JOIN production_media_item i ON i.id = a.item_id
+                WHERE i.production_request_id = ? AND i.kind IN ('RENDER', 'QC')
+                """, Integer.class, id)).as("no re-render and no new QC bundle").isEqualTo(3);
+        assertThat(mediaAssetStates(id)).containsEntry("MP4", "FINAL").containsEntry("QC_REPORT", "FINAL")
+                .containsEntry("MANIFEST", "FINAL");
+        long video = jdbc.queryForObject("""
+                SELECT a.id FROM production_media_asset a JOIN production_media_item i ON i.id = a.item_id
+                WHERE i.production_request_id = ? AND a.role = 'MP4'
+                """, Long.class, id);
+        mvc.perform(get(PATH + "/" + id + "/media/" + video + "?download=true").with(ApiTestSupport.as(admin)))
+                .andExpect(status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content().string("fixture bytes"));
+        mvc.perform(get(PATH + "/" + id + "/media/" + video).with(ApiTestSupport.as(admin)).header("Range", "bytes=0-6"))
+                .andExpect(status().isPartialContent());
+        // neither the stopped worker nor a second confirmation can finalize again
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> executor.drive(stopped))
+                .isInstanceOf(LeaseLostException.class);
+        assertThat(executor.runOnce("late-worker")).isFalse();
+        assertThat(mediaAssetStates(id)).containsEntry("MP4", "FINAL");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = { "QC_REPORT", "MANIFEST" })
+    void damagedQcResultOfTheLastAttemptKeepsPublicationBlocked(String role) throws Exception {
+        discover(NEUTRON);
+        long id = create("SHORTS", ",\"candidateCount\":5,\"mediaEnabled\":true");
+        stopAfterLastQcResult(id);
+        String path = jdbc.queryForObject("""
+                SELECT a.relative_path FROM production_media_asset a JOIN production_media_item i ON i.id = a.item_id
+                WHERE i.production_request_id = ? AND a.role = ?
+                """, String.class, id, role);
+        java.nio.file.Files.writeString(Path.of(mediaStorageRoot).resolve(path), "altered bytes");
+        drain();
+        assertStatus(id, "FAILED");
+        assertThat(step(id, ProductionStage.QC)).containsEntry("status", "FAILED").containsEntry("attempts", 3)
+                .containsEntry("last_error_code", "MEDIA_QC_INTEGRITY");
+        assertThat(mediaAssetStates(id)).containsEntry("MP4", "STAGED");
+        long video = jdbc.queryForObject("""
+                SELECT a.id FROM production_media_asset a JOIN production_media_item i ON i.id = a.item_id
+                WHERE i.production_request_id = ? AND a.role = 'MP4'
+                """, Long.class, id);
+        mvc.perform(get(PATH + "/" + id + "/media/" + video).with(ApiTestSupport.as(admin)))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void lastQcAttemptStoppedBeforeItsResultStillFailsAndPublishesNothing() throws Exception {
+        discover(NEUTRON);
+        long id = create("SHORTS", ",\"candidateCount\":5,\"mediaEnabled\":true");
+        onLocalWork.set(context -> {
+            if (context.stage() == ProductionStage.QC) {
+                if (context.attemptNo() < 3) {
+                    throw new IllegalStateException("IT local QC failure on attempt " + context.attemptNo());
+                }
+                throw new SimulatedStop();
+            }
+        });
+        try {
+            for (int round = 0; round < 4; round++) {
+                try {
+                    drain();
+                } catch (SimulatedStop expected) {
+                    break;
+                }
+                makeDue(id);
+            }
+        } finally {
+            onLocalWork.set(context -> {});
+        }
+        assertThat(step(id, ProductionStage.QC)).as(describe(id)).containsEntry("status", "RUNNING")
+                .containsEntry("attempts", 3);
+        assertThat(jdbc.queryForObject("SELECT state FROM production_media_item WHERE production_request_id = ?"
+                + " AND kind = 'QC'", String.class, id)).isNotEqualTo("APPLIED");
+        root().update("UPDATE production_request SET lease_until = UTC_TIMESTAMP(6) - INTERVAL 1 SECOND WHERE id = ?",
+                id);
+        drain();
+        assertStatus(id, "FAILED");
+        assertThat(step(id, ProductionStage.QC)).containsEntry("status", "FAILED").containsEntry("attempts", 3)
+                .containsEntry("last_error_code", "INTERRUPTED");
+        assertThat(mediaAssetStates(id)).doesNotContainKeys("QC_REPORT", "MANIFEST").containsEntry("MP4", "STAGED");
     }
 
     @Test

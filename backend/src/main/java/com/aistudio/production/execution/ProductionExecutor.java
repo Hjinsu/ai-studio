@@ -175,8 +175,11 @@ public class ProductionExecutor implements AutoCloseable {
 
     void drive(Lease lease) {
         for (int i = 0; i < MAX_ACTIONS_PER_CLAIM; i++) {
-            Snapshot snapshot = fenced(lease, request -> new Snapshot(request, mapper.steps(request.id()),
-                    request.discovery() && mapper.awaitingManualChoice(request.id())));
+            Snapshot snapshot = fenced(lease, request -> {
+                List<StepRow> steps = mapper.steps(request.id());
+                return new Snapshot(request, steps, request.discovery() && mapper.awaitingManualChoice(request.id()),
+                        persistedLocalMedia(request, steps));
+            });
             if (isTerminal(snapshot.request().status())) {
                 return;
             }
@@ -195,7 +198,7 @@ public class ProductionExecutor implements AutoCloseable {
             StepPlanner.Action action = StepPlanner.next(snapshot.steps(), snapshot.request().cancelRequested(),
                     snapshot.awaitingChoice(), stage -> snapshot.request().media() && MediaFlow.stage(stage)
                             ? (MediaFlow.paidStage(stage) ? StageWork.Kind.EFFECT : StageWork.Kind.LOCAL)
-                            : work.kind(stage));
+                            : work.kind(stage), step -> snapshot.persisted().contains(step.id()));
             switch (action) {
                 case StepPlanner.Recover recover -> {
                     boolean more = isDiscover(snapshot.request(), recover.step())
@@ -252,6 +255,25 @@ public class ProductionExecutor implements AutoCloseable {
         };
     }
 
+    /**
+     * B02: interrupted local media steps whose item result is already committed (APPLIED). The planner recovers
+     * them from that result instead of counting a new attempt or failing at the limit; the recovery re-verifies the
+     * stored files (for QC the MP4, report and manifest hashes) before the step can succeed.
+     */
+    private java.util.Set<Long> persistedLocalMedia(RequestRow request, List<StepRow> steps) {
+        if (media == null || !request.media()) {
+            return java.util.Set.of();
+        }
+        java.util.Set<Long> persisted = new java.util.HashSet<>();
+        for (StepRow step : steps) {
+            if (step.status() == StepStatus.RUNNING && MediaFlow.stage(step.stage())
+                    && !MediaFlow.paidStage(step.stage()) && media.persisted(request.id(), step.stage())) {
+                persisted.add(step.id());
+            }
+        }
+        return persisted;
+    }
+
     private boolean runMedia(Lease lease, RequestRow request, StepRow step, boolean recover) {
         try {
             return runMediaStage(lease, request, step, recover);
@@ -268,7 +290,10 @@ public class ProductionExecutor implements AutoCloseable {
             return false;
         }
         boolean recoveryOnly = !media.ready() || request.cancelRequested();
-        if (recoveryOnly && !recover) {
+        // B02: an interrupted local step resumes from its stored result only with media available; until then it
+        // waits unchanged instead of spending its last attempt on a recovery-only pass.
+        boolean storedResult = recover && step.status() == StepStatus.RUNNING && !MediaFlow.paidStage(step.stage());
+        if (recoveryOnly && (!recover || (storedResult && !request.cancelRequested()))) {
             release(lease);
             return false;
         }
@@ -1001,7 +1026,7 @@ public class ProductionExecutor implements AutoCloseable {
     }
 
     /** Package-private so a test can act between the planning snapshot and the completion transaction. */
-    record Snapshot(RequestRow request, List<StepRow> steps, boolean awaitingChoice) {}
+    record Snapshot(RequestRow request, List<StepRow> steps, boolean awaitingChoice, java.util.Set<Long> persisted) {}
 
     @Override
     public void close() {

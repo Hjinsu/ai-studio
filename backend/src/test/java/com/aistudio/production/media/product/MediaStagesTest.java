@@ -177,13 +177,25 @@ class MediaStagesTest {
     }
 
     @Test
-    void itemsWithAnOperationAreOnlyRecovered() throws Exception {
+    void itemsPastTheExecutionProofAreOnlyRecovered() throws Exception {
+        var run = run(catalog(false, false, null), null);
+        var items = ProductTestKit.items(ProductionStage.IMAGE, run.planned(), run.profile()).stream()
+                .map(i -> new MediaStageWork.Item(i.id(), i.ordinal(), i.inputJson(), i.inputHash(), "PROVEN", 77L)).toList();
+        var result = run.work().recover(run.kit().context(ProductionStage.IMAGE, run.planned(), run.profile(), items, 2));
+        assertThat(result).isEqualTo(new MediaStageWork.Result(Outcome.RECOVERY_REQUIRED, "MEDIA_EFFECT_PENDING"));
+        assertThat(run.kit().dispatches).hasValue(0);
+    }
+
+    @Test
+    void boundItemsBeforeTheExecutionProofArePresentedAgainToTheSharedPort() throws Exception {
+        // B01: an ACTIVE item may hold a reservation that was never dispatched; the shared port decides whether the
+        // same operation is sent, closed as not executed, or kept for recovery.
         var run = run(catalog(false, false, null), null);
         var items = ProductTestKit.items(ProductionStage.IMAGE, run.planned(), run.profile()).stream()
                 .map(i -> new MediaStageWork.Item(i.id(), i.ordinal(), i.inputJson(), i.inputHash(), "ACTIVE", 77L)).toList();
         var result = run.work().recover(run.kit().context(ProductionStage.IMAGE, run.planned(), run.profile(), items, 2));
-        assertThat(result).isEqualTo(new MediaStageWork.Result(Outcome.RECOVERY_REQUIRED, "MEDIA_EFFECT_PENDING"));
-        assertThat(run.kit().dispatches).hasValue(0);
+        assertThat(result.outcome()).isEqualTo(Outcome.APPLIED);
+        assertThat(run.kit().dispatches).hasValue(items.size());
     }
 
     @Test

@@ -18,6 +18,12 @@ import com.aistudio.production.execution.StepPlanner.Action;
 
 class StepPlannerTest {
     private static final Function<ProductionStage, StageWork.Kind> KINDS = new FakeStageWork(BigDecimal.ONE)::kind;
+    /** Media request kinds: IMAGE and TTS are paid effects, the later media stages are local work. */
+    private static final Function<ProductionStage, StageWork.Kind> MEDIA_KINDS = stage -> switch (stage) {
+        case IMAGE, TTS -> StageWork.Kind.EFFECT;
+        case SUBTITLE, RENDER, METADATA, QC -> StageWork.Kind.LOCAL;
+        default -> KINDS.apply(stage);
+    };
 
     private static List<StepRow> steps() {
         List<StepRow> rows = new ArrayList<>();
@@ -102,6 +108,28 @@ class StepPlannerTest {
         List<StepRow> exhausted = with(succeededUntil(ProductionStage.RENDER), ProductionStage.RENDER,
                 StepStatus.RETRY_WAIT, 3, true);
         assertThat(next(exhausted, false)).isInstanceOf(StepPlanner.Fail.class);
+    }
+
+    @Test
+    void storedResultOfTheLastAttemptIsRecoveredWithoutAFourthAttempt() {
+        // B02: QC stopped after its result commit on the third attempt
+        List<StepRow> rows = with(succeededUntil(ProductionStage.QC), ProductionStage.QC, StepStatus.RUNNING, 3, true);
+        StepRow qc = rows.get(ProductionStage.QC.ordinal());
+        assertThat(StepPlanner.next(rows, false, false, MEDIA_KINDS, step -> step.id() == qc.id()))
+                .isEqualTo(new StepPlanner.Recover(qc));
+        // without a stored result the attempt limit still fails the step, and cancel still wins
+        assertThat(StepPlanner.next(rows, false, false, MEDIA_KINDS, step -> false))
+                .isEqualTo(new StepPlanner.Fail(qc, "INTERRUPTED"));
+        assertThat(StepPlanner.next(rows, true, false, MEDIA_KINDS, step -> true))
+                .isEqualTo(new StepPlanner.Finish(ProductionStatus.CANCELLED));
+        // an earlier attempt with a stored result is recovered too, so it never counts a new attempt
+        List<StepRow> early = with(succeededUntil(ProductionStage.QC), ProductionStage.QC, StepStatus.RUNNING, 1, true);
+        assertThat(StepPlanner.next(early, false, false, MEDIA_KINDS, step -> true))
+                .isEqualTo(new StepPlanner.Recover(early.get(ProductionStage.QC.ordinal())));
+        // a stored-result flag never resumes a step that is not interrupted
+        List<StepRow> exhausted = with(succeededUntil(ProductionStage.QC), ProductionStage.QC,
+                StepStatus.RETRY_WAIT, 3, true);
+        assertThat(StepPlanner.next(exhausted, false, false, MEDIA_KINDS, step -> true)).isInstanceOf(StepPlanner.Fail.class);
     }
 
     @Test

@@ -62,7 +62,12 @@ class EffectStages {
             var key = new MediaEffectPort.Item(context.owner(), item.id());
             ProductionCostPort.EffectResult result;
             AtomicReference<String> failure = new AtomicReference<>();
-            if (item.operationId() != null) {
+            // B01: an ACTIVE item already bound to an operation may hold a reservation that was never dispatched
+            // (stop between the reservation and the dispatch permit). It is presented again through execute, which
+            // reuses the same effect key and operation; the shared permit then dispatches it at most once, closes
+            // it as not executed on cancel or budget period end, and only replays an operation already dispatched.
+            // Items past the execution proof are only recovered, never re-sent.
+            if (item.operationId() != null && !"ACTIVE".equals(item.state())) {
                 result = effects.recover(key);
             } else {
                 var input = support.input(context, item);
