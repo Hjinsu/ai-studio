@@ -17,7 +17,7 @@
 | V2-04-COMMON | Codex | IMPLEMENTED | `v2/04-common`, V13 및 공통 계약. [검증·인수 기록](STATE.md) |
 | V2-04-SAFETY | Codex | IMPLEMENTED | `v2/04-safety`. Linux 보호, 장애 안전성 및 scratch 예약 수명주기. [검증 보고서](docs/reports/V2-04_SAFETY_REPORT.md) |
 | V2-04-PRODUCT | Claude Code | IMPLEMENTED | 실제 앱 기술 검증 및 사용자 인수 PASS. Product `925d736225828c720f11bc95569f84a6a17165f3`. [보고서](docs/reports/V2-04_PRODUCT_REPORT.md) |
-| V2-04-INTEGRATION | Codex | IMPLEMENTED | v2/04-integration. 독립 리뷰 APPROVE 및 사용자 최종 병합 승인 대기. [통합 보고서](docs/reports/V2-04_INTEGRATION_REPORT.md) |
+| V2-04-INTEGRATION | Codex | IMPLEMENTED | v2/04-integration. B01·B02 RESOLVED, 독립 리뷰 APPROVE. CI 확인 후 사용자 최종 병합 승인 대기. [통합 보고서](docs/reports/V2-04_INTEGRATION_REPORT.md) |
 
 [품질·수익화 요구사항](docs/v2/05_CONTENT_QUALITY_AND_MONETIZATION.md)은 V2-02~08의 단계별 인수 기준에 적용한다. V2-01은 검수·재생성까지 동일 제작 요청 비용 경계를 제공한다. FFmpeg·FFprobe 준비는 V2-04에 포함한다.
 

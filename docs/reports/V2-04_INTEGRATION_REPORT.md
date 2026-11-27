@@ -1,5 +1,13 @@
 # V2-04 최종 통합 및 검증
 
+## 최종 독립 검증 및 병합 준비
+
+- 최종 독립 검증 **APPROVE**. 검증 SHA `32bcff9f3995ed4c18b0145086400e95b71a548d`에서 B01·B02 RESOLVED, 신규 BLOCKING 없음. B01은 fixture 확인 전에 미발송 예약의 취소·만료를 처리하고 최종 발송 허가를 재검증한다. B02는 QC 마지막 시도의 저장 결과를 해시 검증 후 추가 시도 없이 확정한다. [수정 및 집중 검증 보고서](V2-04_BLOCKING_FIXES_REPORT.md)
+- `v2/04-integration`에 검증 SHA를 fast-forward로 통합했다. 후속 커밋은 문서만 변경했다. 전체 로컬 테스트와 독립 리뷰는 반복하지 않았다.
+- 실제 OS 수준 JVM 강제 종료는 미검증이다. 장애 주입은 커밋된 DB·파일 상태를 검증했다. Linux 배포 환경의 미디어 실행은 기존 안전 차단 상태이며 실환경 검증은 남아 있다.
+- V2-05 영상당 제작 예산 목표를 3,000원으로 갱신했다. 실제 지출에는 별도 승인이 필요하다. [V2-05 요구사항](../v2/V2-05_IFNOVA_CONTENT.md)
+- 상태는 IMPLEMENTED다. 최종 통합 HEAD의 CI를 확인하고 사용자 최종 병합 승인을 기다린다.
+
 ## 기준 및 충돌
 
 - 통합 브랜치 `v2/04-integration`, worktree `../ai-studio-v2-04-integration`. 기존 Integration `715893fa47a955be399492ddc362b169b528dae3`, Common `d7bec5f9aadcc423d7b2a987ac31d810367b4604`, Safety `5c303a2aebe87222df6d2b5b8aad182cf70a0716`, 최신 원격 Product `925d736225828c720f11bc95569f84a6a17165f3`를 대조했다.

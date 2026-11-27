@@ -23,7 +23,8 @@
 - 테스트: 수정 전 기준 SHA에서 새 테스트 8건 실패 재현. 수정 후 `--rerun-tasks` 단위 총 331·통과 330·실패 0·SKIP 1(Linux 전용), 격리 MariaDB 11.8.2·FFmpeg 9.1 통합 총 277·통과 276·실패 0·SKIP 1(기존 liveEdge 게이트), bootJar 성공. diff --check·변경 파일 Gitleaks 통과.
 - Migration·OpenAPI·공통 계약·scratch 보호 변경 없음. 사용자 DB·유료 호출·게시 없음. 미검증: OS 수준 JVM kill(영속 상태 기반 주입으로 대체, 보고서 §4), Linux 실행.
 - 잔여 B01(Codex 재검증 UNRESOLVED): fixture 준비 전에 fixture 없는 recover(may-not-send)로 취소·만료 미발송 예약을 먼저 종료하도록 `EffectStages`만 수정. 수정 전 신규 14건 중 8건 실패, 수정 후 집중·관련 통합 총 82·통과 81·SKIP 1, 단위 총 331·통과 328·SKIP 3(환경·OS 게이트). 보고서 §9.
-- 다음 작업: Codex의 잔여 B01 집중 검증(보고서 §9). 통합 브랜치 병합은 사용자 승인 후.
+- Codex 최종 독립 검증 **APPROVE** (32bcff9f3995ed4c18b0145086400e95b71a548d). B01·B02 RESOLVED, 신규 BLOCKING 없음. 사용자가 검증 결과를 수용했고 v2/04-integration에 fast-forward로 통합했다.
+- 다음 작업은 최종 통합 HEAD의 CI 확인과 사용자 최종 병합 승인이다. 승인 후 v2/integration 병합 및 DONE 전환을 진행한다.
 
 ### V2-04-INTEGRATION — 제품·안전성 결합 (2026-11-27 KST, IMPLEMENTED)
 
