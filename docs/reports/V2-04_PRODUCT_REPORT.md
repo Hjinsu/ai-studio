@@ -1,9 +1,96 @@
-# V2-04-PRODUCT 진행 보고 · 체크포인트 (Claude Code)
+# V2-04-PRODUCT 진행 보고 (Claude Code)
 
-- 상태 **IN_PROGRESS — 체크포인트** (IMPLEMENTED 아님) · 2026-11-27 KST
+- 상태 **IN_PROGRESS — 기술 인수 완료, 사용자 청취·권리 확인 대기** (IMPLEMENTED 아님) · 2026-11-27 KST · 회사 PC 재개 결과는 [§0](#0-회사-pc-재개-결과-2026-11-27)
 - 기준 공통 SHA `d7bec5f9aadcc423d7b2a987ac31d810367b4604` · 브랜치 `v2/04-product` · worktree `../ai-studio-v2-04-product`
 - 범위: [착수 지시서](../v2/V2-04_CLAUDE_HANDOFF.md)의 Claude 소유 경로. 공통 계약·Codex 소유 파일, migration, OpenAPI, 빌드 설정은 수정하지 않았다. 공통 scratch 보호 정책(전용 ≤32 GiB 볼륨)은 우회·완화하지 않았다.
-- 남은 필수 항목: 실제 앱(보호 실행기) E2E와 실제 앱 브라우저 검증, 전체 integrationTest 완주, 사용자 청취·권리 확인 → 이후 IMPLEMENTED 보고.
+- 남은 필수 항목: **사용자 청취·권리 확인**(§0.6) → 이후 IMPLEMENTED 보고. 통합 담당자 조율 필요 결함 1건(§0.5).
+
+## 0. 회사 PC 재개 결과 (2026-11-27)
+
+회사 PC(Windows 11, 사용자 `PC-94`), 기준 HEAD `0920437036e85182bb807be4a7b85425da291b50`, 외부 자산 루트 `C:\Users\PC-94\Downloads\AI-Studio-V2-04-Acceptance\`. 제품 코드는 수정하지 않았다. 추가 파일은 실제 앱 인수 스크립트 `frontend/e2e/live-media.mjs`뿐이다(`npm test`에 포함되지 않음).
+
+### 0.1 환경·자산
+
+| 항목 | 결과 | 근거 |
+|---|---|---|
+| Java 21 | PASS | Gradle toolchain Temurin 21.0.13(`~/.gradle/jdks`). PATH의 Zulu 17은 Gradle 실행용으로만 사용 |
+| FFmpeg/ffprobe 9.1 gyan full_build (winget) | PASS | `3ab4a9c4…cb7c2cf` / `ff181a5b…1f1a7bed`. 집 PC 기록과 일치 |
+| Node.js / npm.cmd | PASS | v24.21.0 / 11.19.0. `npm ci` lockfile 그대로, 실행 정책 변경 없음 |
+| Gitleaks | PASS | 8.30.1, exe `17157e2e…78fcb7c`(스파이크 기록과 일치) |
+| 외부 자산 SHA-256 | PASS | `EXTERNAL_ASSETS_SHA256.txt` 39/39(fixtures·downloads 29 + `output/` 10). 스파이크 `SHA256SUMS.txt` 30/30, 절대경로 3건(ffmpeg·ffprobe·gitleaks)은 회사 PC 경로에서 같은 해시로 대조 |
+| Piper·음성 모델 권리 | PASS(문서 대조) | Piper MIT `LICENSE.md`, `en_US-ljspeech-high` MODEL_CARD "Dataset LJ Speech, License: public domain". 해시는 위 대조에 포함 |
+| 이미지·BGM·SFX·글꼴 권리 | PASS(문서 대조) | `ASSETS_AND_RIGHTS.md`: 이미지·음악·효과음 자체 제작, Noto Sans KR Bold OFL 1.1. QC `RIGHTS_COMPLETE` PASS(neutron 15건, venus 10건). **사용자 최종 확인 대기** |
+
+### 0.2 격리 환경
+
+- Scratch: 사용자가 관리자 PowerShell로 `tools\create-scratch-vhdx.ps1`(외부 자산 루트) 실행. `C:\aistudio\scratch.vhdx` 16 GiB 확장형, NTFS `AISCRATCH`, `S:`(총 17,177,767,936 B), `scratch-root=S:\s`. Workspace(`storage-root`)는 C:의 `…\AI-Studio-V2-04-Acceptance\e2e-workspace`. 32 GiB 상한·5 GiB 하한 보호 조건은 그대로 두었다. 재부팅 후 `Mount-DiskImage -ImagePath C:\aistudio\scratch.vhdx`(관리자) 필요.
+- MariaDB: 기존 3306(업무 DB)은 접속하지 않았다. 설치본 11.8.2로 임시 인스턴스 127.0.0.1:3307을 별도 데이터 폴더(세션 임시 폴더)에 실행했고, 완료 후 종료하고 데이터·임시 비밀번호를 삭제했다. 3306 설정과 `.env`는 재사용하지 않았다.
+- 포트: 8080은 다른 프로젝트(IntelliJ)가 사용 중이라 건드리지 않고, 앱 18080·Vite 5180을 썼다. 종료 후 18080/5180/3307 비어 있음 확인.
+
+### 0.3 전체 테스트 (실제 실행)
+
+| 명령 | 결과 |
+|---|---|
+| `gradlew.bat :backend:test :backend:integrationTest :backend:bootJar` (격리 3307, FFmpeg·fixture·font 환경변수) | **PASS** BUILD SUCCESSFUL 7m55s. test 39 suites **324/324**, integrationTest 27 suites **259 통과, 실패 0, 건너뜀 1**(`PlanningExecutionIT.liveEdgeConnectsTheFrontendToTheActualServer`: 기존 환경 게이트 테스트, V2-04 무관). bootJar 생성 |
+| frontend `npm run lint` / `npm run typecheck` / `npm test` / `npm run build` | **PASS** / **PASS** / **102/102** / **PASS** |
+| `ProductMediaIT` 산출(`output-pc94-it/`) | neutron `16f7d2da…90c4c6`, venus `fcf8d4d8…eb6cb33`: 아래 실제 앱 MP4와 **바이트 동일**(결정적 렌더) |
+| Playwright API 대역 `e2e/media.spec.ts` | 이번 세션 재실행 안 함(실제 앱 경로로 대체 검증, 아래) |
+| Gitleaks `live-media.mjs`, `output-pc94-e2e/` | no leaks |
+
+### 0.4 실제 앱 E2E (보호 실행기, bootJar + Vite + Edge) — PASS
+
+`node frontend/e2e/live-media.mjs`(환경: `LIVE_URL`, `LIVE_PASSWORD_FILE`, `LIVE_OUT`, 선택 `LIVE_TOPICS`, `LIVE_REUSE=slug:id`). 앱 설정은 §6 목록과 같다(+`--server.port=18080 --ai-studio.production.executor.enabled=true`).
+
+| 단계 | neutron-star (요청 3) | venus-day (요청 5) |
+|---|---|---|
+| 로그인(UI) | PASS | PASS |
+| 채널·예산·지출 허용(브라우저 세션 API, 모의 KRW) | PASS | PASS |
+| 소재 발굴 `mediaEnabled:true` MANUAL 10후보 → 소재 선택(UI 대화상자) | PASS(요청 1·2는 후보 미포함으로 취소) | PASS |
+| 조사·대본·장면·이미지·음성·자막·렌더·METADATA·QC | 11단계 모두 SUCCEEDED, 각 1회 시도, 76 s | 11단계 모두 SUCCEEDED, 각 1회 시도, 60 s |
+| 보호 실행기 사용 | `S:\s\r3-i*-a1` attempt 디렉터리 생성 확인 | `S:\s\r5-…` |
+| 기술 QC | PASS 32/32, 50.40 s·1512 fr, 낭독 50.372 s, −15.8 LUFS, −1.9 dBTP, LRA 3.9, linear | PASS 32/32, 46.13 s·1384 fr, 낭독 46.115 s, −15.9 LUFS, −1.8 dBTP, LRA 3.3, linear |
+| 미디어 확정·목록(`/media`) | MP4·SRT·QC_REPORT·MANIFEST 등 공개 | 동일 |
+| 브라우저 재생 | 1080×1920, 50.4 s, 1.09 s 재생, error 없음 | 1080×1920, 46.13 s, 1.03 s 재생 |
+| seek 30 s | 30.96 s, readyState 4, 206 응답 | 30.96 s, readyState 4, 206 |
+| 장면 이미지 decode / 장면 낭독 재생 | 5장 1080 px / 0.56 s 재생 | 3장 / 0.56 s |
+| 영상 다운로드(버튼) | `asset-28.mp4`, SHA = 목록 SHA | `asset-65.mp4`, SHA = 목록 SHA |
+| 자막 다운로드(버튼)·SRT 보기 | `asset-27.srt`, `-->` 포함 | `asset-64.srt` |
+| 라이트 / 다크+모바일 390 px 가로 넘침 | 캡처 / 넘침 0 | 캡처 / 넘침 0 |
+
+산출물(Git 밖) `C:\Users\PC-94\Downloads\AI-Studio-V2-04-Acceptance\output-pc94-e2e\` (`SHA256SUMS.txt` 포함):
+
+| 파일 | 바이트 | SHA-256 |
+|---|---|---|
+| `neutron-star\neutron-star.mp4` | 20,744,105 | `16f7d2da0713288b715b6964a0ed3c91c4ea0bd42121698dfbcaaf445590c4c6` |
+| `neutron-star\neutron-star.srt` | | `198b8a8da7286632de8671bd0ef625ebfb6f1796ec9e56f3d21a78071cc628fa` (집 PC와 동일) |
+| `venus-day\venus-day.mp4` | 16,795,925 | `fcf8d4d8d1092d12fd6193a65e2e70b9730fc80683cc6abf6a90805e8eb6cb33` |
+| `venus-day\venus-day.srt` | | `b16eba110c34af5c3c1d6f66804e6048f6724d8feefa33134dd42e725b294eca` |
+
+각 폴더: `contact-sheet.png`(5 s 간격 10컷), `ffprobe.json`, `qc-qc_report-*.json`, `qc-manifest-*.json`, `media.json`, `request-detail.json`, `live-result.json`, `browser-light.png`, `browser-dark-mobile.png`. `logs\`: 실행 로그, 앱 경고, 정리 전 scratch 목록. MP4 해시는 집 PC 산출(`6c2d9c22…`, `20be054d…`)과 다르다. SRT·QC 측정값은 같고, 같은 PC에서는 IT·실제 앱 출력이 바이트 동일하다. 다른 PC 간 해시 고정은 요구사항이 아니다.
+
+참고: 다크·모바일 전체 페이지 캡처의 장면 썸네일은 lazy 로딩 전 상태로 찍혔다. decode는 라이트 화면에서 검증했다.
+
+### 0.5 발견 결함 — 통합 담당자(Codex) 조율 필요, 제품 코드 수정 없음
+
+**보호 scratch 예약이 완료된 attempt 디렉터리를 24시간 동안 계속 1 GiB씩 계산한다.** `ProtectedMediaProcessRunner.prepare`는 `여유공간 ≥ 5 GiB + (기존 r*-i*-a* 디렉터리 수 + 1) × 1 GiB`를 요구한다. `MediaCleanup.RETENTION = 24h`라 성공한 요청의 디렉터리도 하루 동안 남는다. 16 GiB 볼륨에서는 약 10개까지만 허용되는데 5장면 요청 1건이 8개를 남긴다. 그래서 두 번째 요청(요청 4)의 TTS가 `MEDIA_SCRATCH_UNAVAILABLE`("Media scratch reservation exceeds capacity")로 3회 시도 후 **FAILED**됐다(`logs\app-warnings.log`, `live-run-request4-scratch-fail.log`). 32 GiB 상한 볼륨에서도 하루 약 3건이 한계다. `v2/04-safety`(`59f22c8`)도 같은 규칙이다.
+- 인수 진행 방식: 보호 조건은 바꾸지 않았다. 종료(SUCCEEDED/FAILED)되고 lease가 0인 요청 3·4의 scratch 디렉터리만 수동 삭제했다(reaper가 24h 후 하는 동작과 같음). 이후 venus-day(요청 5)를 새로 제작했고, neutron-star는 이미 성공한 요청 3으로 브라우저 검증을 했다.
+- 제안(승인 필요): 종료된 요청·성공 attempt의 scratch를 즉시 reap하거나, 예약을 실행 중 attempt만 계산. 공통 계약 변경이므로 Codex·사용자 결정 사항이다.
+
+### 0.6 사용자 확인 대기 (IMPLEMENTED 전 필수)
+
+1. **청취·시청**: 위 두 MP4를 재생해 낭독(Piper LJSpeech 합성 음성)·자막·BGM/SFX 균형을 확인한다. 브라우저 경로를 직접 보려면 §0.7로 앱을 띄운다.
+2. **권리 확인**: `C:\Users\PC-94\Downloads\AI-Studio-V2-04-Acceptance\ASSETS_AND_RIGHTS.md`(현재 `claude-code-v2-04-product` 대조 기록, 사용자 확인 전). 합성 음성 고지 필요 여부도 함께 판단한다.
+3. 확인 후 상태를 IMPLEMENTED로 전환한다. 그 다음 Codex 독립 리뷰 → CI → ChatGPT 검토 → 사용자 승인 순이다.
+
+### 0.7 재현 (회사 PC)
+
+1. (재부팅 후) 관리자 `Mount-DiskImage -ImagePath C:\aistudio\scratch.vhdx` → `S:\s` 확인. 이전 요청의 `S:\s\r*` 디렉터리가 10개 이상이면 §0.5 제약에 걸린다.
+2. `LOCAL_TEST_GUIDE.md` §2로 3307 임시 MariaDB를 띄우고 `ai_studio` DB를 만든다.
+3. 관리자 계정: 대화형 콘솔에서 `java -jar backend\build\libs\backend-0.1.0-SNAPSHOT.jar admin create --login admin`(ADR-031). 이번 세션은 비대화형이라 CLI가 종료 코드 2로 거부했다(정상 동작). 그래서 격리 DB에만 앱과 같은 BCrypt(12) 해시로 `admin_user` 1행을 직접 넣었다. 로그인 자체는 실제 UI로 검증했다.
+4. bootJar를 §6 설정과 `--server.port=18080 --ai-studio.production.executor.enabled=true`로 실행한다. `AI_STUDIO_BACKEND_URL=http://127.0.0.1:18080 npx vite --host 127.0.0.1 --port 5180`.
+5. `cd frontend; $env:LIVE_URL='http://127.0.0.1:5180'; $env:LIVE_PASSWORD_FILE=<비밀번호 파일>; $env:LIVE_OUT=<Git 밖 폴더>; node e2e/live-media.mjs`.
+
+아래 §1~§7은 집 PC 체크포인트 기록이다(이력).
 
 ## 1. 완료 / 미완료
 
