@@ -38,6 +38,8 @@
 
 - [외부 Worker 2차 검증](docs/reports/V2-05_EXTERNAL_AI_WORKER_ROUND2.md)은 계정별 추가 과금 차단 미확인으로 실제 실행 보류. 모델 호출·유료 API·제품 테스트·Migration 실행 없음. 다음은 동일 CLI 계정의 크레딧 차단 근거 확인 뒤 S1 표본 2개 일회성 검증이다.
 
+- 외부 Worker 2차 재개에서 사용자 제공 과금 설정을 기록하고 Claude S1 초안 2건 및 요청-초안 해시 검증을 완료했다. Codex 기본 구독 연결의 내부 재시도 차단 방법 미확인으로 독립 검수는 보류했다. [재개 결과 및 증거](docs/reports/V2-05_EXTERNAL_AI_WORKER_ROUND2.md). 제품 테스트·DB·Migration 실행 없음. 다음은 Codex 재시도 차단 방법 확인과 검수 완료다.
+
 ### V2-04-BLOCKING-FIXES — 독립 리뷰 B01·B02 수정 (2026-11-27 KST, DONE)
 
 - Claude Code(Codex 사용량 제한으로 위임). 기준 `v2/04-integration` `b9669aae508c71fec7fabeefaab7d1adade09fe0`, 브랜치 `v2/04-blocking-fixes`. 상세·재현 명령: [수정 보고서](docs/reports/V2-04_BLOCKING_FIXES_REPORT.md).
