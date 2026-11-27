@@ -92,14 +92,21 @@ class MediaTimingAndGraphTest {
     void cuesWrapIntoTwoBalancedLinesAndHighlightNumbersAndPhrases() {
         Font font = new Font(Font.SANS_SERIF, Font.BOLD, 10);
         Font scaled = SubtitleTrack.scaled(font, 76);
-        String text = "Now squeeze about 1.4 times the mass of our Sun into a ball";
-        int at = SubtitleTrack.wrap(text, scaled, 1000);
+        String firstHalf = "Now squeeze about 1.4 times";
+        String secondHalf = "the mass of our Sun into a ball";
+        String text = firstHalf + " " + secondHalf;
+        // Logical SansSerif maps to different fonts on Windows and Linux.
+        double lineLimit = Math.max(SubtitleTrack.width(scaled, firstHalf), SubtitleTrack.width(scaled, secondHalf));
+        assertThat(SubtitleTrack.width(scaled, text)).isGreaterThan(lineLimit);
+        int at = SubtitleTrack.wrap(text, scaled, lineLimit);
         assertThat(at).isPositive();
         assertThat(text.charAt(at)).isEqualTo(' ');
-        assertThat(SubtitleTrack.wrap("Short line", scaled, 1000)).isEqualTo(-1);
+        assertThat(SubtitleTrack.width(scaled, text.substring(0, at))).isLessThanOrEqualTo(lineLimit);
+        assertThat(SubtitleTrack.width(scaled, text.substring(at + 1))).isLessThanOrEqualTo(lineLimit);
+        assertThat(SubtitleTrack.wrap("Short line", scaled, lineLimit)).isEqualTo(-1);
         var spans = SubtitleTrack.emphasis("About 117 Earth days, a billion tons.", List.of("billion tons"));
         assertThat(spans).extracting(SubtitleTrack.Span::start).containsExactly(6, 24);
-        assertThatThrownBy(() -> SubtitleTrack.wrap("x".repeat(200), scaled, 1000))
+        assertThatThrownBy(() -> SubtitleTrack.wrap("x".repeat(200), scaled, lineLimit))
                 .isInstanceOfSatisfying(MediaFailure.class, f -> assertThat(f.code()).isEqualTo("SUBTITLE_TOO_LONG"));
     }
 
