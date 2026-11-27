@@ -44,6 +44,11 @@
 
 - 사용자가 [외부 Worker 소재 발굴 확장 방향](docs/v2/V2-05_EXTERNAL_AI_WORKER_DISCOVERY_REVIEW.md)을 승인했다. 상태는 PROPOSED. 기존 DISCOVER·SELECT, 파일 Worker, MariaDB 상태·fencing을 재사용한다. 독립 검수 2건은 결과 파일 해시를 재확인했다. 다음은 Claude S2~S4 완료 후 전체 결과의 V2-05 최종 설계 반영이다. 무인 반복 실행 보류, 제품 테스트·모델/API 호출·DB·Migration 없음. 기존 상세 설계 파일의 미스테이지 삭제를 보존했다.
 
+- 2026-11-28 V2-05 오디오 연출 개선을 PROPOSED 설계에 반영했다. 설계 기준 8e945e6c2952dc73ee0d5aa0b38434714bf4e117, S2~S4 근거 d4d42e154e119ba0e732a6b3947edd6d1636b76c. 변경은 저장소 설계·IFNOVA 요구사항·STATE. 기존 상세 계획 파일의 미스테이지 삭제를 보존했다. 문서 diff와 비밀정보를 검사했다. 제품 테스트·DB·Migration·유료 API 미실행. 다음은 최종 설계 검토와 구현 승인이다.
+
+- 2026-11-28 V2-05 최종 통합 설계와 착수 준비를 PROPOSED로 정리했다. 설계 브랜치 기준 8e945e6, 원격 V2-04 통합 e51e649, Claude S2~S4 d4d42e1. 변경 문서는 [최종 설계](docs/v2/V2-05_FINAL_DESIGN.md), 공통 계획, Claude 인수인계, 오디오/IFNOVA 계약, v2 색인, STATE·TASKS·DECISIONS다. 기존 상세 계획은 양쪽 커밋에 같은 blob으로 남고 로컬 미스테이지 삭제를 보존했다. 이번 구현 기준은 새 최종 설계 문서다.
+- 정적 Git 범위·링크·diff 및 Gitleaks 검증. 제품 테스트, DB 변경·Migration 실행, 추가 스파이크 및 API 호출 없음. 실제 청구 대조 및 보호 렌더 인수 미완료. 다음은 사용자 최종 설계·착수 승인 후 Codex 공통 계약 구현, 공통 SHA 동결 후 Claude 제품 작업이다.
+
 ### V2-04-BLOCKING-FIXES — 독립 리뷰 B01·B02 수정 (2026-11-27 KST, DONE)
 
 - Claude Code(Codex 사용량 제한으로 위임). 기준 `v2/04-integration` `b9669aae508c71fec7fabeefaab7d1adade09fe0`, 브랜치 `v2/04-blocking-fixes`. 상세·재현 명령: [수정 보고서](docs/reports/V2-04_BLOCKING_FIXES_REPORT.md).

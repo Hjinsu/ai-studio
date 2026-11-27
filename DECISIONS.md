@@ -231,3 +231,9 @@ ChatGPT APPROVE WITH MINOR FIXES 및 사용자 승인. V10의 `production_discov
 사용자가 콘텐츠 기반 동적 연출을 확정했다. IFNOVA ko-KR, 40~60초, 총 제작비 상한 3,000원을 유지한다. 이미지 장수, AI 영상 초수, 장면 수·길이, 매체 비율 및 공급자별 배분은 소재별로 결정한다. 기존 15초/30초 AI 영상과 미디어 비율은 비용 비교 사례다.
 
 기존 SCENES 후보 검증, 저비용 대안 비교, 부적합 시 발송 전 보류와 사유 표시를 PROPOSED로 구체화했다. 기존 예약·단일 발송·정산·lease·fencing 계약을 적용한다. [상세 계획 D04/D05](docs/v2/V2-05_IMPLEMENTATION_PLAN.md)
+
+## V2-05 최종 통합 설계 · 승인 대기 (2026-11-28 KST)
+
+사용자 공급자 결정은 Claude 구독 Worker와 Codex 검수, Gemini Flash TTS/Puck, fal FLUX Schnell, Wan I2V Flash 우선이다. 사용자 실행 파일 교환을 지원한다. 무인 반복은 이용 조건 확인 전 비활성화하며 예약은 V2-07 범위다. T2V 기본 OFF, Nano Banana 비용 근거 확보 전 OFF, 기타 공급자는 BACKLOG다. IFNOVA 자체 자막은 기본 OFF다.
+
+편당 3,000원, 기존 lease·fencing·ledger·복구를 유지한다. Gemini TTS 출력 cap 1회 관측은 공식 최대 청구 보장이 아니며, Gemini/fal 실청구 대조는 미완료다. 로컬 상업용 음원과 동작 큐 검수를 채택할 계획이다. 공통·제품 구현 및 운영 활성화는 각각 승인 대기다. [최종 설계](docs/v2/V2-05_FINAL_DESIGN.md)
