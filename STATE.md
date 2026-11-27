@@ -16,6 +16,13 @@
 ## 인수인계 기록
 작업 ID / 상태 / 변경 파일 / 테스트 명령 및 실제 결과 / 미해결 문제 / 다음 작업 / 필요 환경변수. 커밋 해시는 생성된 경우만 기록.
 
+### V2-04-SAFETY — Scratch 예약 및 정리 결함 (2026-11-27 KST, IMPLEMENTED)
+
+- 사용자 승인 범위는 `v2/04-safety`의 scratch 예약·정리 수명주기다. 기준 Safety `59f22c8ab026029fe2a6c2eb20e2666f6c0a51ec`, Common `d7bec5f9aadcc423d7b2a987ac31d810367b4604`, Product `1c526763d3b14b5f5721bb451e2bc09c6f669a2a`.
+- `MediaProcessRunner`, `ProductionExecutor`, `MediaFlow`, `MediaAvailability`, `ProtectedMediaProcessRunner`, `MediaCleanup`에 단계 경계·활성 예약·검증된 scratch 정리를 연결했다. `PlanningExecutionIT`에 해시·삭제 실패·lease 보호·취소 시 증거 보존 회귀를 추가했다. 변경된 수명주기와 집중 검증은 [안전 보고서](docs/reports/V2-04_SAFETY_REPORT.md#scratch-예약-수명주기-수정-2026-11-27-kst)에 기록했다.
+- `gradlew.bat :backend:test :backend:integrationTest :backend:bootJar` 단위 298건, 격리 DB 통합 260건 통과. Windows Linux 전용 테스트와 기존 선택 Live Edge 테스트 각 1건 건너뜀. 16 GiB의 `S:/s/v204-verify`에서 제품 소스를 임시 조합한 최종 bootJar로 3개 채널의 영상 5편을 연속 제작했다. 요청 사이 수동 scratch 삭제 없이 5건 모두 11단계 첫 시도에 성공했다.
+- Migration 변경 없음. V13은 격리 MariaDB 11.8.2에만 적용했다. 다음 작업은 원격 safety HEAD 기준의 별도 독립 리뷰와 사용자 승인 범위의 제품 결합 검증이다.
+
 ### V2-04-COMMON — 공통 계약 구현 (2026-11-27 KST, IMPLEMENTED)
 
 - 사용자 착수 승인 기준 `715893fa47a955be399492ddc362b169b528dae3`, 설계 승인 `18c9b9484d6bc6637252732adb0063e7808ca960`, Codex `v2/04-common` / `../ai-studio-v2-04-common`. 공통 검증 커밋은 `origin/v2/04-common`에서 확인한다.

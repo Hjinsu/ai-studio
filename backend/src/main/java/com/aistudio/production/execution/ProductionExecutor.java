@@ -253,6 +253,16 @@ public class ProductionExecutor implements AutoCloseable {
     }
 
     private boolean runMedia(Lease lease, RequestRow request, StepRow step, boolean recover) {
+        try {
+            return runMediaStage(lease, request, step, recover);
+        } finally {
+            if (media != null) {
+                media.finishStage(lease.requestId());
+            }
+        }
+    }
+
+    private boolean runMediaStage(Lease lease, RequestRow request, StepRow step, boolean recover) {
         if (media == null) {
             park(lease, step, "MEDIA_UNAVAILABLE");
             return false;

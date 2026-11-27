@@ -24,3 +24,16 @@
 | 실제 배포와 렌더 인수 | NOT_TESTED | Windows 중첩 Job 거절·메모리 초과 및 실제 scratch 볼륨 압박, 배포별 Linux 보호, 권리 확인 자산으로 실제 두 편 렌더는 결합 인수에 남는다. |
 
 FAIL 0건. 테스트 대상 코드의 SHA는 `6beeabada605c6a79ac06c95f57286212dbd4016`이다. 이후 검증 기록 커밋에는 문서 변경만 포함한다. 임시 MariaDB는 종료했다.
+
+## Scratch 예약 수명주기 수정 (2026-11-27 KST)
+
+- 작업 기준은 Safety `59f22c8ab026029fe2a6c2eb20e2666f6c0a51ec`, Common `d7bec5f9aadcc423d7b2a987ac31d810367b4604`, Product `1c526763d3b14b5f5721bb451e2bc09c6f669a2a`다. Claude 보고서 §0.5에서 24시간 보존 중인 attempt 디렉터리에도 계속 1 GiB를 예약해 후속 제작이 막힌 원인을 확인했다.
+- 각 활성 scratch는 현재 JVM의 worker가 소유한다. 동일 단계의 다음 item으로 넘어가거나 동기 단계·영속화가 반환되면 소유 worker가 해제한다. 성공 item은 Workspace의 필수 파일 해시와 비용 실행 증거를 확인한다. 해시 검사는 DB 잠금 밖에서 하고, 삭제 직전 요청 잠금 아래 epoch·item·자산 참조를 재확인한다. lease 만료만으로 로컬 예약을 해제하지 않는다.
+- 활성 예약의 1 GiB 차감과 실제 가용 공간 확인, 예약 반환을 같은 잠금에서 처리한다. 보존 또는 삭제 실패로 남은 바이트는 실제 가용 공간에서 이미 차감된다. 실패·취소·중단 파일은 24시간 보존 후 활성 lease·로컬 writer·복구 필요 여부를 재검사한다. 프로세스 종료 검증 실패는 실행기 실패 상태로 전환한다. [공통 계약](../v2/V2-04_COMMON_CONTRACT.md)
+- Java 21과 격리 MariaDB 11.8.2에서 `gradlew.bat :backend:test :backend:integrationTest :backend:bootJar` 통과. 단위 298건, 통합 260건, 실패 0건. Windows에서 Linux 전용 1건, 통합에서 선택 실행하는 기존 Live Edge 1건이 건너뛰어졌다. 오래된 lease·최근 파일·로컬 writer·소유자 미확인 scratch 보존, Workspace 해시 불일치, Windows 삭제 공유 거부, 만료 epoch의 파일 채택 차단 및 취소 후 한 번 정산을 검증했다.
+- 별도 검증 worktree에서 Safety와 지정된 Product SHA의 미디어 제품 소스만 조합해 bootJar를 만들었다. Vite·Edge, FAKE/로컬 fixture, 격리 MariaDB, 실제 FFmpeg Windows Job을 사용했다. 16 GiB 전용 볼륨 `S:/s` 아래 테스트 루트 `S:/s/v204-verify`에서 요청 13의 실제 렌더 중 JVM을 강제 종료했다. FFmpeg는 함께 종료됐으며 중단된 scratch를 유지했다. 재시작한 앱이 lease epoch 2→3에서 RENDER 2회차로 복구했고 MP4 재생·seek·다운로드가 성공했다. 발송·영수증·적용 기록 14건은 동일했고 중복 정산은 0건이었다.
+- 최종 bootJar에서 요청 15·16·17·18·20을 3개 채널에 걸쳐 연속 제작했다. 소재 선택부터 완료까지 63~75초였으며, 각 요청의 11개 단계가 모두 첫 시도에 성공했다. Edge에서 영상 재생·seek, MP4 해시 대조와 자막 다운로드를 확인했다. 배치 경계의 가용 공간은 세 번 모두 16,959,602,688 B였다. 정상 attempt는 모두 정리됐고 마지막까지 중단 샘플 하나만 보존됐다. 다섯 편 사이 수동 scratch 삭제는 없었다.
+- 압박 시험에서 10 GiB 테스트 파일로 실제 가용 공간을 6,222,184,448 B로 낮췄다. 요청 24는 TTS 3회의 시도에서 모두 `MEDIA_SCRATCH_UNAVAILABLE`로 차단됐으며 TTS 발송 0건으로 FAILED가 됐다. 5분 기본 대기 대신 격리 DB에서 이 요청의 retry 시각만 앞당겼다. 10 GiB 테스트 파일을 반환한 뒤 요청 30이 12개의 소형 잔존 디렉터리를 그대로 둔 상태에서 완료됐다.
+- JVM 중단 샘플의 파일 변경 시각을 25시간 전으로 설정한 뒤 다음 준비 호출에서 자동 정리되는 것을 확인했다. 다른 기존 `S:/s` 디렉터리는 테스트 루트 밖에 있었다.
+- 요청 31의 실제 렌더 도중 취소 API를 호출했다. FFmpeg가 종료됐으며 요청이 CANCELLED로 닫혔다. 활성 lease, 미확정·미적용 비용 효과 및 공개 MP4는 각각 0건이었다. 취소 scratch는 보존 조건에 따라 유지됐다.
+- 신규 migration, OpenAPI 및 제품 브랜치 병합 없음. 격리 DB에만 V13을 적용했으며 테스트 앱과 DB를 종료했다. 실제 앱의 2-worker 동시 렌더, Linux에서의 전체 제품 렌더와 실행 중 5 GiB 하한 교차 시험은 미수행이다.

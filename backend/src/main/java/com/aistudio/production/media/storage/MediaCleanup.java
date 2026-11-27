@@ -7,8 +7,11 @@ import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.HashSet;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Set;
+import java.util.function.Predicate;
 import java.util.regex.Pattern;
 
 import org.slf4j.Logger;
@@ -17,13 +20,15 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 import com.aistudio.production.contract.MediaStore.Attempt;
+import com.aistudio.production.contract.MediaStore.FileIdentity;
 import com.aistudio.production.contract.MediaStore.Role;
+import com.aistudio.production.contract.MediaProcessRunner.Scratch;
 import com.aistudio.shared.db.LockRetryingTransactions;
 
 @Component
 public class MediaCleanup {
     private static final Logger log = LoggerFactory.getLogger(MediaCleanup.class);
-    private static final Pattern SCRATCH = Pattern.compile("r([1-9][0-9]{0,18})-i[1-9][0-9]{0,18}-a[1-9][0-9]{0,9}");
+    private static final Pattern SCRATCH = Pattern.compile("r([1-9][0-9]{0,18})-i([1-9][0-9]{0,18})-a([1-9][0-9]{0,9})");
     private static final Duration RETENTION = Duration.ofHours(24);
     private final JdbcTemplate jdbc;
     private final LockRetryingTransactions transactions;
@@ -33,8 +38,8 @@ public class MediaCleanup {
         this.transactions = transactions;
     }
 
-    /** Called with the exclusive process-runner lock held and preparation still healthy. */
-    public void reap(Path scratch, Path storage) {
+    /** Called under execution and admission locks, with healthy process protection. */
+    public void reap(Path scratch, Path storage, Predicate<Path> reserved) {
         Instant cutoff = Instant.now().minus(RETENTION);
         try {
             if (!safe(scratch) || !safe(storage)) {
@@ -42,11 +47,17 @@ public class MediaCleanup {
             }
             try (var entries = Files.list(scratch)) {
                 for (Path directory : entries.filter(path -> SCRATCH.matcher(path.getFileName().toString()).matches())
-                        .limit(32).toList()) {
+                        .filter(path -> !reserved.test(path)).toList()) {
                     var name = SCRATCH.matcher(directory.getFileName().toString());
                     if (name.matches() && Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS)
                             && older(directory, cutoff) && safe(directory)) {
-                        reapScratch(Long.parseLong(name.group(1)), directory, cutoff);
+                        try {
+                            var handle = new Scratch(Long.parseLong(name.group(1)), Long.parseLong(name.group(2)),
+                                    Integer.parseInt(name.group(3)));
+                            reapAbandoned(handle, directory, storage, cutoff);
+                        } catch (RuntimeException ex) {
+                            log.warn("Retained abandoned media scratch: {}", ex.getClass().getSimpleName());
+                        }
                     }
                 }
             }
@@ -65,30 +76,159 @@ public class MediaCleanup {
         }
     }
 
-    private void reapScratch(long requestId, Path directory, Instant cutoff) {
+    private void reapAbandoned(Scratch handle, Path directory, Path storage, Instant cutoff) {
+        Request before = request(handle.requestId(), false);
+        if (before == null || before.leased()) {
+            return;
+        }
+        Item prior = item(handle);
+        Applied verified = verifyApplied(handle, before, prior, storage);
         transactions.run(() -> {
-            if (leased(requestId)) {
+            Request request = request(handle.requestId(), true);
+            if (request == null || request.leased()) {
                 return;
             }
-            try (var tree = Files.walk(directory)) {
-                List<Path> paths = tree.limit(2049).toList();
-                if (paths.size() > 2048) {
+            Item item = item(handle);
+            if (item != null && item.state().equals("APPLIED")) {
+                if ((!item.effect() && handle.attempt() > item.attempt())
+                        || !stillApplied(handle, request, item, verified)) {
                     return;
                 }
-                for (Path path : paths) {
-                    if (!safe(path) || !older(path, cutoff) || !(Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)
-                            || Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS))) {
-                        return;
-                    }
-                }
-                for (Path path : paths.stream().sorted(Comparator.reverseOrder()).toList()) {
-                    Files.deleteIfExists(path);
-                }
-            } catch (IOException ex) {
-                throw new UncheckedIOException(ex);
+            } else if (item != null && (!request.terminal()
+                    || !(Set.of("PENDING", "FAILED", "CANCELLED").contains(item.state())
+                            || (!item.effect() && item.state().equals("ACTIVE"))))) {
+                return;
             }
+            deleteTree(directory, cutoff);
         });
     }
+
+    /** The caller has finished using this directory and has excluded concurrent writers. */
+    public boolean retireApplied(Scratch handle, Path directory, Path storage) {
+        try {
+            Request before = request(handle.requestId(), false);
+            Item prior = item(handle);
+            if (before == null || prior == null || prior.epoch() != before.epoch()
+                    || (!prior.effect() && prior.attempt() != handle.attempt())) {
+                return false;
+            }
+            Applied verified = verifyApplied(handle, before, prior, storage);
+            if (verified == null) {
+                return false;
+            }
+            return transactions.execute(() -> {
+                Request request = request(handle.requestId(), true);
+                Item item = item(handle);
+                if (!stillApplied(handle, request, item, verified)) {
+                    return false;
+                }
+                deleteTree(directory, null);
+                return true;
+            });
+        } catch (RuntimeException ex) {
+            log.warn("Retained media scratch after verification failure: {}", ex.getClass().getSimpleName());
+            return false;
+        }
+    }
+
+    private Request request(long id, boolean locked) {
+        return jdbc.query("""
+                SELECT channel_id, content_id, run_id, lease_epoch,
+                    lease_owner IS NOT NULL AND lease_until > UTC_TIMESTAMP(6),
+                    status IN ('SUCCEEDED', 'FAILED', 'CANCELLED')
+                FROM production_request WHERE id = ?
+                """ + (locked ? "FOR UPDATE" : ""), (row, index) -> new Request(row.getLong(1), row.getLong(2), row.getLong(3),
+                        row.getLong(4), row.getBoolean(5), row.getBoolean(6)), id).stream().findFirst().orElse(null);
+    }
+
+    private Item item(Scratch handle) {
+        return jdbc.query("""
+                SELECT kind, state, attempt_no, lease_epoch, execution_proof_sha256 IS NOT NULL
+                FROM production_media_item WHERE id = ? AND production_request_id = ?
+                """, (row, index) -> new Item(row.getString(1), row.getString(2), row.getInt(3),
+                        row.getLong(4), row.getBoolean(5)), handle.itemId(), handle.requestId())
+                .stream().findFirst().orElse(null);
+    }
+
+    private Applied verifyApplied(Scratch handle, Request request, Item item, Path storage) {
+        if (item == null || !item.state().equals("APPLIED")) {
+            return null;
+        }
+        Set<Role> required = switch (item.kind()) {
+            case "IMAGE" -> Set.of(Role.SOURCE_IMAGE, Role.NORMALIZED_IMAGE);
+            case "TTS" -> Set.of(Role.SOURCE_AUDIO, Role.PCM_AUDIO, Role.ALIGNMENT);
+            case "SUBTITLE" -> Set.of(Role.ASS, Role.SRT);
+            case "RENDER" -> Set.of(Role.MP4);
+            case "METADATA" -> Set.of(Role.MEDIA_METADATA);
+            case "QC" -> Set.of(Role.QC_REPORT, Role.MANIFEST);
+            default -> Set.of();
+        };
+        if (required.isEmpty() || (item.effect() && !item.proven())) {
+            return null;
+        }
+        var assets = assets(handle, item);
+        var attempt = new Attempt(request.channel(), request.content(), request.run(), handle.itemId(), item.attempt());
+        Set<Role> verified = new HashSet<>();
+        try {
+            var store = new WorkspaceMediaStore(storage);
+            for (Asset asset : assets) {
+                if (!required.contains(asset.role()) || !attempt.relativePath(asset.role()).equals(asset.path())) {
+                    return null;
+                }
+                try (var file = store.openVerified(attempt, asset.role(), asset.identity())) {
+                    verified.add(asset.role());
+                }
+            }
+            return verified.equals(required) ? new Applied(request, item, assets) : null;
+        } catch (IOException ex) {
+            return null;
+        }
+    }
+
+    private boolean stillApplied(Scratch handle, Request request, Item item, Applied verified) {
+        return verified != null && verified.request().equals(request) && verified.item().equals(item)
+                && verified.assets().equals(assets(handle, item));
+    }
+
+    private List<Asset> assets(Scratch handle, Item item) {
+        return jdbc.query("""
+                SELECT role, relative_path, byte_length, sha256 FROM production_media_asset
+                WHERE item_id = ? AND attempt_no = ? AND (state = 'FINAL' OR (? AND state = 'STAGED'))
+                ORDER BY role
+                """, (row, index) -> new Asset(Role.valueOf(row.getString(1)), row.getString(2),
+                        new FileIdentity(row.getLong(3), row.getString(4))), handle.itemId(), item.attempt(),
+                !item.effect());
+    }
+
+    private static void deleteTree(Path directory, Instant cutoff) {
+        try (var tree = Files.walk(directory)) {
+            List<Path> paths = tree.limit(2049).toList();
+            if (paths.size() > 2048) {
+                return;
+            }
+            for (Path path : paths) {
+                if (!safe(path) || (cutoff != null && !older(path, cutoff))
+                        || !(Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)
+                        || Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS))) {
+                    return;
+                }
+            }
+            for (Path path : paths.stream().sorted(Comparator.reverseOrder()).toList()) {
+                Files.deleteIfExists(path);
+            }
+        } catch (IOException | RuntimeException ex) {
+            log.warn("Could not remove media scratch: {}", ex.getClass().getSimpleName());
+        }
+    }
+
+    private record Request(long channel, long content, long run, long epoch, boolean leased, boolean terminal) {}
+    private record Item(String kind, String state, int attempt, long epoch, boolean proven) {
+        boolean effect() {
+            return kind.equals("TTS") || kind.equals("IMAGE");
+        }
+    }
+    private record Asset(Role role, String path, FileIdentity identity) {}
+    private record Applied(Request request, Item item, List<Asset> assets) {}
 
     private void reapWorkspace(Path storage, Path file, Instant cutoff) {
         Path relative = storage.relativize(file);

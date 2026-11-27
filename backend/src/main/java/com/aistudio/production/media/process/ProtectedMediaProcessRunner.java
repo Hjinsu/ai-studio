@@ -1,12 +1,17 @@
 package com.aistudio.production.media.process;
 
 import java.io.IOException;
+import java.nio.file.FileStore;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
 import java.time.Duration;
+import java.time.Instant;
+import java.util.HashMap;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BooleanSupplier;
 
@@ -42,6 +47,7 @@ final class ProtectedMediaProcessRunner implements MediaProcessRunner {
     private final int loudnessTimeout;
     private final ReentrantLock execution = new ReentrantLock(true);
     private final Object scratchAdmission = new Object();
+    private final Map<Scratch, Reservation> reservations = new HashMap<>();
     private final MediaCleanup cleanup;
     private long cleanupAt;
     private volatile boolean verified;
@@ -50,6 +56,8 @@ final class ProtectedMediaProcessRunner implements MediaProcessRunner {
     private LinuxMediaProcess linux;
     private final String linuxOwnerService;
     private final boolean linuxVerified;
+
+    private record Reservation(Thread worker, Path directory) {}
 
     ProtectedMediaProcessRunner(
             @Value("${ai-studio.production.media.ffmpeg-path:}") String ffmpegPath,
@@ -99,10 +107,7 @@ final class ProtectedMediaProcessRunner implements MediaProcessRunner {
         }
         try {
             Path root = scratch();
-            var volume = Files.getFileStore(root);
-            if (volume.equals(Files.getFileStore(Path.of(workspaceRoot))) || volume.getTotalSpace() > MAX_SCRATCH_VOLUME) {
-                throw new IOException("Media scratch requires a dedicated volume");
-            }
+            scratchVolume(root);
             var ffmpeg = binary(Tool.FFMPEG);
             var ffprobe = binary(Tool.FFPROBE);
             if (Platform.isWindows()) {
@@ -136,12 +141,14 @@ final class ProtectedMediaProcessRunner implements MediaProcessRunner {
             throw new IOException("Media process protection is unavailable");
         }
         Path root = realDirectory(Path.of(scratchRoot));
+        scratchVolume(root);
         if (execution.tryLock()) {
             try {
                 long now = System.nanoTime();
-                if (cleanupAt == 0 || now - cleanupAt > Duration.ofMinutes(10).toNanos()) {
+                if (!failed && (cleanupAt == 0 || now - cleanupAt > Duration.ofMinutes(10).toNanos())) {
                     synchronized (scratchAdmission) {
-                        cleanup.reap(root, Path.of(workspaceRoot));
+                        cleanup.reap(root, Path.of(workspaceRoot), path -> reservations.values().stream()
+                                .anyMatch(reservation -> reservation.directory().equals(path)));
                     }
                     cleanupAt = now;
                 }
@@ -150,6 +157,13 @@ final class ProtectedMediaProcessRunner implements MediaProcessRunner {
             }
         }
         synchronized (scratchAdmission) {
+            if (failed) {
+                throw new IOException("Media process protection is unavailable");
+            }
+            // A multi-item stage can leave completed items behind before moving to the next one.
+            reservations.entrySet().removeIf(entry -> entry.getKey().requestId() == handle.requestId()
+                    && !entry.getKey().equals(handle) && entry.getValue().worker() == Thread.currentThread()
+                    && cleanup.retireApplied(entry.getKey(), entry.getValue().directory(), Path.of(workspaceRoot)));
             return reserveScratch(root, handle);
         }
     }
@@ -160,19 +174,47 @@ final class ProtectedMediaProcessRunner implements MediaProcessRunner {
         if (attempt.toString().length() > 200) {
             throw new IOException("Media attempt path is too long");
         }
-        try (var entries = Files.list(root)) {
-            long remainingAttempts = entries.filter(path -> !path.equals(attempt)
-                    && path.getFileName().toString().matches("r[0-9]+-i[0-9]+-a[0-9]+")).limit(33).count();
-            if (Files.getFileStore(root).getUsableSpace() < SCRATCH_FLOOR + (remainingAttempts + 1) * GIB) {
-                throw new IOException("Media scratch reservation exceeds capacity");
-            }
+        Reservation current = reservations.get(handle);
+        if (current != null && current.worker() != Thread.currentThread()) {
+            throw new IOException("Media scratch is still in use by another worker");
+        }
+        if (scratchVolume(root).getUsableSpace() < SCRATCH_FLOOR
+                + (reservations.size() + (current == null ? 1L : 0L)) * GIB) {
+            throw new IOException("Media scratch reservation exceeds capacity");
         }
         try {
             Files.createDirectory(attempt);
         } catch (java.nio.file.FileAlreadyExistsException ignored) {
             // Existing directories are used for subsequent commands within the same attempt.
         }
-        return realDirectory(attempt);
+        Path directory = realDirectory(attempt);
+        // Keep a reused directory outside the abandoned sweep window across a JVM exit.
+        Files.setLastModifiedTime(directory, FileTime.from(Instant.now()));
+        reservations.put(handle, new Reservation(Thread.currentThread(), directory));
+        return directory;
+    }
+
+    @Override
+    public void finishStage(long requestId) {
+        synchronized (scratchAdmission) {
+            if (failed || reservations.isEmpty()) {
+                return;
+            }
+            try {
+                scratchVolume(realDirectory(Path.of(scratchRoot)));
+            } catch (IOException ex) {
+                failed = true;
+                return;
+            }
+            reservations.entrySet().removeIf(entry -> {
+                Reservation reservation = entry.getValue();
+                if (entry.getKey().requestId() != requestId || reservation.worker() != Thread.currentThread()) {
+                    return false;
+                }
+                cleanup.retireApplied(entry.getKey(), reservation.directory(), Path.of(workspaceRoot));
+                return true;
+            });
+        }
     }
 
     @Override
@@ -220,6 +262,8 @@ final class ProtectedMediaProcessRunner implements MediaProcessRunner {
             if (e.getMessage() != null && (e.getMessage().startsWith("CreateProcessW")
                     || e.getMessage().startsWith("IsProcessInJob") || e.getMessage().startsWith("SetInformationJobObject")
                     || e.getMessage().startsWith("TerminateJobObject") || e.getMessage().startsWith("Wait for empty Job")
+                    || e.getMessage().startsWith("QueryInformationJobObject")
+                    || e.getMessage().startsWith("Wait for rejected process")
                     || e.getMessage().startsWith("Linux media boundary")
                     || e.getMessage().startsWith("Linux media supervisor"))) {
                 failed = true;
@@ -236,6 +280,14 @@ final class ProtectedMediaProcessRunner implements MediaProcessRunner {
             throw new IOException("Media scratch path or available space is invalid");
         }
         return root;
+    }
+
+    private FileStore scratchVolume(Path root) throws IOException {
+        var volume = Files.getFileStore(root);
+        if (volume.equals(Files.getFileStore(Path.of(workspaceRoot))) || volume.getTotalSpace() > MAX_SCRATCH_VOLUME) {
+            throw new IOException("Media scratch requires a dedicated volume");
+        }
+        return volume;
     }
 
     private static Path realDirectory(Path path) throws IOException {

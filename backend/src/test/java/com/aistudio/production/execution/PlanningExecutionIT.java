@@ -987,12 +987,16 @@ class PlanningExecutionIT {
         var retainedForLease = scratchAttempt(scratch, leased, 1, false);
         var expired = scratchAttempt(scratch, idle, 1, false);
         var retainedForRecentWrite = scratchAttempt(scratch, idle, 2, true);
+        var retainedForLocalWriter = scratchAttempt(scratch, idle, 3, false);
+        var retainedForUnknownOwner = scratchAttempt(scratch, Long.MAX_VALUE, 1, false);
 
-        mediaCleanup.reap(scratch.toRealPath(), Path.of(mediaStorageRoot));
+        mediaCleanup.reap(scratch.toRealPath(), Path.of(mediaStorageRoot), retainedForLocalWriter::equals);
 
         assertThat(retainedForLease).exists();
         assertThat(expired).doesNotExist();
         assertThat(retainedForRecentWrite).exists();
+        assertThat(retainedForLocalWriter).exists();
+        assertThat(retainedForUnknownOwner).exists();
     }
 
     private static Path scratchAttempt(Path root, long request, int attempt, boolean recent) throws IOException {
@@ -1007,7 +1011,47 @@ class PlanningExecutionIT {
     }
 
     @Test
-    void expiredMediaWriterCannotPublishAndReplacementSettlesAfterCancel() throws Exception {
+    void scratchRetirementRequiresDurableAssetsAndToleratesDeletionFailure(
+            @org.junit.jupiter.api.io.TempDir Path scratch) throws Exception {
+        discover(NEUTRON);
+        long id = create("SHORTS", ",\"candidateCount\":5,\"mediaEnabled\":true");
+        drain();
+        assertStatus(id, "SUCCEEDED");
+        long render = jdbc.queryForObject("""
+                SELECT id FROM production_media_item WHERE production_request_id = ? AND kind = 'RENDER'
+                """, Long.class, id);
+        String relative = jdbc.queryForObject("""
+                SELECT relative_path FROM production_media_asset WHERE item_id = ? AND role = 'MP4'
+                """, String.class, render);
+        var handle = new com.aistudio.production.contract.MediaProcessRunner.Scratch(id, render, 1);
+        var storage = Path.of(mediaStorageRoot);
+        var workspaceVideo = storage.resolve(relative);
+        var dir = java.nio.file.Files.createDirectory(scratch.resolve("r" + id + "-i" + render + "-a1"));
+        var output = java.nio.file.Files.writeString(dir.resolve("output"), "temporary");
+
+        var bytes = java.nio.file.Files.readAllBytes(workspaceVideo);
+        var corrupt = bytes.clone();
+        corrupt[0] ^= 1;
+        java.nio.file.Files.write(workspaceVideo, corrupt);
+        assertThat(mediaCleanup.retireApplied(handle, dir, storage)).isFalse();
+        assertThat(output).exists();
+        java.nio.file.Files.write(workspaceVideo, bytes);
+
+        if (com.sun.jna.Platform.isWindows()) {
+            try (var lock = java.nio.channels.FileChannel.open(output, java.nio.file.StandardOpenOption.READ,
+                    com.sun.nio.file.ExtendedOpenOption.NOSHARE_DELETE)) {
+                assertThat(mediaCleanup.retireApplied(handle, dir, storage)).isTrue();
+                assertThat(output).hasContent("temporary");
+            }
+        }
+        assertThat(mediaCleanup.retireApplied(handle, dir, storage)).isTrue();
+        assertThat(dir).doesNotExist();
+        assertThat(java.nio.file.Files.readAllBytes(workspaceVideo)).isEqualTo(bytes);
+    }
+
+    @Test
+    void expiredMediaWriterCannotPublishAndReplacementSettlesAfterCancel(
+            @org.junit.jupiter.api.io.TempDir Path scratch) throws Exception {
         discover(NEUTRON);
         long id = create("SHORTS", ",\"candidateCount\":5,\"mediaEnabled\":true");
         onMediaSend.set(() -> jdbc.update(
@@ -1020,6 +1064,11 @@ class PlanningExecutionIT {
         long epoch = jdbc.queryForObject("SELECT lease_epoch FROM production_request WHERE id = ?", Long.class, id);
         var state = jdbc.queryForMap("SELECT id, operation_id, state FROM production_media_item "
                 + "WHERE production_request_id = ? AND state = 'PROVEN'", id);
+        Path retained = java.nio.file.Files.createDirectory(scratch.resolve("r" + id + "-i" + state.get("id") + "-a1"));
+        var past = java.nio.file.attribute.FileTime.from(java.time.Instant.now().minus(java.time.Duration.ofHours(25)));
+        java.nio.file.Files.setLastModifiedTime(retained, past);
+        mediaCleanup.reap(scratch.toRealPath(), Path.of(mediaStorageRoot), path -> false);
+        assertThat(retained).exists();
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM production_media_asset WHERE item_id = ?", Integer.class,
                 state.get("id"))).isZero();
         jdbc.update("UPDATE production_request SET cancel_requested_at = UTC_TIMESTAMP(6) WHERE id = ?", id);
@@ -1031,6 +1080,8 @@ class PlanningExecutionIT {
         assertThat(mediaDispatches).hasValue(1);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM cost_log WHERE event_key = CONCAT('production:settle:', ?)",
                 Integer.class, state.get("operation_id"))).isEqualTo(1);
+        mediaCleanup.reap(scratch.toRealPath(), Path.of(mediaStorageRoot), path -> false);
+        assertThat(retained).doesNotExist();
     }
 
     @Test

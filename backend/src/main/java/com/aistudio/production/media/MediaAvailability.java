@@ -65,4 +65,8 @@ public class MediaAvailability {
     public MediaProfile snapshot(long configId, String language) {
         return MediaProfile.localFixture(configId, language, catalog, voice);
     }
+
+    public void finishStage(long requestId) {
+        runner.ifAvailable(process -> process.finishStage(requestId));
+    }
 }

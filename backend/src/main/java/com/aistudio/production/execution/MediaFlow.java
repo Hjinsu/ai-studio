@@ -54,6 +54,9 @@ class MediaFlow {
         return availability.ready();
     }
 
+    void finishStage(long requestId) {
+        availability.finishStage(requestId);
+    }
 
     MediaStageWork.Result recoverCosts(MediaStageWork.Context context) {
         if (context.stage() != ProductionStage.IMAGE && context.stage() != ProductionStage.TTS) {

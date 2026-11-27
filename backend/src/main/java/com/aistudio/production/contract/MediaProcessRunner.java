@@ -29,5 +29,8 @@ public interface MediaProcessRunner {
 
     java.nio.file.Path prepare(Scratch scratch) throws IOException;
 
+    /** Ends the calling worker's use of scratch after synchronous stage work and publication have returned. */
+    default void finishStage(long requestId) {}
+
     Result run(Command command, BooleanSupplier cancelled) throws IOException, InterruptedException;
 }
