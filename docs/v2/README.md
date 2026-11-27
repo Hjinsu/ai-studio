@@ -17,4 +17,4 @@
 
 현재 회사 PC 재개 절차는 [확정 NEXT_SESSION](../NEXT_SESSION.md)을 따른다. 핵심 설계 변경과 V2-01 착수는 각각 승인 범위를 확인한다.
 
-V2-04는 [상세 설계](V2-04_IMPLEMENTATION_PLAN.md), [공통 계약](V2-04_COMMON_CONTRACT.md), [Claude 착수 지시서](V2-04_CLAUDE_HANDOFF.md)를 적용한다. [V2-05 요구사항](V2-05_IFNOVA_CONTENT.md)에 한국어 기본값과 움직임 검토 및 캐릭터 BACKLOG를 기록한다. [V2-06 요구사항](V2-06_YOUTUBE_LOCALIZATION.md)은 YouTube 번역·더빙과 게시 전 확인을 다룬다.
+V2-04는 [상세 설계](V2-04_IMPLEMENTATION_PLAN.md), [공통 계약](V2-04_COMMON_CONTRACT.md), [Claude 착수 지시서](V2-04_CLAUDE_HANDOFF.md)를 적용한다. [V2-05 상세 설계 제안](V2-05_IMPLEMENTATION_PLAN.md)과 [V2-05 요구사항](V2-05_IFNOVA_CONTENT.md)에 한국어 기본값과 움직임 검토 및 캐릭터 BACKLOG를 기록한다. [V2-06 요구사항](V2-06_YOUTUBE_LOCALIZATION.md)은 YouTube 번역·더빙과 게시 전 확인을 다룬다.

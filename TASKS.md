@@ -18,6 +18,7 @@
 | V2-04-SAFETY | Codex | DONE | `v2/04-safety`. Linux 보호, 장애 안전성 및 scratch 예약 수명주기. [검증 보고서](docs/reports/V2-04_SAFETY_REPORT.md) |
 | V2-04-PRODUCT | Claude Code | DONE | 실제 앱 기술 검증 및 사용자 인수 PASS. Product `925d736225828c720f11bc95569f84a6a17165f3`. [보고서](docs/reports/V2-04_PRODUCT_REPORT.md) |
 | V2-04-INTEGRATION | Codex | DONE | v2/04-integration. B01·B02 RESOLVED, 독립 리뷰 APPROVE. 최종 CI 통과 및 사용자 인수·병합 승인으로 v2/integration에 반영. [통합 보고서](docs/reports/V2-04_INTEGRATION_REPORT.md) |
+| V2-05-DESIGN | Codex | PROPOSED | 최신 v2/integration 기반 문서 설계. 구현 착수 및 유료 실험은 각각 승인 대기. [상세 계획](docs/v2/V2-05_IMPLEMENTATION_PLAN.md) |
 
 [품질·수익화 요구사항](docs/v2/05_CONTENT_QUALITY_AND_MONETIZATION.md)은 V2-02~08의 단계별 인수 기준에 적용한다. V2-01은 검수·재생성까지 동일 제작 요청 비용 경계를 제공한다. FFmpeg·FFprobe 준비는 V2-04에 포함한다.
 

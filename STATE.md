@@ -16,6 +16,13 @@
 ## 인수인계 기록
 작업 ID / 상태 / 변경 파일 / 테스트 명령 및 실제 결과 / 미해결 문제 / 다음 작업 / 필요 환경변수. 커밋 해시는 생성된 경우만 기록.
 
+### V2-05-DESIGN — 상세 설계 (2026-11-27 KST, PROPOSED)
+
+- 담당 Codex. 브랜치 `v2/05-design`, 설계 착수 기준 `9ca44233b402c6a26e5708c4182453b97d3f2045`. `origin/v2/integration` `e51e64971a9e16251b38f86e23f7c778e7eb11eb`과 V2-04 DONE, 최종 B01·B02 수정의 조상 포함 관계를 확인했다.
+- 변경: [상세 계획](docs/v2/V2-05_IMPLEMENTATION_PLAN.md), [저장소 대조](docs/v2/V2-05_REPOSITORY_DESIGN.md), [공급자·스파이크](docs/v2/V2-05_PROVIDER_SPIKE.md), IFNOVA 요구사항·기존 공급자 조사·v2 색인, TASKS·DECISIONS·STATE. 문서 범위.
+- 검증: Git 원격 SHA·조상 확인, staged diff check 및 Gitleaks. 제품 테스트 미실행, Migration 생성·적용 없음. 실제 청구·공급자 장애 복구·Linux 제품 경로는 미검증이다.
+- 다음: 사용자 설계 승인과 구현 배정 후 공통 브랜치에서 모의 공급자와 격리 MariaDB 검증을 착수한다. 실제 호출은 공급자·SKU·권리·최대 지출을 별도 승인받은 스파이크로 한정한다.
+
 ### V2-04-BLOCKING-FIXES — 독립 리뷰 B01·B02 수정 (2026-11-27 KST, DONE)
 
 - Claude Code(Codex 사용량 제한으로 위임). 기준 `v2/04-integration` `b9669aae508c71fec7fabeefaab7d1adade09fe0`, 브랜치 `v2/04-blocking-fixes`. 상세·재현 명령: [수정 보고서](docs/reports/V2-04_BLOCKING_FIXES_REPORT.md).
