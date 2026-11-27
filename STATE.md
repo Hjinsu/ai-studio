@@ -18,9 +18,9 @@
 
 ### V2-04-INTEGRATION — 제품·안전성 결합 (2026-11-27 KST, IMPLEMENTED)
 
-- `v2/04-integration` / `../ai-studio-v2-04-integration`에 Safety `5c303a2aebe87222df6d2b5b8aad182cf70a0716`와 최신 Product `925d736225828c720f11bc95569f84a6a17165f3`를 결합했다. 병합 커밋 `c187b76e68e655a66278b6f2212cce928336c1c6`. Safety IMPLEMENTED, Product IN_PROGRESS.
+- `v2/04-integration` / `../ai-studio-v2-04-integration`에 Safety `5c303a2aebe87222df6d2b5b8aad182cf70a0716`와 최신 Product `925d736225828c720f11bc95569f84a6a17165f3`를 결합했다. 병합 커밋 `c187b76e68e655a66278b6f2212cce928336c1c6`. Safety IMPLEMENTED, Product IMPLEMENTED.
 - 충돌 해결, 제품 설정, 검증 절차, Windows Job 경계 테스트, V2-05·V2-06 요구사항과 전체 기술 결과를 [통합 보고서](docs/reports/V2-04_INTEGRATION_REPORT.md)에 기록했다. 기존 V13·OpenAPI·생성 타입은 공통 SHA와 일치하며 V13 적용은 격리 DB로 제한했다.
-- 최종 CI HEAD에서 다음 작업은 별도 세션의 독립 리뷰 1회다. 사용자 청취 및 병합 승인과 독립 리뷰 APPROVE가 남았다. Linux의 실제 배포 제품 렌더는 별도 검증이다.
+- 최종 CI HEAD에서 다음 작업은 별도 세션의 독립 리뷰 1회다. 독립 리뷰 APPROVE와 사용자 최종 병합 승인이 남았다. Linux의 실제 배포 제품 렌더는 별도 검증이다.
 
 ### V2-04-SAFETY — Scratch 예약 및 정리 결함 (2026-11-27 KST, IMPLEMENTED)
 
@@ -29,16 +29,16 @@
 - `gradlew.bat :backend:test :backend:integrationTest :backend:bootJar` 단위 298건, 격리 DB 통합 260건 통과. Windows Linux 전용 테스트와 기존 선택 Live Edge 테스트 각 1건 건너뜀. 16 GiB의 `S:/s/v204-verify`에서 제품 소스를 임시 조합한 최종 bootJar로 3개 채널의 영상 5편을 연속 제작했다. 요청 사이 수동 scratch 삭제 없이 5건 모두 11단계 첫 시도에 성공했다.
 - Migration 변경 없음. V13은 격리 MariaDB 11.8.2에만 적용했다. 다음 작업은 원격 safety HEAD 기준의 별도 독립 리뷰와 사용자 승인 범위의 제품 결합 검증이다.
 
-### V2-04-PRODUCT — 제품 기술 검증·사용자 인수 대기 (2026-11-27 KST, IN_PROGRESS)
+### V2-04-PRODUCT — 제품 기술 검증·사용자 인수 완료 (2026-11-27 KST, IMPLEMENTED)
 
 - Claude Code, 공통 SHA `d7bec5f9aadcc423d7b2a987ac31d810367b4604`, 브랜치 `v2/04-product`. 상세·재현: [진행 보고 §0](docs/reports/V2-04_PRODUCT_REPORT.md). 사용자 지시로 이 브랜치 STATE.md에 직접 기록(통합 시 정리).
 - 완료(체크포인트 `0920437`): `backend/.../production/media/product/`, 프런트 미디어 미리보기, fixture 생성기. 회사 PC 재개 세션에서 `frontend/e2e/live-media.mjs`(실제 앱 인수 스크립트, npm test 제외)를 추가했다. 제품 코드·공통 계약·migration·OpenAPI 변경 없음.
 - 테스트(회사 PC, 격리 MariaDB 3307): `:backend:test` 324/324, `:backend:integrationTest` 259 통과·실패 0·건너뜀 1(기존 환경 게이트 liveEdge), `:backend:bootJar` PASS. frontend lint·typecheck·Vitest 102/102·build PASS. Gitleaks no leaks.
 - **실제 앱 E2E PASS**: bootJar + 공통 보호 실행기(Windows Job Object, 16 GiB 전용 VHDX `S:\s`) + Vite + Edge. 로그인 → 발굴 → UI 소재 선택 → 11단계 각 1회 SUCCEEDED → QC 32/32 → 재생·seek 30 s(206)·장면 이미지/낭독·MP4/SRT 다운로드(목록 SHA 일치)·라이트/다크·모바일. MP4(Git 밖 `C:\Users\PC-94\Downloads\AI-Studio-V2-04-Acceptance\output-pc94-e2e\`): neutron-star `16f7d2da0713288b715b6964a0ed3c91c4ea0bd42121698dfbcaaf445590c4c6`, venus-day `fcf8d4d8d1092d12fd6193a65e2e70b9730fc80683cc6abf6a90805e8eb6cb33`.
 - Scratch 누적 결함은 Safety 기준 SHA에서 해결했다. 제품 보고서 §0.5의 재현은 이력이다.
-- 이번 통합 지시에 따라 청취 인수를 대기 상태로 둔다. 정지 이미지 표현은 V2-04 범위로 수용됐고 권리 근거는 확인됐다. 낭독·자막·배경음악·효과음의 최종 청취 결과는 별도로 확인한다. 원격 Product의 기술·인수 기록은 제품 보고서에 이력으로 보존한다.
+- 사용자가 실제 MP4 두 편의 낭독·자막·배경음악·효과음과 자산 권리 근거를 모두 PASS로 확인했다. 정지 이미지 중심 표현은 V2-04 범위로 수용했고, 실제 움직임과 콘텐츠 재미 개선은 V2-05로 이관했다. Product `925d736225828c720f11bc95569f84a6a17165f3`. [Claude 제품 보고서 §0.6](https://github.com/Hjinsu/ai-studio/blob/925d736225828c720f11bc95569f84a6a17165f3/docs/reports/V2-04_PRODUCT_REPORT.md#06-기술-qc와-사용자-확인-2026-11-27-kst)
 - 후속(범위 밖): V2-05 IMAGE_TO_VIDEO·TEXT_TO_VIDEO 검토, V2-06 AI 콘텐츠 고지·실제 게시 정책 검증. 실제 게시·유료 API 호출 미승인.
-- 다음 작업은 통합 SHA의 CI와 단일 독립 리뷰다. 최종 청취 확인 및 사용자 승인 후 기존 통합 브랜치 병합을 판단한다.
+- 다음 작업은 통합 SHA의 CI와 단일 독립 리뷰다. 독립 리뷰 APPROVE 및 사용자 최종 병합 승인 후 기존 통합 브랜치 병합을 판단한다.
 
 ### V2-04-COMMON — 공통 계약 구현 (2026-11-27 KST, IMPLEMENTED)
 
