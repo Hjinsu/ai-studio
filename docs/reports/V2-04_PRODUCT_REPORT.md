@@ -1,9 +1,9 @@
 # V2-04-PRODUCT 진행 보고 (Claude Code)
 
-- 상태 **IN_PROGRESS — 기술 인수 완료, 사용자 청취·권리 확인 대기** (IMPLEMENTED 아님) · 2026-11-27 KST · 회사 PC 재개 결과는 [§0](#0-회사-pc-재개-결과-2026-11-27)
+- 상태 **IMPLEMENTED** (DONE 아님: Codex 독립 리뷰·CI·ChatGPT 검토·사용자 승인 대기) · 2026-11-27 KST · 회사 PC 재개 결과는 [§0](#0-회사-pc-재개-결과-2026-11-27)
 - 기준 공통 SHA `d7bec5f9aadcc423d7b2a987ac31d810367b4604` · 브랜치 `v2/04-product` · worktree `../ai-studio-v2-04-product`
 - 범위: [착수 지시서](../v2/V2-04_CLAUDE_HANDOFF.md)의 Claude 소유 경로. 공통 계약·Codex 소유 파일, migration, OpenAPI, 빌드 설정은 수정하지 않았다. 공통 scratch 보호 정책(전용 ≤32 GiB 볼륨)은 우회·완화하지 않았다.
-- 남은 필수 항목: **사용자 청취·권리 확인**(§0.6) → 이후 IMPLEMENTED 보고. 통합 담당자 조율 필요 결함 1건(§0.5).
+- 필수 인수 조건과 사용자 확인 완료(§0.6). 후속: Codex scratch 예약 결함(§0.5), V2-05 IMAGE_TO_VIDEO·TEXT_TO_VIDEO 검토, V2-06 AI 콘텐츠 고지·게시 정책.
 
 ## 0. 회사 PC 재개 결과 (2026-11-27)
 
@@ -76,11 +76,17 @@
 - 인수 진행 방식: 보호 조건은 바꾸지 않았다. 종료(SUCCEEDED/FAILED)되고 lease가 0인 요청 3·4의 scratch 디렉터리만 수동 삭제했다(reaper가 24h 후 하는 동작과 같음). 이후 venus-day(요청 5)를 새로 제작했고, neutron-star는 이미 성공한 요청 3으로 브라우저 검증을 했다.
 - 제안(승인 필요): 종료된 요청·성공 attempt의 scratch를 즉시 reap하거나, 예약을 실행 중 attempt만 계산. 공통 계약 변경이므로 Codex·사용자 결정 사항이다.
 
-### 0.6 사용자 확인 대기 (IMPLEMENTED 전 필수)
+### 0.6 사용자 확인 결과 (2026-11-27 KST) — 완료
 
-1. **청취·시청**: 위 두 MP4를 재생해 낭독(Piper LJSpeech 합성 음성)·자막·BGM/SFX 균형을 확인한다. 브라우저 경로를 직접 보려면 §0.7로 앱을 띄운다.
-2. **권리 확인**: `C:\Users\PC-94\Downloads\AI-Studio-V2-04-Acceptance\ASSETS_AND_RIGHTS.md`(현재 `claude-code-v2-04-product` 대조 기록, 사용자 확인 전). 합성 음성 고지 필요 여부도 함께 판단한다.
-3. 확인 후 상태를 IMPLEMENTED로 전환한다. 그 다음 Codex 독립 리뷰 → CI → ChatGPT 검토 → 사용자 승인 순이다.
+| 항목 | 결과 | 사용자 판단 |
+|---|---|---|
+| 실제 MP4 두 편 시청(neutron-star `16f7d2da…90c4c6`, venus-day `fcf8d4d8…eb6cb33`) | **PASS** | 사용자가 두 영상을 직접 확인했다. 낭독(Piper LJSpeech 단일 합성 음성)·자막·배경음악·효과음을 포함한 확인 결과를 V2-04 기술 인수로 수용했다 |
+| 정지 이미지 중심 영상 표현(카메라 이동·전환) | **허용(V2-04 범위)** | 몰입감 향상용 IMAGE_TO_VIDEO·TEXT_TO_VIDEO 지원은 **V2-05에서 별도 검토** |
+| 권리 근거 `ASSETS_AND_RIGHTS.md` | **PASS** | Piper LJSpeech-high Public Domain 표기, 자체 생성 이미지·배경음악·효과음·대본, OFL 1.1 글꼴, 외부 설치 FFmpeg(GPLv3, 로컬 실행·미배포)의 현재 사용 방식이 기술 인수용으로 적절하다 |
+| AI 콘텐츠(합성 음성) 고지·실제 게시 정책 검증 | 범위 밖 | **V2-06 후속 요구사항**으로 관리한다 |
+| Scratch 예약 누적 결함(§0.5) | 미해결, Codex 담당 | 제품 쪽에서 직접 수정하지 않는다 |
+
+필수 인수 조건(전체 테스트, 실제 앱 E2E, 브라우저 검증, 두 MP4 QC·해시, 권리, 사용자 확인)을 모두 충족해 **IMPLEMENTED**로 보고한다. 이후 Codex 독립 리뷰 → 최신 PR HEAD CI → ChatGPT 최종 검토 → 사용자 승인으로 DONE을 판단한다. 실제 게시와 유료 API 호출은 승인되지 않았다.
 
 ### 0.7 재현 (회사 PC)
 
