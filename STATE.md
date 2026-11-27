@@ -25,6 +25,8 @@
 
 - 동적 연출 후속 설계는 `v2/05-design`의 `9e94a28ed0b4441f67954bc6e222700f8bb16b38`에서 시작했다. 상세 계획·저장소 대조·공급자 스파이크·IFNOVA·기존 공급자 조사·DECISIONS·STATE를 갱신했다. 문서 검증은 변경 범위·로컬 링크·staged diff check·Gitleaks로 수행하며 제품 테스트 및 Migration 실행은 범위 밖이다. 다음은 설계 검토와 구현 및 유료 실험의 별도 승인이다.
 
+- 최종 검토 R01~R06은 설계 SHA `e327f20317d2335aa342eae001818ccf6cf7a12d`에서 보완했다. 변경은 상세 계획·저장소 대조·공급자 스파이크와 이 인수 기록이다. 문서 범위·링크·staged diff·Gitleaks를 검증한다. 제품 테스트 미실행, Migration 미생성·미적용. 다음은 무과금 S0 준비, 별도 승인 후 유료 S1~S4다. 제품 구현과 최초 실제 영상은 별도 승인 대기다.
+
 ### V2-04-BLOCKING-FIXES — 독립 리뷰 B01·B02 수정 (2026-11-27 KST, DONE)
 
 - Claude Code(Codex 사용량 제한으로 위임). 기준 `v2/04-integration` `b9669aae508c71fec7fabeefaab7d1adade09fe0`, 브랜치 `v2/04-blocking-fixes`. 상세·재현 명령: [수정 보고서](docs/reports/V2-04_BLOCKING_FIXES_REPORT.md).
